@@ -1,19 +1,34 @@
 import {
-  Controller, Get, Post, Put, Delete,
-  Body, Param, Query, UseGuards, Request,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ScheduleService } from './schedule.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { Role } from '../common/types/roles.enum';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('schedule')
+@ApiBearerAuth()
 @Controller('schedule')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ScheduleController {
   constructor(private scheduleService: ScheduleService) {}
 
   @Get()
-  findAll(@Query('date') date?: string, @Query('groupId') groupId?: string, @Query('teacherId') teacherId?: string) {
+  findAll(
+    @Query('date') date?: string,
+    @Query('groupId') groupId?: string,
+    @Query('teacherId') teacherId?: string,
+  ) {
     if (date) return this.scheduleService.findByDate(date);
     if (groupId) return this.scheduleService.findByGroup(groupId);
     if (teacherId) return this.scheduleService.findByTeacher(teacherId);

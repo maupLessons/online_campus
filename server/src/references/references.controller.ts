@@ -1,7 +1,10 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ReferencesService } from './references.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('references')
+@ApiBearerAuth()
 @Controller('references')
 @UseGuards(JwtAuthGuard)
 export class ReferencesController {

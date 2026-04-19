@@ -1,7 +1,16 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import {
-  scheduleEntries, courseAssignments, courses, groups,
-  classrooms, studentProfiles, teacherProfiles,
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  scheduleEntries,
+  courseAssignments,
+  courses,
+  groups,
+  classrooms,
+  studentProfiles,
+  teacherProfiles,
 } from '../common/mock-data';
 import { ScheduleEntry } from '../common/types/entities';
 
@@ -48,7 +57,10 @@ export class ScheduleService {
   create(dto: Omit<ScheduleEntry, 'id'>) {
     const conflicts = this.checkConflicts(dto);
     if (conflicts.length > 0) {
-      throw new BadRequestException({ message: 'Конфлікт розкладу', conflicts });
+      throw new BadRequestException({
+        message: 'Конфлікт розкладу',
+        conflicts,
+      });
     }
 
     const entry: ScheduleEntry = { id: `sch-${Date.now()}`, ...dto };
@@ -78,16 +90,23 @@ export class ScheduleService {
 
     for (const entry of this.entries) {
       if (entry.date !== dto.date || entry.status === 'cancelled') continue;
-      if (entry.startTime >= dto.endTime || entry.endTime <= dto.startTime) continue;
+      if (entry.startTime >= dto.endTime || entry.endTime <= dto.startTime)
+        continue;
 
-      const entryCa = courseAssignments.find((c) => c.id === entry.courseAssignmentId);
+      const entryCa = courseAssignments.find(
+        (c) => c.id === entry.courseAssignmentId,
+      );
       if (!entryCa) continue;
 
       if (entryCa.teacherId === ca.teacherId) {
-        conflicts.push(`Викладач зайнятий: ${entry.startTime}-${entry.endTime}`);
+        conflicts.push(
+          `Викладач зайнятий: ${entry.startTime}-${entry.endTime}`,
+        );
       }
       if (dto.classroomId && entry.classroomId === dto.classroomId) {
-        conflicts.push(`Аудиторія зайнята: ${entry.startTime}-${entry.endTime}`);
+        conflicts.push(
+          `Аудиторія зайнята: ${entry.startTime}-${entry.endTime}`,
+        );
       }
       if (entryCa.groupId === ca.groupId) {
         conflicts.push(`Група зайнята: ${entry.startTime}-${entry.endTime}`);

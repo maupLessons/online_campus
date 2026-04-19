@@ -128,7 +128,12 @@ export interface Grade {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'schedule_change' | 'new_assignment' | 'grade' | 'announcement' | 'system';
+  type:
+    | 'schedule_change'
+    | 'new_assignment'
+    | 'grade'
+    | 'announcement'
+    | 'system';
   title: string;
   message: string;
   createdAt: string;

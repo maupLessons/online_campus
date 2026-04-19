@@ -9,7 +9,10 @@ export class NotificationsService {
   findByUser(userId: string) {
     return this.items
       .filter((n) => n.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
   }
 
   getUnreadCount(userId: string) {

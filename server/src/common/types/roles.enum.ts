@@ -16,6 +16,12 @@ export const ROLE_HIERARCHY: Record<Role, Role[]> = {
   [Role.DEPARTMENT_HEAD]: [Role.TEACHER],
   [Role.DEAN]: [Role.DEPARTMENT_HEAD, Role.TEACHER],
   [Role.RECTOR]: [Role.DEAN, Role.DEPARTMENT_HEAD, Role.TEACHER],
-  [Role.PRESIDENT]: [Role.RECTOR, Role.DEAN, Role.DEPARTMENT_HEAD, Role.TEACHER, Role.STUDENT],
+  [Role.PRESIDENT]: [
+    Role.RECTOR,
+    Role.DEAN,
+    Role.DEPARTMENT_HEAD,
+    Role.TEACHER,
+    Role.STUDENT,
+  ],
   [Role.ADMIN]: [],
 };

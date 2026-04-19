@@ -1,5 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { users, studentProfiles, teacherProfiles, groups, departments } from '../common/mock-data';
+import {
+  users,
+  studentProfiles,
+  teacherProfiles,
+  groups,
+  departments,
+} from '../common/mock-data';
 import { Role } from '../common/types/roles.enum';
 
 @Injectable()
@@ -27,7 +33,9 @@ export class UsersService {
       group = groups.find((g) => g.id === studentProfile.groupId);
     }
     if (teacherProfile) {
-      department = departments.find((d) => d.id === teacherProfile.departmentId);
+      department = departments.find(
+        (d) => d.id === teacherProfile.departmentId,
+      );
     }
 
     return {
@@ -42,10 +50,11 @@ export class UsersService {
   findByName(query: string) {
     const q = query.toLowerCase();
     return users
-      .filter((u) =>
-        u.firstName.toLowerCase().includes(q) ||
-        u.lastName.toLowerCase().includes(q) ||
-        (u.middleName && u.middleName.toLowerCase().includes(q)),
+      .filter(
+        (u) =>
+          u.firstName.toLowerCase().includes(q) ||
+          u.lastName.toLowerCase().includes(q) ||
+          (u.middleName && u.middleName.toLowerCase().includes(q)),
       )
       .map(({ passwordHash, ...u }) => u);
   }

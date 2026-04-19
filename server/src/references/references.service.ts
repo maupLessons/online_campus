@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { groups, classrooms, departments, faculties } from '../common/mock-data';
+import {
+  groups,
+  classrooms,
+  departments,
+  faculties,
+} from '../common/mock-data';
 
 @Injectable()
 export class ReferencesService {

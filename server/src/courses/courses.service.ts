@@ -1,8 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
-  courses, courseAssignments, groups, materials,
-  assignments, submissions, grades, studentProfiles,
-  teacherProfiles, users,
+  courses,
+  courseAssignments,
+  groups,
+  materials,
+  assignments,
+  submissions,
+  grades,
+  studentProfiles,
+  teacherProfiles,
+  users,
 } from '../common/mock-data';
 
 @Injectable()
@@ -17,7 +24,9 @@ export class CoursesService {
     const profile = studentProfiles.find((p) => p.userId === studentId);
     if (!profile) return [];
 
-    const cas = courseAssignments.filter((ca) => ca.groupId === profile.groupId);
+    const cas = courseAssignments.filter(
+      (ca) => ca.groupId === profile.groupId,
+    );
     return cas.map((ca) => {
       const course = courses.find((c) => c.id === ca.courseId);
       const teacher = users.find((u) => u.id === ca.teacherId);
@@ -26,7 +35,9 @@ export class CoursesService {
         courseName: course?.name,
         courseCode: course?.code,
         credits: course?.credits,
-        teacherName: teacher ? `${teacher.lastName} ${teacher.firstName[0]}.${teacher.middleName ? ' ' + teacher.middleName[0] + '.' : ''}` : undefined,
+        teacherName: teacher
+          ? `${teacher.lastName} ${teacher.firstName[0]}.${teacher.middleName ? ' ' + teacher.middleName[0] + '.' : ''}`
+          : undefined,
       };
     });
   }
@@ -56,7 +67,9 @@ export class CoursesService {
   // ============ ASSIGNMENTS ============
 
   findAssignments(courseAssignmentId: string) {
-    return assignments.filter((a) => a.courseAssignmentId === courseAssignmentId);
+    return assignments.filter(
+      (a) => a.courseAssignmentId === courseAssignmentId,
+    );
   }
 
   findAssignmentsByStudent(studentId: string) {
@@ -72,7 +85,9 @@ export class CoursesService {
       .map((a) => {
         const ca = courseAssignments.find((c) => c.id === a.courseAssignmentId);
         const course = ca ? courses.find((c) => c.id === ca.courseId) : null;
-        const sub = submissions.find((s) => s.assignmentId === a.id && s.studentId === studentId);
+        const sub = submissions.find(
+          (s) => s.assignmentId === a.id && s.studentId === studentId,
+        );
         return {
           ...a,
           courseName: course?.name,
@@ -90,7 +105,9 @@ export class CoursesService {
         const student = users.find((u) => u.id === s.studentId);
         return {
           ...s,
-          studentName: student ? `${student.lastName} ${student.firstName}` : undefined,
+          studentName: student
+            ? `${student.lastName} ${student.firstName}`
+            : undefined,
         };
       });
   }
@@ -122,11 +139,14 @@ export class CoursesService {
     return studentIds.map((sid) => {
       const student = users.find((u) => u.id === sid);
       const studentGrades = grades.filter(
-        (g) => g.studentId === sid && g.courseAssignmentId === courseAssignmentId,
+        (g) =>
+          g.studentId === sid && g.courseAssignmentId === courseAssignmentId,
       );
       return {
         studentId: sid,
-        studentName: student ? `${student.lastName} ${student.firstName}` : undefined,
+        studentName: student
+          ? `${student.lastName} ${student.firstName}`
+          : undefined,
         grades: studentGrades,
       };
     });

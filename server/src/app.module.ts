@@ -8,6 +8,7 @@ import { ScheduleModule } from './schedule/schedule.module';
 import { CoursesModule } from './courses/courses.module';
 import { ReferencesModule } from './references/references.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { SeedModule } from './seed/seed.module';
 
 @Module({
   imports: [
@@ -15,7 +16,11 @@ import { NotificationsModule } from './notifications/notifications.module';
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        uri: `mongodb://${config.get('MONGO_ROOT_USERNAME')}:${config.get('MONGO_ROOT_PASSWORD')}@${config.get('MONGO_HOST')}:${config.get('MONGO_PORT')}/${config.get('MONGO_DATABASE')}?authSource=admin`,
+        uri: `mongodb://${config.get('MONGO_ROOT_USERNAME')}:${config.get(
+          'MONGO_ROOT_PASSWORD',
+        )}@${config.get('MONGO_HOST')}:${config.get(
+          'MONGO_PORT',
+        )}/${config.get('MONGO_DATABASE')}?authSource=admin`,
       }),
     }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
@@ -25,6 +30,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     CoursesModule,
     ReferencesModule,
     NotificationsModule,
+    SeedModule,
   ],
 })
 export class AppModule {}

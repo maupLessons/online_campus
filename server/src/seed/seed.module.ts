@@ -10,18 +10,12 @@ import {
   DepartmentSchema,
   Group,
   GroupSchema,
-  StudentProfile,
-  StudentProfileSchema,
-  TeacherProfile,
-  TeacherProfileSchema,
 } from '../database/schemas';
 import {
   UserSeeder,
   FacultySeeder,
   DepartmentSeeder,
   GroupSeeder,
-  StudentProfileSeeder,
-  TeacherProfileSeeder,
 } from './seeders';
 
 @Module({
@@ -31,8 +25,6 @@ import {
       { name: Faculty.name, schema: FacultySchema },
       { name: Department.name, schema: DepartmentSchema },
       { name: Group.name, schema: GroupSchema },
-      { name: StudentProfile.name, schema: StudentProfileSchema },
-      { name: TeacherProfile.name, schema: TeacherProfileSchema },
     ]),
   ],
   providers: [
@@ -41,8 +33,6 @@ import {
     FacultySeeder,
     DepartmentSeeder,
     GroupSeeder,
-    StudentProfileSeeder,
-    TeacherProfileSeeder,
   ],
 })
 export class SeedModule {}

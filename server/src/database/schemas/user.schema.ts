@@ -1,6 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
 import { Role } from '../../common/types/roles.enum';
+import { StudentProfile, StudentProfileSchema } from './student-profile.schema';
+import { TeacherProfile, TeacherProfileSchema } from './teacher-profile.schema';
 
 @Schema({ timestamps: true })
 export class User extends Document {
@@ -38,6 +40,15 @@ export class User extends Document {
     default: 'active',
   })
   status: string;
+
+  @Prop({ type: StudentProfileSchema, required: false })
+  studentProfile?: StudentProfile;
+
+  @Prop({ type: TeacherProfileSchema, required: false })
+  teacherProfile?: TeacherProfile;
+
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

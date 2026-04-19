@@ -14,7 +14,6 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
   app.enableCors({ origin: process.env.CLIENT_URL, credentials: true });
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
-
   const config = new DocumentBuilder()
     .setTitle('Online Campus API')
     .setDescription('The Online Campus API description')

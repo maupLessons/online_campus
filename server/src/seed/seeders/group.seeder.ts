@@ -8,7 +8,9 @@ import { groups } from '../../common/mock-data';
 export class GroupSeeder {
   private readonly logger = new Logger(GroupSeeder.name);
 
-  constructor(@InjectModel(Group.name) private readonly groupModel: Model<Group>) {}
+  constructor(
+    @InjectModel(Group.name) private readonly groupModel: Model<Group>,
+  ) {}
 
   async seed(): Promise<void> {
     const data = groups.map((group) => ({

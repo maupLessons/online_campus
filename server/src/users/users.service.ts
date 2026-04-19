@@ -1,87 +1,104 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  users,
-  studentProfiles,
-  teacherProfiles,
-  groups,
-  departments,
-} from '../common/mock-data';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User } from '../database/schemas';
 import { Role } from '../common/types/roles.enum';
+import { UserDto } from './dto/user.dto';
+
+function mapToDto(user: User): UserDto {
+  return {
+    id: user._id.toString(),
+    login: user.login,
+    role: user.role,
+    email: user.email,
+    phone: user.phone,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    middleName: user.middleName,
+    avatarUrl: user.avatarUrl,
+    status: user.status,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+    studentProfile: user.studentProfile
+      ? {
+          recordBookNumber: user.studentProfile.recordBookNumber,
+          year: user.studentProfile.year,
+        }
+      : undefined,
+    teacherProfile: user.teacherProfile
+      ? {
+          position: user.teacherProfile.position,
+        }
+      : undefined,
+  };
+}
 
 @Injectable()
 export class UsersService {
-  findAll(role?: Role) {
-    let result = users;
-    if (role) {
-      result = result.filter((u) => u.role === role);
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+  ) {}
+
+  async findAll(role?: Role): Promise<UserDto[]> {
+    const users = await this.userModel
+      .find(role ? { role } : {})
+      .select('-passwordHash')
+      .exec();
+
+    return users.map(mapToDto);
+  }
+
+  async findOne(id: string): Promise<UserDto> {
+    const user = await this.userModel
+      .findById(id)
+      .select('-passwordHash')
+      .populate('studentProfile.group')
+      .populate({
+        path: 'teacherProfile.department',
+        populate: { path: 'faculty' },
+      })
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException('Користувача не знайдено');
     }
-    return result.map(({ passwordHash, ...u }) => u);
+
+    return mapToDto(user);
   }
 
-  findOne(id: string) {
-    const user = users.find((u) => u.id === id);
-    if (!user) throw new NotFoundException('Користувача не знайдено');
+  async findByName(query: string): Promise<UserDto[]> {
+    const q = new RegExp(query, 'i');
+    const users = await this.userModel
+      .find({ $or: [{ firstName: q }, { lastName: q }, { middleName: q }] })
+      .select('-passwordHash')
+      .exec();
 
-    const { passwordHash, ...userWithoutPassword } = user;
-    const studentProfile = studentProfiles.find((p) => p.userId === id);
-    const teacherProfile = teacherProfiles.find((p) => p.userId === id);
-
-    let group = null;
-    let department = null;
-
-    if (studentProfile) {
-      group = groups.find((g) => g.id === studentProfile.groupId);
-    }
-    if (teacherProfile) {
-      department = departments.find(
-        (d) => d.id === teacherProfile.departmentId,
-      );
-    }
-
-    return {
-      ...userWithoutPassword,
-      studentProfile: studentProfile || undefined,
-      teacherProfile: teacherProfile || undefined,
-      group: group || undefined,
-      department: department || undefined,
-    };
+    return users.map(mapToDto);
   }
 
-  findByName(query: string) {
-    const q = query.toLowerCase();
-    return users
-      .filter(
-        (u) =>
-          u.firstName.toLowerCase().includes(q) ||
-          u.lastName.toLowerCase().includes(q) ||
-          (u.middleName && u.middleName.toLowerCase().includes(q)),
-      )
-      .map(({ passwordHash, ...u }) => u);
+  async getStudentsByGroup(groupId: string): Promise<UserDto[]> {
+    const filter = { 'studentProfile.group': groupId } as Record<
+      string,
+      unknown
+    >;
+    const users = await this.userModel
+      .find(filter)
+      .select('-passwordHash')
+      .exec();
+
+    return users.map(mapToDto);
   }
 
-  getStudentsByGroup(groupId: string) {
-    const studentIds = studentProfiles
-      .filter((p) => p.groupId === groupId)
-      .map((p) => p.userId);
+  async getTeachersByDepartment(departmentId: string): Promise<UserDto[]> {
+    const filter = { 'teacherProfile.department': departmentId } as Record<
+      string,
+      unknown
+    >;
+    const users = await this.userModel
+      .find(filter)
+      .select('-passwordHash')
+      .exec();
 
-    return users
-      .filter((u) => studentIds.includes(u.id))
-      .map(({ passwordHash, ...u }) => {
-        const profile = studentProfiles.find((p) => p.userId === u.id);
-        return { ...u, studentProfile: profile };
-      });
-  }
-
-  getTeachersByDepartment(departmentId: string) {
-    const teacherIds = teacherProfiles
-      .filter((p) => p.departmentId === departmentId)
-      .map((p) => p.userId);
-
-    return users
-      .filter((u) => teacherIds.includes(u.id))
-      .map(({ passwordHash, ...u }) => {
-        const profile = teacherProfiles.find((p) => p.userId === u.id);
-        return { ...u, teacherProfile: profile };
-      });
+    return users.map(mapToDto);
   }
 }

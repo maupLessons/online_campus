@@ -1,19 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
-import { User } from './user.schema';
 import { Group } from './group.schema';
 
-@Schema()
-export class StudentProfile extends Document {
-  @Prop({
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-    unique: true,
-  })
-  user: User;
-
+@Schema({ _id: false })
+export class StudentProfile {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Group', required: true })
   group: Group;
 

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Group } from '../../database/schemas/group.schema';
+import { Group } from '../../database/schemas';
 import { groups } from '../../common/mock-data';
 
 @Injectable()
@@ -16,7 +16,6 @@ export class GroupSeeder {
     const data = groups.map((group) => ({
       ...group,
       _id: group.id,
-      curator: group.curatorTeacherId,
     }));
     await this.groupModel.insertMany(data);
     this.logger.log(`Seeded ${data.length} groups.`);

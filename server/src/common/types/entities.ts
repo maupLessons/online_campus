@@ -33,7 +33,7 @@ export interface Group {
   code: string;
   specialty: string;
   course: number;
-  curatorTeacherId?: string;
+  curator?: string;
 }
 
 export interface Department {
@@ -47,6 +47,12 @@ export interface Faculty {
   id: string;
   name: string;
   deanUserId?: string;
+}
+
+export interface Specialty {
+  id: string;
+  name: string;
+  code: string;
 }
 
 export interface Course {

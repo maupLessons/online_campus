@@ -16,6 +16,7 @@ import {
   Submission,
   Grade,
   Notification,
+  Specialty, // Add Specialty here
 } from '../types/entities';
 
 const hash = bcrypt.hashSync('password123', 10);
@@ -85,6 +86,8 @@ const ids = {
   'ntf-3': '6622b2a00f3a22d5b625db03',
   'ntf-4': '6622b2a00f3a22d5b625db04',
   'ntf-5': '6622b2a00f3a22d5b625db05',
+  'spec-1': '6622b2a00f3a22d5b625dc01', // New Specialty ID
+  'spec-2': '6622b2a00f3a22d5b625dc02', // New Specialty ID
 };
 
 // ============ FACULTIES & DEPARTMENTS ============
@@ -351,27 +354,42 @@ export const teacherProfiles: TeacherProfile[] = [
   },
 ];
 
+// ============ SPECIALTIES ============
+
+export const specialties: Specialty[] = [
+  {
+    id: ids['spec-1'],
+    name: "Комп'ютерні науки",
+    code: '121',
+  },
+  {
+    id: ids['spec-2'],
+    name: 'Програмна інженерія',
+    code: '126',
+  },
+];
+
 // ============ GROUPS ============
 
 export const groups: Group[] = [
   {
     id: ids['grp-1'],
     code: 'КН-11',
-    specialty: "Комп'ютерні науки",
+    specialty: ids['spec-1'],
     course: 1,
-    curatorTeacherId: ids['user-t1'],
+    curator: ids['user-t1'],
   },
   {
     id: ids['grp-2'],
     code: 'ПІ-21',
-    specialty: 'Програмна інженерія',
+    specialty: ids['spec-2'],
     course: 2,
-    curatorTeacherId: ids['user-t3'],
+    curator: ids['user-t3'],
   },
   {
     id: ids['grp-3'],
     code: 'КН-31',
-    specialty: "Комп'ютерні науки",
+    specialty: ids['spec-1'],
     course: 3,
   },
 ];

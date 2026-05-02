@@ -12,6 +12,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SeedModule } from './seed/seed.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditInterceptor } from './audit-log/audit.interceptor';
+import { ExistsInDatabaseConstraint } from './common/validators/exists-in-database.validator';
 
 @Module({
   imports: [
@@ -31,11 +32,13 @@ import { AuditInterceptor } from './audit-log/audit.interceptor';
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        uri: `mongodb://${config.get<string>('MONGO_ROOT_USERNAME')}:${config.get<string>(
-          'MONGO_ROOT_PASSWORD',
-        )}@${config.get<string>('MONGO_HOST')}:${config.get<string>(
-          'MONGO_PORT',
-        )}/${config.get<string>('MONGO_DATABASE')}?authSource=admin`,
+        uri: `mongodb://${config.get<string>(
+          'MONGO_ROOT_USERNAME',
+        )}:${config.get<string>('MONGO_ROOT_PASSWORD')}@${config.get<string>(
+          'MONGO_HOST',
+        )}:${config.get<string>('MONGO_PORT')}/${config.get<string>(
+          'MONGO_DATABASE',
+        )}?authSource=admin`,
       }),
     }),
     AuthModule,
@@ -56,6 +59,7 @@ import { AuditInterceptor } from './audit-log/audit.interceptor';
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,
     },
+    ExistsInDatabaseConstraint,
   ],
 })
 export class AppModule {}

@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Classroom } from '../database/schemas';
+import { Classroom } from './schemas';
 import { ClassroomDto, CreateClassroomDto, UpdateClassroomDto } from './dto';
-import { plainToInstance } from 'class-transformer';
+import { transformToDtoArray } from '../common/utils/transform.util';
 
 @Injectable()
 export class ClassroomsService {
@@ -17,9 +17,7 @@ export class ClassroomsService {
     building?: string;
   }): Promise<ClassroomDto[]> {
     const classrooms = await this.classroomModel.find(query).lean().exec();
-    return plainToInstance(ClassroomDto, classrooms, {
-      excludeExtraneousValues: true,
-    });
+    return transformToDtoArray(ClassroomDto, classrooms);
   }
 
   async create(createClassroomDto: CreateClassroomDto): Promise<string> {

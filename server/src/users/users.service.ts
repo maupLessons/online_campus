@@ -1,37 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { User } from '../database/schemas';
+import { User } from './schemas';
 import { Role } from '../common/types/roles.enum';
 import { UserDto } from './dto/user.dto';
 
-function mapToDto(user: User): UserDto {
-  return {
-    id: user._id.toString(),
-    login: user.login,
-    role: user.role,
-    email: user.email,
-    phone: user.phone,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    middleName: user.middleName,
-    avatarUrl: user.avatarUrl,
-    status: user.status,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
-    studentProfile: user.studentProfile
-      ? {
-          recordBookNumber: user.studentProfile.recordBookNumber,
-          year: user.studentProfile.year,
-        }
-      : undefined,
-    teacherProfile: user.teacherProfile
-      ? {
-          position: user.teacherProfile.position,
-        }
-      : undefined,
-  };
-}
+import {
+  transformToDto,
+  transformToDtoArray,
+} from '../common/utils/transform.util';
 
 @Injectable()
 export class UsersService {
@@ -45,7 +22,7 @@ export class UsersService {
       .select('-passwordHash')
       .exec();
 
-    return users.map(mapToDto);
+    return transformToDtoArray(UserDto, users);
   }
 
   async findOne(id: string): Promise<UserDto> {
@@ -63,7 +40,7 @@ export class UsersService {
       throw new NotFoundException('Користувача не знайдено');
     }
 
-    return mapToDto(user);
+    return transformToDto(UserDto, user);
   }
 
   async findByName(query: string): Promise<UserDto[]> {
@@ -73,7 +50,7 @@ export class UsersService {
       .select('-passwordHash')
       .exec();
 
-    return users.map(mapToDto);
+    return transformToDtoArray(UserDto, users);
   }
 
   async getStudentsByGroup(groupId: string): Promise<UserDto[]> {
@@ -86,7 +63,7 @@ export class UsersService {
       .select('-passwordHash')
       .exec();
 
-    return users.map(mapToDto);
+    return transformToDtoArray(UserDto, users);
   }
 
   async getTeachersByDepartment(departmentId: string): Promise<UserDto[]> {
@@ -99,6 +76,6 @@ export class UsersService {
       .select('-passwordHash')
       .exec();
 
-    return users.map(mapToDto);
+    return transformToDtoArray(UserDto, users);
   }
 }

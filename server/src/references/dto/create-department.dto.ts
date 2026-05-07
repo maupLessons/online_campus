@@ -1,6 +1,7 @@
 import { IsString, IsNotEmpty, IsMongoId, IsOptional } from 'class-validator';
 import { ExistsInDatabase } from '../../common/validators/exists-in-database.validator';
-import { Faculty, User } from '../../database/schemas';
+import { Faculty } from '../schemas';
+import { User } from '../../users/schemas';
 
 export class CreateDepartmentDto {
   @IsString()

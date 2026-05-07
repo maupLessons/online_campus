@@ -1,11 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Group } from '../database/schemas';
+import { Group } from './schemas';
 import { CreateGroupDto } from './dto';
 import { GroupDto } from './dto';
 import { UpdateGroupDto } from './dto';
-import { plainToInstance } from 'class-transformer';
+import {
+  transformToDto,
+  transformToDtoArray,
+} from '../common/utils/transform.util';
 
 @Injectable()
 export class GroupsService {
@@ -20,7 +23,7 @@ export class GroupsService {
       .populate('curator')
       .lean() // Return plain JavaScript objects
       .exec();
-    return plainToInstance(GroupDto, groups, { excludeExtraneousValues: true });
+    return transformToDtoArray(GroupDto, groups);
   }
 
   async findById(id: string): Promise<GroupDto> {
@@ -33,7 +36,7 @@ export class GroupsService {
     if (!group) {
       throw new NotFoundException(`Group with ID ${id} not found`);
     }
-    return plainToInstance(GroupDto, group, { excludeExtraneousValues: true });
+    return transformToDto(GroupDto, group);
   }
 
   async create(createGroupDto: CreateGroupDto): Promise<string> {

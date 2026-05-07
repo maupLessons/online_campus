@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Exclude, Expose, Transform } from 'class-transformer';
-import { Classroom } from '../../database/schemas'; // Import Classroom schema
+import { Classroom } from '../schemas';
 
 @Exclude()
 export class ClassroomDto {

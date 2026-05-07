@@ -1,9 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SeedService } from './seed.service';
+import { User, UserSchema } from '../users/schemas';
 import {
-  User,
-  UserSchema,
   Faculty,
   FacultySchema,
   Department,
@@ -14,7 +13,7 @@ import {
   SpecialtySchema,
   Classroom,
   ClassroomSchema,
-} from '../database/schemas';
+} from '../references/schemas';
 import {
   UserSeeder,
   FacultySeeder,

@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Exclude, Expose, Transform, Type } from 'class-transformer';
 import { SpecialtyDto } from './specialty.dto';
 import { UserReferenceDto } from './user-reference.dto';
-import { Group } from '../../database/schemas'; // Import Group schema
+import { Group } from '../schemas';
 
 @Exclude()
 export class GroupDto {

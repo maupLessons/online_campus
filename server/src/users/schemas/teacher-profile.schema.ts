@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
-import { Department } from './department.schema';
+import { Department } from '../../references/schemas';
 
 @Schema({ _id: false })
 export class TeacherProfile {

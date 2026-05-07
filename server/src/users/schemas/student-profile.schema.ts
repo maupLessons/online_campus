@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import * as mongoose from 'mongoose';
-import { Group } from './group.schema';
+import { Group } from '../../references/schemas';
 
 @Schema({ _id: false })
 export class StudentProfile {

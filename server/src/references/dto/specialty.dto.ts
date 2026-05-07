@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Exclude, Expose, Transform } from 'class-transformer';
-import { Specialty } from '../../database/schemas'; // Import Specialty schema
+import { Specialty } from '../schemas';
 
 @Exclude()
 export class SpecialtyDto {

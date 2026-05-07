@@ -1,11 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Department } from '../database/schemas';
+import { Department } from './schemas';
 import { CreateDepartmentDto } from './dto';
 import { DepartmentDto } from './dto';
 import { UpdateDepartmentDto } from './dto';
-import { plainToInstance } from 'class-transformer';
+import {
+  transformToDto,
+  transformToDtoArray,
+} from '../common/utils/transform.util';
 
 @Injectable()
 export class DepartmentsService {
@@ -21,9 +24,7 @@ export class DepartmentsService {
       .populate('head')
       .lean()
       .exec();
-    return plainToInstance(DepartmentDto, departments, {
-      excludeExtraneousValues: true,
-    });
+    return transformToDtoArray(DepartmentDto, departments);
   }
 
   async findById(id: string): Promise<DepartmentDto> {
@@ -36,9 +37,7 @@ export class DepartmentsService {
     if (!department) {
       throw new NotFoundException(`Department with ID ${id} not found`);
     }
-    return plainToInstance(DepartmentDto, department, {
-      excludeExtraneousValues: true,
-    });
+    return transformToDto(DepartmentDto, department);
   }
 
   async create(createDepartmentDto: CreateDepartmentDto): Promise<string> {

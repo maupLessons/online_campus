@@ -12,9 +12,7 @@ import {
   GroupSchema,
   Specialty,
   SpecialtySchema,
-  User,
-  UserSchema,
-} from '../database/schemas';
+} from './schemas';
 import { GroupsService } from './groups.service';
 import { ClassroomsService } from './classrooms.service';
 import { DepartmentsService } from './departments.service';
@@ -29,7 +27,6 @@ import { SpecialtiesService } from './specialties.service';
       { name: Department.name, schema: DepartmentSchema },
       { name: Faculty.name, schema: FacultySchema },
       { name: Specialty.name, schema: SpecialtySchema },
-      { name: User.name, schema: UserSchema },
     ]),
   ],
   controllers: [ReferencesController],

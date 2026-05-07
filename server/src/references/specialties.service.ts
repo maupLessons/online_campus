@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Specialty } from '../database/schemas';
+import { Specialty } from './schemas';
 import { CreateSpecialtyDto, SpecialtyDto, UpdateSpecialtyDto } from './dto';
-import { plainToInstance } from 'class-transformer';
+import { transformToDtoArray } from '../common/utils/transform.util';
 
 @Injectable()
 export class SpecialtiesService {
@@ -14,9 +14,7 @@ export class SpecialtiesService {
 
   async findAll(): Promise<SpecialtyDto[]> {
     const specialties = await this.specialtyModel.find().lean().exec();
-    return plainToInstance(SpecialtyDto, specialties, {
-      excludeExtraneousValues: true,
-    });
+    return transformToDtoArray(SpecialtyDto, specialties);
   }
 
   async create(createSpecialtyDto: CreateSpecialtyDto): Promise<string> {

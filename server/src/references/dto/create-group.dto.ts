@@ -6,7 +6,8 @@ import {
   IsOptional,
 } from 'class-validator';
 import { ExistsInDatabase } from '../../common/validators/exists-in-database.validator';
-import { Specialty, User } from '../../database/schemas';
+import { Specialty } from '../schemas';
+import { User } from '../../users/schemas';
 
 export class CreateGroupDto {
   @IsString()

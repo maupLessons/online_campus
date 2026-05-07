@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Faculty } from '../database/schemas';
+import { Faculty } from './schemas';
 import { CreateFacultyDto, FacultyDto, UpdateFacultyDto } from './dto';
-import { plainToInstance } from 'class-transformer';
+import { transformToDtoArray } from '../common/utils/transform.util';
 
 @Injectable()
 export class FacultiesService {
@@ -17,9 +17,7 @@ export class FacultiesService {
       .populate('dean')
       .lean()
       .exec();
-    return plainToInstance(FacultyDto, faculties, {
-      excludeExtraneousValues: true,
-    });
+    return transformToDtoArray(FacultyDto, faculties);
   }
 
   async create(createFacultyDto: CreateFacultyDto): Promise<string> {

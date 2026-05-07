@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Exclude, Expose, Transform, Type } from 'class-transformer';
 import { UserReferenceDto } from './user-reference.dto';
-import { Faculty } from '../../database/schemas'; // Import Faculty schema
+import { Faculty } from '../schemas';
 
 @Exclude()
 export class FacultyDto {

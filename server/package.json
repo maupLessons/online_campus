@@ -36,6 +36,7 @@
     "compression": "^1.8.1",
     "helmet": "^8.1.0",
     "mongoose": "^9.4.1",
+    "mongoose-paginate-v2": "^1.9.4",
     "multer": "^2.1.1",
     "nestjs-pino": "^4.6.1",
     "passport": "^0.7.0",

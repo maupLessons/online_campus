@@ -3,7 +3,11 @@ import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { Role } from '../common/types/roles.enum';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { PaginationDto } from '../common/dto/pagination.dto';
+import { PaginatedDto } from '../common/dto/paginated.dto';
+import { UserDto } from './dto/user.dto';
+import { ApiPaginatedResponse } from '../common/swagger/api-paginated.response';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -14,8 +18,12 @@ export class UsersController {
 
   @Get()
   @Roles(Role.ADMIN, Role.RECTOR, Role.PRESIDENT)
-  findAll(@Query('role') role?: Role) {
-    return this.usersService.findAll(role);
+  @ApiPaginatedResponse(UserDto)
+  findAll(
+    @Query() paginationDto: PaginationDto,
+    @Query('role') role?: Role,
+  ): Promise<PaginatedDto<UserDto>> {
+    return this.usersService.findAll(paginationDto, role);
   }
 
   @Get('search')

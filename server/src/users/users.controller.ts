@@ -1,14 +1,23 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { Role } from '../common/types/roles.enum';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { PaginationDto } from '../common/dto/pagination.dto';
 import { PaginatedDto } from '../common/dto/paginated.dto';
 import { UserDto } from './dto/user.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserQueryDto } from './dto/user-query.dto';
 import { ApiPaginatedResponse } from '../common/swagger/api-paginated.response';
 
 @ApiTags('users')
@@ -39,10 +48,8 @@ export class UsersController {
   @Get()
   @Roles(Role.ADMIN, Role.RECTOR, Role.PRESIDENT)
   @ApiPaginatedResponse(UserDto)
-  findAll(
-    @Query() paginationDto: PaginationDto,
-    @Query('role') role?: Role,
-  ): Promise<PaginatedDto<UserDto>> {
+  findAll(@Query() query: UserQueryDto): Promise<PaginatedDto<UserDto>> {
+    const { role, ...paginationDto } = query;
     return this.usersService.findAll(paginationDto, role);
   }
 

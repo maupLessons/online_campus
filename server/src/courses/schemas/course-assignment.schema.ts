@@ -9,13 +9,13 @@ export type CourseAssignmentDocument = CourseAssignment & Document;
 @Schema({ timestamps: true })
 export class CourseAssignment {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Course', required: true })
-  courseId: Course;
+  course: Course;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Group', required: true })
-  groupId: Group;
+  group: Group;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
-  teacherId: User;
+  teacher: User;
 
   @Prop({ required: true })
   academicYear: string;

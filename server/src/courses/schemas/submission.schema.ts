@@ -12,10 +12,10 @@ export class Submission {
     ref: 'Assignment',
     required: true,
   })
-  assignmentId: Assignment;
+  assignment: Assignment;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
-  studentId: User;
+  student: User;
 
   @Prop({ required: true, default: Date.now })
   submittedAt: Date;

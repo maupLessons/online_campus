@@ -11,7 +11,7 @@ export class Material {
     ref: 'CourseAssignment',
     required: true,
   })
-  courseAssignmentId: CourseAssignment;
+  courseAssignment: CourseAssignment;
 
   @Prop({ required: true })
   title: string;

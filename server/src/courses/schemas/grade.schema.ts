@@ -8,14 +8,14 @@ export type GradeDocument = Grade & Document;
 @Schema({ timestamps: true })
 export class Grade {
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
-  studentId: User;
+  student: User;
 
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'CourseAssignment',
     required: true,
   })
-  courseAssignmentId: CourseAssignment;
+  courseAssignment: CourseAssignment;
 
   @Prop({ required: true, default: Date.now })
   date: Date;

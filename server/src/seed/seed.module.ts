@@ -21,7 +21,15 @@ import {
   GroupSeeder,
   SpecialtySeeder,
   ClassroomSeeder,
+  CourseSeeder,
+  CourseAssignmentSeeder,
 } from './seeders';
+import {
+  Course,
+  CourseSchema,
+  CourseAssignment,
+  CourseAssignmentSchema,
+} from '../courses/schemas';
 
 @Module({
   imports: [
@@ -32,6 +40,8 @@ import {
       { name: Group.name, schema: GroupSchema },
       { name: Specialty.name, schema: SpecialtySchema },
       { name: Classroom.name, schema: ClassroomSchema },
+      { name: Course.name, schema: CourseSchema },
+      { name: CourseAssignment.name, schema: CourseAssignmentSchema },
     ]),
   ],
   providers: [
@@ -42,6 +52,8 @@ import {
     GroupSeeder,
     SpecialtySeeder,
     ClassroomSeeder,
+    CourseSeeder,
+    CourseAssignmentSeeder,
   ],
 })
 export class SeedModule {}

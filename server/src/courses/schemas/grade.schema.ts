@@ -1,0 +1,36 @@
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Schema as MongooseSchema } from 'mongoose';
+import { User } from '../../users/schemas';
+import { CourseAssignment } from './course-assignment.schema';
+
+export type GradeDocument = Grade & Document;
+
+@Schema({ timestamps: true })
+export class Grade {
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
+  studentId: User;
+
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'CourseAssignment',
+    required: true,
+  })
+  courseAssignmentId: CourseAssignment;
+
+  @Prop({ required: true, default: Date.now })
+  date: Date;
+
+  @Prop({
+    required: true,
+    enum: ['current', 'module', 'exam', 'final'],
+  })
+  type: string;
+
+  @Prop({ required: true })
+  value: number;
+
+  @Prop()
+  comment: string;
+}
+
+export const GradeSchema = SchemaFactory.createForClass(Grade);

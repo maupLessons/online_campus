@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 import { CourseAssignment } from './course-assignment.schema';
+import { File } from '../../files/file.schema';
 
 export type MaterialDocument = Material & Document;
 
@@ -19,8 +20,11 @@ export class Material {
   @Prop()
   description: string;
 
-  @Prop()
-  fileLink: string;
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'File' }],
+    default: [],
+  })
+  files: File[];
 
   @Prop({ required: true, default: Date.now })
   publishDate: Date;

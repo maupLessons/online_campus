@@ -1,10 +1,9 @@
-import { Controller, Get, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, UseGuards, Request } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard, Roles } from '../auth/roles.guard';
-import { Role } from '../common/types/roles.enum';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { AuthenticatedRequest } from '../common/types/authenticated-request';
+import { RolesGuard } from '../auth/roles.guard';
+import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import { CourseAssignmentDto } from './dto';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -14,51 +13,14 @@ export class CoursesController {
   constructor(private coursesService: CoursesService) {}
 
   @Get()
-  findAll() {
+  async findAll() {
     return this.coursesService.findAllCourses();
   }
 
   @Get('my')
-  findMy(@Request() req: AuthenticatedRequest) {
+  @ApiResponse({ type: [CourseAssignmentDto] })
+  async findMy(@Request() req: any) {
     const { sub, role } = req.user;
-    if (role === Role.STUDENT) {
-      return this.coursesService.findCoursesByStudent(sub);
-    }
-    if (role === Role.TEACHER || role === Role.DEPARTMENT_HEAD) {
-      return this.coursesService.findCoursesByTeacher(sub);
-    }
-    return this.coursesService.findAllCourses();
-  }
-
-  @Get(':courseAssignmentId/materials')
-  getMaterials(@Param('courseAssignmentId') caId: string) {
-    return this.coursesService.findMaterials(caId);
-  }
-
-  @Get(':courseAssignmentId/assignments')
-  getAssignments(@Param('courseAssignmentId') caId: string) {
-    return this.coursesService.findAssignments(caId);
-  }
-
-  @Get(':courseAssignmentId/grades')
-  @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
-  getGradeJournal(@Param('courseAssignmentId') caId: string) {
-    return this.coursesService.findGradesByCourseAssignment(caId);
-  }
-
-  @Get('assignments/my')
-  getMyAssignments(@Request() req: AuthenticatedRequest) {
-    return this.coursesService.findAssignmentsByStudent(req.user.sub);
-  }
-
-  @Get('grades/my')
-  getMyGrades(@Request() req: AuthenticatedRequest) {
-    return this.coursesService.findGradesByStudent(req.user.sub);
-  }
-
-  @Get('assignments/:assignmentId/submissions')
-  @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.ADMIN)
-  getSubmissions(@Param('assignmentId') assignmentId: string) {
-    return this.coursesService.findSubmissions(assignmentId);
+    return this.coursesService.findMy(sub, role);
   }
 }

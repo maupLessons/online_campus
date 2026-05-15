@@ -1,0 +1,210 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import * as request from 'supertest';
+import { App } from 'supertest/types';
+import { AppModule } from '../src/app.module';
+import { Connection, Types } from 'mongoose';
+import { getConnectionToken } from '@nestjs/mongoose';
+import { JwtService } from '@nestjs/jwt';
+import { Role } from '../src/common/types/roles.enum';
+import { GenericContainer, StartedTestContainer } from 'testcontainers';
+import { MaterialDto } from '../src/courses/materials/dto';
+
+process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';
+
+const SET_UP_TIMEOUT = 60_000;
+
+describe('Materials (e2e)', () => {
+  let app: INestApplication<App>;
+  let container: StartedTestContainer;
+  let connection: Connection;
+  let jwtService: JwtService;
+
+  const teacherId = new Types.ObjectId();
+  const courseAssignmentId = new Types.ObjectId();
+  let accessToken: string;
+
+  beforeAll(async () => {
+    container = await new GenericContainer('mongo')
+      .withExposedPorts(27017)
+      .start();
+
+    process.env.MONGODB_URI = `mongodb://${container.getHost()}:${container.getMappedPort(27017)}/test-db`;
+  }, SET_UP_TIMEOUT);
+
+  beforeEach(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    await app.init();
+
+    connection = app.get(getConnectionToken());
+    jwtService = app.get(JwtService);
+
+    accessToken = jwtService.sign({
+      sub: teacherId.toHexString(),
+      login: 'teacher_e2e',
+      role: Role.TEACHER,
+    });
+
+    // Seed necessary data
+    await connection.collection('courseassignments').insertOne({
+      _id: courseAssignmentId,
+      teacher: teacherId,
+      course: new Types.ObjectId(),
+      group: new Types.ObjectId(),
+      academicYear: '2023-2024',
+      semester: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  });
+
+  afterEach(async () => {
+    await connection.collection('courseassignments').deleteMany({});
+    await connection.collection('materials').deleteMany({});
+    await app.close();
+  });
+
+  afterAll(async () => {
+    await container.stop();
+  });
+
+  describe('POST /courses/:courseAssignmentId/materials', () => {
+    it('should create a material (201)', async () => {
+      const response = await request(app.getHttpServer())
+        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          title: 'E2E Test Material',
+          description: 'E2E Description',
+          fileIds: [],
+        })
+        .expect(201);
+
+      const body = response.body as MaterialDto;
+      expect(body.title).toBe('E2E Test Material');
+      expect(body.id).toBeDefined();
+    });
+
+    it('should fail if unauthorized (401)', () => {
+      return request(app.getHttpServer())
+        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .send({
+          title: 'Unauthorized Material',
+        })
+        .expect(401);
+    });
+
+    it('should fail if user is not the teacher (403)', async () => {
+      const otherUserToken = jwtService.sign({
+        sub: new Types.ObjectId().toHexString(),
+        login: 'other_user',
+        role: Role.TEACHER,
+      });
+
+      return request(app.getHttpServer())
+        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${otherUserToken}`)
+        .send({
+          title: 'Forbidden Material',
+        })
+        .expect(403);
+    });
+  });
+
+  describe('GET /courses/:courseAssignmentId/materials', () => {
+    it('should get materials for course assignment (200)', async () => {
+      // First create a material so there is something to GET
+      const createRes = await request(app.getHttpServer())
+        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          title: 'Get Test Material',
+          fileIds: [],
+        })
+        .expect(201);
+
+      const materialId = (createRes.body as MaterialDto).id;
+
+      const response = await request(app.getHttpServer())
+        .get(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const body = response.body as MaterialDto[];
+      expect(Array.isArray(body)).toBe(true);
+      expect(body.some((m) => m.id === materialId)).toBe(true);
+    });
+  });
+
+  describe('PUT /courses/:courseAssignmentId/materials/:id', () => {
+    it('should update material (200)', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          title: 'Before Update',
+          fileIds: [],
+        })
+        .expect(201);
+
+      const materialId = (createRes.body as MaterialDto).id;
+
+      const response = await request(app.getHttpServer())
+        .put(
+          `/courses/${courseAssignmentId.toHexString()}/materials/${materialId}`,
+        )
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          title: 'Updated E2E Title',
+        })
+        .expect(200);
+
+      const body = response.body as MaterialDto;
+      expect(body.title).toBe('Updated E2E Title');
+    });
+
+    it('should return 404 for non-existent material', async () => {
+      const fakeId = new Types.ObjectId().toHexString();
+      return request(app.getHttpServer())
+        .put(`/courses/${courseAssignmentId.toHexString()}/materials/${fakeId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ title: 'New Title' })
+        .expect(404);
+    });
+  });
+
+  describe('DELETE /courses/:courseAssignmentId/materials/:id', () => {
+    it('should delete material (200)', async () => {
+      const createRes = await request(app.getHttpServer())
+        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({
+          title: 'To Delete',
+          fileIds: [],
+        })
+        .expect(201);
+
+      const materialId = (createRes.body as MaterialDto).id;
+
+      await request(app.getHttpServer())
+        .delete(
+          `/courses/${courseAssignmentId.toHexString()}/materials/${materialId}`,
+        )
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const response = await request(app.getHttpServer())
+        .get(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const body = response.body as MaterialDto[];
+      expect(body.some((m) => m.id === materialId)).toBe(false);
+    });
+  });
+});

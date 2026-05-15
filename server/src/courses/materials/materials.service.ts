@@ -115,8 +115,11 @@ export class MaterialsService {
     return transformToDto(MaterialDto, updated);
   }
 
-  async remove(id: string, userId: string, role: Role): Promise<void> {
-    const material = await this.materialModel.findById(id).lean().exec();
+  async remove(id: string, userId: string, role: Role): Promise<MaterialDto> {
+    const material = await this.materialModel
+      .findById(id)
+      .populate('files')
+      .exec();
     if (!material) {
       throw new NotFoundException('Матеріал не знайдено');
     }
@@ -127,6 +130,8 @@ export class MaterialsService {
       role,
     );
 
+    const dto = transformToDto(MaterialDto, material.toObject());
     await this.materialModel.findByIdAndDelete(id).exec();
+    return dto;
   }
 }

@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 import { Assignment } from './assignment.schema';
 import { User } from '../../users/schemas';
+import { File } from '../../files/file.schema';
 
 export type SubmissionDocument = Submission & Document;
 
@@ -20,8 +21,11 @@ export class Submission {
   @Prop({ required: true, default: Date.now })
   submittedAt: Date;
 
-  @Prop()
-  fileLink: string;
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'File' }],
+    default: [],
+  })
+  files: File[];
 
   @Prop()
   score: number;

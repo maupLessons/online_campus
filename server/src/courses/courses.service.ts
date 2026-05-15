@@ -71,6 +71,7 @@ export class CoursesService {
         path: 'group',
         populate: { path: 'specialty' },
       })
+      .populate('teacher')
       .lean()
       .exec();
 

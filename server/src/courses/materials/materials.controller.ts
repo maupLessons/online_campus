@@ -55,7 +55,11 @@ export class MaterialsController {
 
   @Delete(':id')
   @Roles(Role.TEACHER, Role.ADMIN)
-  async removeMaterial(@Param('id') id: string, @Request() req: any) {
+  @ApiResponse({ type: MaterialDto })
+  async removeMaterial(
+    @Param('id') id: string,
+    @Request() req: any,
+  ): Promise<MaterialDto> {
     const { sub, role } = req.user;
     return this.materialsService.remove(id, sub, role);
   }

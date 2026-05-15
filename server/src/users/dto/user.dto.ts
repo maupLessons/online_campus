@@ -133,11 +133,42 @@ export class UserDto {
 
   @ApiProperty()
   @Expose()
-  @Transform(({ obj }: { obj: User }) => obj.createdAt.toISOString())
+  @Transform(({ value }) =>
+    value instanceof Date ? value.toISOString() : value,
+  )
   createdAt: string;
 
   @ApiProperty()
   @Expose()
-  @Transform(({ obj }: { obj: User }) => obj.updatedAt.toISOString())
+  @Transform(({ value }) =>
+    value instanceof Date ? value.toISOString() : value,
+  )
   updatedAt: string;
+}
+
+export class UserMinimalDto {
+  @ApiProperty()
+  @Expose()
+  @Transform(({ obj }) => obj._id?.toString() || obj.id)
+  id: string;
+
+  @ApiProperty()
+  @Expose()
+  firstName: string;
+
+  @ApiProperty()
+  @Expose()
+  lastName: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  middleName?: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  avatarUrl?: string;
+
+  @ApiProperty({ enum: Role })
+  @Expose()
+  role: Role;
 }

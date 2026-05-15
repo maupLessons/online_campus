@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
-import { UserDto } from '../../users/dto/user.dto';
+import { UserMinimalDto } from '../../users/dto/user.dto';
 
 export class CourseAssignmentDto {
   @ApiProperty()
@@ -23,10 +23,10 @@ export class CourseAssignmentDto {
   @Transform(({ obj }) => obj.course?.credits)
   credits: number;
 
-  @ApiProperty({ type: () => UserDto, required: false })
+  @ApiProperty({ type: () => UserMinimalDto, required: false })
   @Expose()
-  @Type(() => UserDto)
-  teacher?: UserDto;
+  @Type(() => UserMinimalDto)
+  teacher?: UserMinimalDto;
 
   @ApiProperty({ required: false })
   @Expose()

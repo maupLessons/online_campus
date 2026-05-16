@@ -2,8 +2,6 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
-  BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, PaginateModel } from 'mongoose';
@@ -19,8 +17,6 @@ import {
 import {
   CreateAssignmentDto,
   UpdateAssignmentDto,
-  SubmitAssignmentDto,
-  GradeSubmissionDto,
   AssignmentDto,
   SubmissionDto,
   AssignmentIdDto,
@@ -32,6 +28,7 @@ import {
 } from '../../common/utils/transform.util';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
+import { CoursesService } from '../courses.service';
 
 @Injectable()
 export class AssignmentsService {
@@ -43,27 +40,8 @@ export class AssignmentsService {
     private courseAssignmentModel: Model<CourseAssignmentDocument>,
     @InjectModel(Submission.name)
     private submissionModel: Model<SubmissionDocument>,
+    private coursesService: CoursesService,
   ) {}
-
-  private async validateOwnership(
-    courseAssignmentId: string,
-    userId: string,
-    role: Role,
-  ): Promise<CourseAssignmentDocument> {
-    const ca = await this.courseAssignmentModel
-      .findById(courseAssignmentId)
-      .exec();
-
-    if (!ca) {
-      throw new NotFoundException('Призначення курсу не знайдено');
-    }
-
-    if (role !== Role.ADMIN && String(ca.teacher as any) !== userId) {
-      throw new ForbiddenException('Ви не є викладачем цього курсу');
-    }
-
-    return ca;
-  }
 
   async findAssignments(
     courseAssignmentId: string,
@@ -163,7 +141,11 @@ export class AssignmentsService {
     userId: string,
     role: Role,
   ): Promise<AssignmentDto> {
-    const ca = await this.validateOwnership(courseAssignmentId, userId, role);
+    const ca = await this.coursesService.validateOwnership(
+      courseAssignmentId,
+      userId,
+      role,
+    );
 
     const { fileIds, ...rest } = dto;
     const assignment = new this.assignmentModel({
@@ -189,7 +171,7 @@ export class AssignmentsService {
       throw new NotFoundException('Завдання не знайдено');
     }
 
-    await this.validateOwnership(
+    await this.coursesService.validateOwnership(
       String(assignment.courseAssignment as any),
       userId,
       role,
@@ -219,7 +201,7 @@ export class AssignmentsService {
       throw new NotFoundException('Завдання не знайдено');
     }
 
-    await this.validateOwnership(
+    await this.coursesService.validateOwnership(
       String(assignment.courseAssignment as any),
       userId,
       role,
@@ -305,90 +287,5 @@ export class AssignmentsService {
     });
 
     return paginatedDto;
-  }
-
-  async submitAssignment(
-    assignmentId: string,
-    dto: SubmitAssignmentDto,
-    studentId: string,
-  ): Promise<SubmissionDto> {
-    const assignment = await this.assignmentModel.findById(assignmentId).exec();
-    if (!assignment) {
-      throw new NotFoundException('Завдання не знайдено');
-    }
-
-    if (new Date() > assignment.dueDate) {
-      throw new BadRequestException('Термін здачі завдання минув');
-    }
-
-    const user = await this.userModel
-      .findById(studentId)
-      .select('studentProfile')
-      .lean()
-      .exec();
-
-
-    if (
-      !user?.studentProfile ||
-      String(user.studentProfile.group as any) !==
-        String(assignment.group as any)
-    ) {
-      throw new ForbiddenException(
-        'Ви не належите до групи, якій призначено це завдання',
-      );
-    }
-
-    const existingFilter: Record<string, unknown> = {
-      assignment: new Types.ObjectId(assignmentId),
-      student: new Types.ObjectId(studentId),
-    };
-    const existing = await this.submissionModel.findOne(existingFilter).exec();
-
-    if (existing) {
-      throw new ConflictException('Ви вже здали це завдання');
-    }
-
-    const fileObjectIds = dto.fileIds.map((id) => new Types.ObjectId(id));
-    const submission = new this.submissionModel({
-      assignment: new Types.ObjectId(assignmentId),
-      student: new Types.ObjectId(studentId),
-      files: fileObjectIds,
-      status: 'submitted',
-    });
-    const saved = await submission.save();
-
-    const populated = await saved.populate('files');
-    return transformToDto(SubmissionDto, populated.toObject());
-  }
-
-  async gradeSubmission(
-    submissionId: string,
-    dto: GradeSubmissionDto,
-    userId: string,
-    role: Role,
-  ): Promise<SubmissionDto> {
-    const submission = await this.submissionModel
-      .findById(submissionId)
-      .populate('assignment')
-      .exec();
-
-    if (!submission) {
-      throw new NotFoundException('Роботу не знайдено');
-    }
-
-    const assignment = submission.assignment as unknown as AssignmentDocument;
-    await this.validateOwnership(
-      String(assignment.courseAssignment as any),
-      userId,
-      role,
-    );
-
-    submission.score = dto.score;
-    submission.comment = dto.comment ?? '';
-    submission.status = 'graded';
-
-    const saved = await submission.save();
-    const populated = await saved.populate('files');
-    return transformToDto(SubmissionDto, populated.toObject());
   }
 }

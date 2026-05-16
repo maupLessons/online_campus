@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { MaterialDto } from '../src/courses/materials/dto';
+import { SeedService } from '../src/seed/seed.service';
 
 process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';
 
@@ -35,7 +36,10 @@ describe('Materials (e2e)', () => {
   beforeEach(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(SeedService)
+      .useValue({ onModuleInit: jest.fn() })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(new ValidationPipe({ transform: true }));

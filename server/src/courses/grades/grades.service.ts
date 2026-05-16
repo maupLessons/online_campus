@@ -1,56 +1,270 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, PaginateModel } from 'mongoose';
 import { User, UserDocument } from '../../users/schemas';
 import {
   Grade,
   GradeDocument,
   CourseAssignment,
   CourseAssignmentDocument,
+  Submission,
+  SubmissionDocument,
+  Assignment,
+  AssignmentDocument,
 } from '../schemas';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
+import {
+  GradeResponseDto,
+  StudentCourseResponseDto,
+  GradeSubmissionDto,
+  SubmissionDto,
+  CreateGradeDto,
+  UpdateGradeDto,
+  GradeJournalResponseDto,
+} from '../dto';
+import {
+  transformToPaginatedDto,
+  transformToDtoArray,
+  transformToDto,
+} from '../../common/utils/transform.util';
+import { Role } from '../../common/types/roles.enum';
+import { CoursesService } from '../courses.service';
 
 @Injectable()
 export class GradesService {
   constructor(
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel(Grade.name) private gradeModel: Model<GradeDocument>,
+    @InjectModel(User.name) private userModel: PaginateModel<UserDocument>,
+    @InjectModel(Grade.name) private gradeModel: PaginateModel<GradeDocument>,
     @InjectModel(CourseAssignment.name)
-    private courseAssignmentModel: Model<CourseAssignmentDocument>,
+    private courseAssignmentModel: PaginateModel<CourseAssignmentDocument>,
+    @InjectModel(Submission.name)
+    private submissionModel: Model<SubmissionDocument>,
+    @InjectModel(Assignment.name)
+    private assignmentModel: Model<AssignmentDocument>,
+    private coursesService: CoursesService,
   ) {}
 
-  async findGradesByStudent(studentId: string): Promise<GradeDocument[]> {
-    return this.gradeModel
-      .find({ student: new Types.ObjectId(studentId) } as any)
-      .populate({
+  async gradeSubmission(
+    submissionId: string,
+    dto: GradeSubmissionDto,
+    userId: string,
+    role: Role,
+  ): Promise<SubmissionDto> {
+    const submission = await this.submissionModel
+      .findById(submissionId)
+      .populate('assignment')
+      .exec();
+
+    if (!submission) {
+      throw new NotFoundException('Роботу не знайдено');
+    }
+
+    const assignment = submission.assignment as unknown as AssignmentDocument;
+    await this.coursesService.validateOwnership(
+      String(assignment.courseAssignment as any),
+      userId,
+      role,
+    );
+
+    submission.score = dto.score;
+    submission.comment = dto.comment ?? '';
+    submission.status = 'graded';
+
+    const saved = await submission.save();
+    const populated = await saved.populate('files');
+    return transformToDto(SubmissionDto, populated.toObject());
+  }
+
+  async create(
+    dto: CreateGradeDto,
+    userId: string,
+    role: Role,
+  ): Promise<GradeResponseDto> {
+    await this.coursesService.validateOwnership(
+      dto.courseAssignmentId,
+      userId,
+      role,
+    );
+
+    const grade = new this.gradeModel({
+      student: new Types.ObjectId(dto.studentId),
+      courseAssignment: new Types.ObjectId(dto.courseAssignmentId),
+      type: dto.type,
+      value: dto.value,
+      date: new Date(),
+      comment: dto.comment,
+    });
+
+    const saved = await grade.save();
+    const populated = await saved.populate({
+      path: 'courseAssignment',
+      populate: { path: 'course' },
+    });
+
+    return transformToDto(GradeResponseDto, populated.toObject());
+  }
+
+  async update(
+    id: string,
+    dto: UpdateGradeDto,
+    userId: string,
+    role: Role,
+  ): Promise<GradeResponseDto> {
+    const grade = await this.gradeModel.findById(id).exec();
+    if (!grade) {
+      throw new NotFoundException('Оцінку не знайдено');
+    }
+
+    await this.coursesService.validateOwnership(
+      String(grade.courseAssignment as any),
+      userId,
+      role,
+    );
+
+    if (dto.type) grade.type = dto.type;
+    if (dto.value !== undefined) grade.value = dto.value;
+    if (dto.comment !== undefined) grade.comment = dto.comment;
+
+    const saved = await grade.save();
+    const populated = await saved.populate({
+      path: 'courseAssignment',
+      populate: { path: 'course' },
+    });
+
+    return transformToDto(GradeResponseDto, populated.toObject());
+  }
+
+  async remove(id: string, userId: string, role: Role): Promise<{ id: string }> {
+    const grade = await this.gradeModel.findById(id).exec();
+    if (!grade) {
+      throw new NotFoundException('Оцінку не знайдено');
+    }
+
+    await this.coursesService.validateOwnership(
+      String(grade.courseAssignment as any),
+      userId,
+      role,
+    );
+
+    await this.gradeModel.findByIdAndDelete(id).exec();
+    return { id };
+  }
+
+  async findMyCoursesWithGrades(
+    studentId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<any>> {
+    const user = await this.userModel.findById(studentId).lean().exec();
+    const groupId = user?.studentProfile?.group;
+
+    if (!groupId) {
+      return {
+        docs: [],
+        totalDocs: 0,
+        limit: pagination.limit || 10,
+        page: pagination.page || 1,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+    }
+
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      populate: 'course',
+      sort: { 'course.name': 1 },
+      lean: true,
+    };
+
+    const filter = { group: new Types.ObjectId(groupId as any) };
+    const result = await this.courseAssignmentModel.paginate(filter, options);
+
+    return transformToPaginatedDto(StudentCourseResponseDto, result);
+  }
+
+  async findStudentGradesByCourse(
+    studentId: string,
+    courseAssignmentId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<GradeResponseDto>> {
+    const { page, limit } = pagination;
+    const options = {
+      page,
+      limit,
+      sort: { date: -1 },
+      populate: {
         path: 'courseAssignment',
         populate: { path: 'course' },
-      })
-      .exec();
+      },
+      lean: true,
+    };
+
+    const result = await this.gradeModel.paginate(
+      {
+        student: new Types.ObjectId(studentId),
+        courseAssignment: new Types.ObjectId(courseAssignmentId),
+      },
+      options,
+    );
+
+    return transformToPaginatedDto(GradeResponseDto, result);
   }
 
   async findGradesByCourseAssignment(
     courseAssignmentId: string,
-  ): Promise<any[]> {
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<GradeJournalResponseDto>> {
     const ca = await this.courseAssignmentModel
       .findById(courseAssignmentId)
       .populate('group')
       .lean()
       .exec();
-    if (!ca) return [];
+    if (!ca) {
+      return {
+        docs: [],
+        totalDocs: 0,
+        limit: pagination.limit || 10,
+        page: pagination.page || 1,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+    }
 
-    const students = await this.userModel
-      .find({ 'studentProfile.group': ca.group._id } as any)
-      .lean()
-      .exec();
+    const { page, limit } = pagination;
+    const studentOptions = {
+      page: page || 1,
+      limit: limit || 10,
+      lean: true,
+      sort: { lastName: 1, firstName: 1 },
+    };
+
+    const studentResult = await this.userModel.paginate(
+      { 'studentProfile.group': (ca.group as any)._id },
+      studentOptions,
+    );
+
+    const studentIds = studentResult.docs.map((s) => s._id);
 
     const grades = await this.gradeModel
       .find({
         courseAssignment: new Types.ObjectId(courseAssignmentId),
+        student: { $in: studentIds },
       } as any)
+      .populate({
+        path: 'courseAssignment',
+        populate: { path: 'course' },
+      })
       .lean()
       .exec();
 
-    return students.map((s) => {
+    const journalDocs = studentResult.docs.map((s) => {
       const studentGrades = grades.filter(
         (g) => g.student.toString() === s._id.toString(),
       );
@@ -60,5 +274,17 @@ export class GradesService {
         grades: studentGrades,
       };
     });
+
+    return {
+      docs: transformToDtoArray(GradeJournalResponseDto, journalDocs),
+      totalDocs: studentResult.totalDocs,
+      limit: studentResult.limit,
+      page: studentResult.page || 1,
+      totalPages: studentResult.totalPages,
+      hasNextPage: studentResult.hasNextPage,
+      hasPrevPage: studentResult.hasPrevPage,
+      nextPage: studentResult.nextPage || undefined,
+      prevPage: studentResult.prevPage || undefined,
+    };
   }
 }

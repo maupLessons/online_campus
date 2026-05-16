@@ -18,10 +18,7 @@ import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import {
   CreateAssignmentDto,
   UpdateAssignmentDto,
-  SubmitAssignmentDto,
-  GradeSubmissionDto,
   AssignmentDto,
-  SubmissionDto,
   AssignmentIdDto,
 } from '../dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -107,28 +104,5 @@ export class AssignmentsController {
   ): Promise<AssignmentDto> {
     const { sub, role } = req.user;
     return this.assignmentsService.findOne(id, sub, role);
-  }
-
-  @Post('assignments/:id/submit')
-  @Roles(Role.STUDENT)
-  @ApiResponse({ type: SubmissionDto })
-  async submitAssignment(
-    @Param('id') id: string,
-    @Body() dto: SubmitAssignmentDto,
-    @Request() req: any,
-  ): Promise<SubmissionDto> {
-    return this.assignmentsService.submitAssignment(id, dto, req.user.sub);
-  }
-
-  @Post('submissions/:id/grade')
-  @Roles(Role.TEACHER)
-  @ApiResponse({ type: SubmissionDto })
-  async gradeSubmission(
-    @Param('id') id: string,
-    @Body() dto: GradeSubmissionDto,
-    @Request() req: any,
-  ): Promise<SubmissionDto> {
-    const { sub, role } = req.user;
-    return this.assignmentsService.gradeSubmission(id, dto, sub, role);
   }
 }

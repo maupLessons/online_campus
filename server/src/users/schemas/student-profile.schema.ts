@@ -7,7 +7,7 @@ export class StudentProfile {
   @Prop({ type: mongoose.Schema.Types.ObjectId, ref: 'Group', required: true })
   group: Group;
 
-  @Prop({ required: true, unique: true })
+  @Prop({ required: true, unique: true, sparse: true })
   recordBookNumber: string;
 
   @Prop({ type: Number, required: true })

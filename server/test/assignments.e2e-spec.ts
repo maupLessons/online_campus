@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { ConfigService } from '@nestjs/config';
+import { SeedService } from '../src/seed/seed.service';
 
 const SET_UP_TIMEOUT = 60_000;
 
@@ -38,6 +39,8 @@ describe('Assignments (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(SeedService)
+      .useValue({ onModuleInit: jest.fn() })
       .overrideProvider(ConfigService)
       .useValue({
         get: (key: string) => {
@@ -57,25 +60,29 @@ describe('Assignments (e2e)', () => {
 
     teacherToken = jwtService.sign({
       sub: teacherId.toHexString(),
-      login: 'teacher_e2e',
+      login: 'teacher_e2e_unique',
       role: Role.TEACHER,
     });
 
     studentToken = jwtService.sign({
       sub: studentId.toHexString(),
-      login: 'student_e2e',
+      login: 'student_e2e_unique',
       role: Role.STUDENT,
     });
 
     // Seed necessary data
     await connection.collection('users').insertOne({
       _id: studentId,
-      login: 'student_e2e',
+      login: 'student_e2e_unique',
       role: Role.STUDENT,
-      studentProfile: { group: groupId },
+      studentProfile: { 
+        group: groupId,
+        recordBookNumber: 'E2E-ASGN-STUDENT',
+        year: 1
+      },
       status: 'active',
       passwordHash: 'hash',
-      email: 'student@test.com',
+      email: 'student_asgn_e2e@test.com',
       firstName: 'Student',
       lastName: 'Test',
       createdAt: new Date(),
@@ -154,6 +161,7 @@ describe('Assignments (e2e)', () => {
       const assignment = response.body.docs.find(
         (a: any) => a.id === assignmentId.toHexString(),
       );
+      expect(assignment).toBeDefined();
       expect(assignment.submission).toBeDefined();
       expect(assignment.submission.status).toBe('submitted');
     });
@@ -275,7 +283,10 @@ describe('Assignments (e2e)', () => {
 
       expect(response.body.docs).toBeDefined();
       expect(Array.isArray(response.body.docs)).toBe(true);
-      expect(response.body.docs.length).toBeGreaterThan(0);
+      const assignment = response.body.docs.find(
+        (a: any) => a.title === 'My Assignment',
+      );
+      expect(assignment).toBeDefined();
     });
   });
 
@@ -370,19 +381,23 @@ describe('Assignments (e2e)', () => {
 
       await connection.collection('users').insertOne({
         _id: otherStudentId,
-        login: 'other_student',
+        login: 'other_student_unique',
         role: Role.STUDENT,
-        studentProfile: { group: otherGroupId },
+        studentProfile: { 
+          group: otherGroupId,
+          recordBookNumber: 'E2E-OTHER-STUDENT',
+          year: 1
+        },
         status: 'active',
         passwordHash: 'hash',
-        email: 'other@test.com',
+        email: 'other_asgn@test.com',
         firstName: 'Other',
         lastName: 'Student',
       });
 
       const otherStudentToken = jwtService.sign({
         sub: otherStudentId.toHexString(),
-        login: 'other_student',
+        login: 'other_student_unique',
         role: Role.STUDENT,
       });
 

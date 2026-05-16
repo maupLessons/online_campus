@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Role } from '../common/types/roles.enum';
@@ -20,6 +24,26 @@ export class CoursesService {
     @InjectModel(CourseAssignment.name)
     private courseAssignmentModel: Model<CourseAssignmentDocument>,
   ) {}
+
+  async validateOwnership(
+    courseAssignmentId: string,
+    userId: string,
+    role: Role,
+  ): Promise<CourseAssignmentDocument> {
+    const ca = await this.courseAssignmentModel
+      .findById(courseAssignmentId)
+      .exec();
+
+    if (!ca) {
+      throw new NotFoundException('Призначення курсу не знайдено');
+    }
+
+    if (role !== Role.ADMIN && String(ca.teacher as any) !== userId) {
+      throw new ForbiddenException('Ви не є викладачем цього курсу');
+    }
+
+    return ca;
+  }
 
   // ============ COURSES ============
 

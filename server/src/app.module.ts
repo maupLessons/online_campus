@@ -3,6 +3,8 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ScheduleModule } from './schedule/schedule.module';
@@ -24,10 +26,20 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
     ]),
     ConfigModule.forRoot({ isGlobal: true }),
 
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/uploads',
+    }),
+
     MongooseModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const isTest = config.get<string>('NODE_ENV') === 'test';
+        const uri = config.get<string>('MONGODB_URI');
+
+        if (uri) {
+          return { uri };
+        }
 
         return {
           uri: `mongodb://${config.get<string>(

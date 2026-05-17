@@ -3,8 +3,6 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ServeStaticModule } from '@nestjs/serve-static';
-import { join } from 'path';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ScheduleModule } from './schedule/schedule.module';
@@ -25,11 +23,6 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
       { name: 'auth', ttl: 900000, limit: 10 },
     ]),
     ConfigModule.forRoot({ isGlobal: true }),
-
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
-    }),
 
     MongooseModule.forRootAsync({
       inject: [ConfigService],

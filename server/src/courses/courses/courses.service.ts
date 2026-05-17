@@ -4,9 +4,9 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, PaginateModel } from 'mongoose';
 
-import { CourseAssignmentDto } from './dto';
+import { CourseAssignmentDto, CourseDto } from './dto';
 import { Role } from '../../common/types/roles.enum';
 import { User, UserDocument } from '../../users/schemas';
 import {
@@ -15,15 +15,19 @@ import {
   CourseAssignmentDocument,
   CourseDocument,
 } from '../schemas';
-import { transformToDtoArray } from '../../common/utils/transform.util';
+import {
+  transformToPaginatedDto,
+} from '../../common/utils/transform.util';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
 
 @Injectable()
 export class CoursesService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
-    @InjectModel(Course.name) private courseModel: Model<CourseDocument>,
+    @InjectModel(Course.name) private courseModel: PaginateModel<CourseDocument>,
     @InjectModel(CourseAssignment.name)
-    private courseAssignmentModel: Model<CourseAssignmentDocument>,
+    private courseAssignmentModel: PaginateModel<CourseAssignmentDocument>,
   ) {}
 
   async validateOwnership(
@@ -46,58 +50,101 @@ export class CoursesService {
     return ca;
   }
 
-  async findAllCourses(): Promise<Course[]> {
-    return this.courseModel.find().populate('department').exec();
+  async findAllCourses(
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<CourseDto>> {
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      sort: { name: 1 },
+      lean: true,
+    };
+
+    const result = await this.courseModel.paginate({}, options as any);
+    return transformToPaginatedDto(CourseDto, result);
   }
 
-  async findMy(userId: string, role: Role): Promise<CourseAssignmentDto[]> {
+  async findMy(
+    userId: string,
+    role: Role,
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<CourseAssignmentDto>> {
     if (role === Role.STUDENT) {
-      return this.findCoursesByStudent(userId);
+      return this.findCoursesByStudent(userId, pagination);
     }
     if (role === Role.TEACHER || role === Role.DEPARTMENT_HEAD) {
-      return this.findCoursesByTeacher(userId);
+      return this.findCoursesByTeacher(userId, pagination);
     }
-    const all = await this.courseAssignmentModel
-      .find()
-      .populate('course')
-      .populate('teacher')
-      .populate('group')
-      .lean()
-      .exec();
 
-    return transformToDtoArray(CourseAssignmentDto, all);
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      populate: ['course', 'teacher', 'group'],
+      lean: true,
+    };
+
+    const result = await this.courseAssignmentModel.paginate(
+      {},
+      options as any,
+    );
+    return transformToPaginatedDto(CourseAssignmentDto, result);
   }
 
   async findCoursesByStudent(
     studentId: string,
-  ): Promise<CourseAssignmentDto[]> {
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<CourseAssignmentDto>> {
     const user = await this.userModel.findById(studentId).lean().exec();
-    if (!user || !user.studentProfile) return [];
+    if (!user || !user.studentProfile) {
+      return {
+        docs: [],
+        totalDocs: 0,
+        limit: pagination.limit || 10,
+        page: pagination.page || 1,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+    }
 
-    const cas = await this.courseAssignmentModel
-      .find({ group: user.studentProfile.group })
-      .populate('course')
-      .populate('teacher')
-      .lean()
-      .exec();
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      populate: ['course', 'teacher'],
+      lean: true,
+    };
 
-    return transformToDtoArray(CourseAssignmentDto, cas);
+    const result = await this.courseAssignmentModel.paginate(
+      { group: user.studentProfile.group },
+      options as any,
+    );
+
+    return transformToPaginatedDto(CourseAssignmentDto, result);
   }
 
   async findCoursesByTeacher(
     teacherId: string,
-  ): Promise<CourseAssignmentDto[]> {
-    const cas = await this.courseAssignmentModel
-      .find({ teacher: new Types.ObjectId(teacherId) })
-      .populate('course')
-      .populate({
-        path: 'group',
-        populate: { path: 'specialty' },
-      })
-      .populate('teacher')
-      .lean()
-      .exec();
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<CourseAssignmentDto>> {
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      populate: [
+        'course',
+        'teacher',
+        {
+          path: 'group',
+          populate: { path: 'specialty' },
+        },
+      ],
+      lean: true,
+    };
 
-    return transformToDtoArray(CourseAssignmentDto, cas);
+    const result = await this.courseAssignmentModel.paginate(
+      { teacher: new Types.ObjectId(teacherId) },
+      options as any,
+    );
+
+    return transformToPaginatedDto(CourseAssignmentDto, result);
   }
 }

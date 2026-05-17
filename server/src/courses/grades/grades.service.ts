@@ -1,11 +1,6 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, PaginateModel } from 'mongoose';
-import { User, UserDocument } from '../../users/schemas';
 import {
   Grade,
   GradeDocument,
@@ -16,24 +11,26 @@ import {
   Assignment,
   AssignmentDocument,
 } from '../schemas';
-import { PaginationDto } from '../../common/dto/pagination.dto';
-import { PaginatedDto } from '../../common/dto/paginated.dto';
 import {
   GradeResponseDto,
-  StudentCourseResponseDto,
   GradeSubmissionDto,
-  SubmissionDto,
   CreateGradeDto,
   UpdateGradeDto,
   GradeJournalResponseDto,
-} from '../dto';
+} from './dto';
+import { StudentCourseResponseDto } from '../courses/dto';
+import { SubmissionDto } from '../submissions/dto';
 import {
   transformToPaginatedDto,
   transformToDtoArray,
   transformToDto,
 } from '../../common/utils/transform.util';
 import { Role } from '../../common/types/roles.enum';
-import { CoursesService } from '../courses.service';
+import { CoursesService } from '../courses/courses.service';
+import { toId } from '../../common/utils/to-id.util';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
+import { User, UserDocument } from '../../users/schemas';
 
 @Injectable()
 export class GradesService {
@@ -66,7 +63,7 @@ export class GradesService {
 
     const assignment = submission.assignment as unknown as AssignmentDocument;
     await this.coursesService.validateOwnership(
-      String(assignment.courseAssignment as any),
+      toId(assignment.courseAssignment),
       userId,
       role,
     );
@@ -121,7 +118,7 @@ export class GradesService {
     }
 
     await this.coursesService.validateOwnership(
-      String(grade.courseAssignment as any),
+      toId(grade.courseAssignment),
       userId,
       role,
     );
@@ -139,14 +136,18 @@ export class GradesService {
     return transformToDto(GradeResponseDto, populated.toObject());
   }
 
-  async remove(id: string, userId: string, role: Role): Promise<{ id: string }> {
+  async remove(
+    id: string,
+    userId: string,
+    role: Role,
+  ): Promise<{ id: string }> {
     const grade = await this.gradeModel.findById(id).exec();
     if (!grade) {
       throw new NotFoundException('Оцінку не знайдено');
     }
 
     await this.coursesService.validateOwnership(
-      String(grade.courseAssignment as any),
+      toId(grade.courseAssignment),
       userId,
       role,
     );
@@ -158,7 +159,7 @@ export class GradesService {
   async findMyCoursesWithGrades(
     studentId: string,
     pagination: PaginationDto,
-  ): Promise<PaginatedDto<any>> {
+  ): Promise<PaginatedDto<StudentCourseResponseDto>> {
     const user = await this.userModel.findById(studentId).lean().exec();
     const groupId = user?.studentProfile?.group;
 
@@ -182,8 +183,10 @@ export class GradesService {
       lean: true,
     };
 
-    const filter = { group: new Types.ObjectId(groupId as any) };
-    const result = await this.courseAssignmentModel.paginate(filter, options);
+    const result = await this.courseAssignmentModel.paginate(
+      { group: groupId },
+      options,
+    );
 
     return transformToPaginatedDto(StudentCourseResponseDto, result);
   }
@@ -246,7 +249,7 @@ export class GradesService {
     };
 
     const studentResult = await this.userModel.paginate(
-      { 'studentProfile.group': (ca.group as any)._id },
+      { 'studentProfile.group': toId(ca.group) },
       studentOptions,
     );
 
@@ -266,7 +269,7 @@ export class GradesService {
 
     const journalDocs = studentResult.docs.map((s) => {
       const studentGrades = grades.filter(
-        (g) => g.student.toString() === s._id.toString(),
+        (g) => toId(g.student) === toId(s._id),
       );
       return {
         studentId: s._id,

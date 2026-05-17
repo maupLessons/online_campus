@@ -20,10 +20,11 @@ import {
   UpdateAssignmentDto,
   AssignmentDto,
   AssignmentIdDto,
-} from '../dto';
+} from './dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
 import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
+import { RequestWithUser } from '../../common/types/request-with-user.interface';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -37,7 +38,7 @@ export class AssignmentsController {
   async getAssignments(
     @Param('courseAssignmentId') caId: string,
     @Query() paginationDto: PaginationDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<PaginatedDto<AssignmentDto>> {
     const { sub, role } = req.user;
     return this.assignmentsService.findAssignments(
@@ -54,7 +55,7 @@ export class AssignmentsController {
   async createAssignment(
     @Param('courseAssignmentId') caId: string,
     @Body() dto: CreateAssignmentDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<AssignmentDto> {
     const { sub, role } = req.user;
     return this.assignmentsService.create(caId, dto, sub, role);
@@ -66,7 +67,7 @@ export class AssignmentsController {
   async updateAssignment(
     @Param('id') id: string,
     @Body() dto: UpdateAssignmentDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<AssignmentDto> {
     const { sub, role } = req.user;
     return this.assignmentsService.update(id, dto, sub, role);
@@ -77,7 +78,7 @@ export class AssignmentsController {
   @ApiResponse({ type: AssignmentIdDto })
   async removeAssignment(
     @Param('id') id: string,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<AssignmentIdDto> {
     const { sub, role } = req.user;
     return this.assignmentsService.remove(id, sub, role);
@@ -88,7 +89,7 @@ export class AssignmentsController {
   @ApiPaginatedResponse(AssignmentDto)
   async getMyAssignments(
     @Query() paginationDto: PaginationDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<PaginatedDto<AssignmentDto>> {
     return this.assignmentsService.findAssignmentsByStudent(
       req.user.sub,
@@ -100,7 +101,7 @@ export class AssignmentsController {
   @ApiResponse({ type: AssignmentDto })
   async getAssignment(
     @Param('id') id: string,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<AssignmentDto> {
     const { sub, role } = req.user;
     return this.assignmentsService.findOne(id, sub, role);

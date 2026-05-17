@@ -14,7 +14,7 @@ import {
   AssignmentDocument,
 } from '../schemas';
 import { User, UserDocument } from '../../users/schemas';
-import { SubmissionDto, SubmitAssignmentDto } from '../dto';
+import { SubmissionDto, SubmitAssignmentDto } from './dto';
 import {
   transformToDto,
   transformToDtoArray,

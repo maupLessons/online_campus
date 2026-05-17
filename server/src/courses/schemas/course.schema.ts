@@ -6,6 +6,8 @@ export type CourseDocument = Course & Document;
 
 @Schema({ timestamps: true })
 export class Course {
+  _id: MongooseSchema.Types.ObjectId;
+
   @Prop({ required: true })
   name: string;
 

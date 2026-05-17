@@ -1,16 +1,10 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, PaginateModel } from 'mongoose';
 import { User, UserDocument } from '../../users/schemas';
 import {
   Assignment,
   AssignmentDocument,
-  CourseAssignment,
-  CourseAssignmentDocument,
   Submission,
   SubmissionDocument,
 } from '../schemas';
@@ -18,17 +12,18 @@ import {
   CreateAssignmentDto,
   UpdateAssignmentDto,
   AssignmentDto,
-  SubmissionDto,
   AssignmentIdDto,
-} from '../dto';
+} from './dto';
+import { CoursesService } from '../courses/courses.service';
+import { PaginationDto } from '../../common/dto/pagination.dto';
 import { Role } from '../../common/types/roles.enum';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
 import {
   transformToDto,
   transformToPaginatedDto,
 } from '../../common/utils/transform.util';
-import { PaginationDto } from '../../common/dto/pagination.dto';
-import { PaginatedDto } from '../../common/dto/paginated.dto';
-import { CoursesService } from '../courses.service';
+import { SubmissionDto } from '../submissions/dto';
+import { toId } from '../../common/utils/to-id.util';
 
 @Injectable()
 export class AssignmentsService {
@@ -36,8 +31,6 @@ export class AssignmentsService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Assignment.name)
     private assignmentModel: PaginateModel<AssignmentDocument>,
-    @InjectModel(CourseAssignment.name)
-    private courseAssignmentModel: Model<CourseAssignmentDocument>,
     @InjectModel(Submission.name)
     private submissionModel: Model<SubmissionDocument>,
     private coursesService: CoursesService,
@@ -60,7 +53,7 @@ export class AssignmentsService {
     const filter: Record<string, any> = {
       courseAssignment: new Types.ObjectId(courseAssignmentId),
     };
-    const result = await this.assignmentModel.paginate(filter, options);
+    const result = await this.assignmentModel.paginate(filter as any, options);
     const paginatedDto = transformToPaginatedDto(AssignmentDto, result);
 
     if (role === Role.STUDENT && userId) {
@@ -73,11 +66,8 @@ export class AssignmentsService {
         .populate('files')
         .lean()
         .exec();
-      const submissionMap = new Map<string, SubmissionDocument>(
-        submissions.map((s: SubmissionDocument) => [
-          String(s.assignment as any),
-          s,
-        ]),
+      const submissionMap = new Map<string, Submission>(
+        submissions.map((s) => [toId(s.assignment), s]),
       );
 
       paginatedDto.docs = paginatedDto.docs.map((dto) => {
@@ -85,8 +75,8 @@ export class AssignmentsService {
         dto.submission = sub
           ? transformToDto(SubmissionDto, {
               ...sub,
-              assignmentId: String(sub.assignment as any),
-              studentId: String(sub.student as any),
+              assignmentId: toId(sub.assignment),
+              studentId: toId(sub.student),
             })
           : null;
         return dto;
@@ -126,8 +116,8 @@ export class AssignmentsService {
       dto.submission = submission
         ? transformToDto(SubmissionDto, {
             ...submission,
-            assignmentId: String(submission.assignment as any),
-            studentId: String(submission.student as any),
+            assignmentId: toId(submission.assignment),
+            studentId: toId(submission.student),
           })
         : null;
     }
@@ -260,26 +250,23 @@ export class AssignmentsService {
       .populate('files')
       .lean()
       .exec()) as any[];
-
-    const submissionMap = new Map<string, SubmissionDocument>(
-      submissions.map((s) => [String(s.assignment), s]),
+    const submissionMap = new Map<string, Submission>(
+      submissions.map((s) => [toId(s.assignment), s]),
     );
 
     paginatedDto.docs = paginatedDto.docs.map((dto, index) => {
       const a = assignments[index];
-      const ca = a?.courseAssignment as unknown as CourseAssignmentDocument & {
-        course: { name: string };
-      };
+      const ca = a.courseAssignment;
 
       dto.courseName = ca?.course?.name;
-      dto.courseAssignmentId = String(ca?._id as any);
+      dto.courseAssignmentId = toId(ca);
 
       const sub = submissionMap.get(dto.id);
       dto.submission = sub
         ? transformToDto(SubmissionDto, {
             ...sub,
-            assignmentId: String(sub.assignment as any),
-            studentId: String(sub.student as any),
+            assignmentId: toId(sub.assignment),
+            studentId: toId(sub.student),
           })
         : null;
 

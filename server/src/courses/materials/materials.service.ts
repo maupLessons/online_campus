@@ -17,6 +17,7 @@ import {
   transformToDto,
   transformToDtoArray,
 } from '../../common/utils/transform.util';
+import { toId } from '../../common/utils/to-id.util';
 
 @Injectable()
 export class MaterialsService {
@@ -27,22 +28,22 @@ export class MaterialsService {
   ) {}
 
   async findMaterials(courseAssignmentId: string): Promise<MaterialDto[]> {
-    const materials = await this.materialModel
+    const materials = (await this.materialModel
       .find({
         courseAssignment: new Types.ObjectId(courseAssignmentId),
-      } as any)
+      } as Record<string, unknown>)
       .populate('files')
       .lean()
-      .exec();
+      .exec()) as MaterialDocument[];
 
-    return transformToDtoArray(MaterialDto, materials as any[]);
+    return transformToDtoArray(MaterialDto, materials);
   }
 
   private async validateOwnership(
     courseAssignmentId: string,
     userId: string,
     role: Role,
-  ) {
+  ): Promise<void> {
     if (role === Role.ADMIN) return;
 
     const ca = await this.courseAssignmentModel
@@ -54,7 +55,7 @@ export class MaterialsService {
       throw new NotFoundException('Призначення курсу не знайдено');
     }
 
-    if (ca.teacher?.toString() !== userId) {
+    if (toId(ca.teacher) !== userId) {
       throw new ForbiddenException('Ви не є викладачем цього курсу');
     }
   }
@@ -68,12 +69,12 @@ export class MaterialsService {
     await this.validateOwnership(courseAssignmentId, userId, role);
 
     const { fileIds, ...rest } = createMaterialDto;
-
     const newMaterial = new this.materialModel({
       ...rest,
       courseAssignment: new Types.ObjectId(courseAssignmentId),
-      files: fileIds ? fileIds.map((id) => new Types.ObjectId(id)) : [],
+      files: fileIds?.map((id) => new Types.ObjectId(id)) ?? [],
     });
+
     const saved = await newMaterial.save();
     const populated = await saved.populate('files');
     return transformToDto(MaterialDto, populated.toObject());
@@ -90,28 +91,24 @@ export class MaterialsService {
       throw new NotFoundException('Матеріал не знайдено');
     }
 
-    await this.validateOwnership(
-      material.courseAssignment?.toString() || '',
-      userId,
-      role,
-    );
+    await this.validateOwnership(toId(material.courseAssignment), userId, role);
 
     const { fileIds, ...rest } = updateMaterialDto;
     const updateData: Record<string, unknown> = { ...rest };
-
     if (fileIds) {
       updateData.files = fileIds.map((fid) => new Types.ObjectId(fid));
     }
 
-    const updated = await this.materialModel
+    const updated = (await this.materialModel
       .findByIdAndUpdate(id, { $set: updateData }, { new: true })
       .populate('files')
       .lean()
-      .exec();
+      .exec()) as MaterialDocument | null;
 
     if (!updated) {
       throw new NotFoundException('Матеріал не знайдено');
     }
+
     return transformToDto(MaterialDto, updated);
   }
 
@@ -120,15 +117,12 @@ export class MaterialsService {
       .findById(id)
       .populate('files')
       .exec();
+
     if (!material) {
       throw new NotFoundException('Матеріал не знайдено');
     }
 
-    await this.validateOwnership(
-      material.courseAssignment?.toString() || '',
-      userId,
-      role,
-    );
+    await this.validateOwnership(toId(material.courseAssignment), userId, role);
 
     const dto = transformToDto(MaterialDto, material.toObject());
     await this.materialModel.findByIdAndDelete(id).exec();

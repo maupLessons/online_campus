@@ -9,7 +9,8 @@ import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
-import { GradeResponseDto, StudentCourseResponseDto } from '../src/courses/dto';
+import { GradeResponseDto } from '../src/courses/grades/dto';
+import { StudentCourseResponseDto } from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed/seed.service';
 
 process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';
@@ -21,12 +22,6 @@ describe('Grades (e2e)', () => {
   let container: StartedTestContainer;
   let connection: Connection;
   let jwtService: JwtService;
-
-  let studentId: Types.ObjectId;
-  let groupId: Types.ObjectId;
-  let courseId: Types.ObjectId;
-  let courseAssignmentId: Types.ObjectId;
-  let accessToken: string;
 
   beforeAll(async () => {
     container = await new GenericContainer('mongo')
@@ -50,19 +45,32 @@ describe('Grades (e2e)', () => {
 
     connection = app.get(getConnectionToken());
     jwtService = app.get(JwtService);
+  });
 
-    studentId = new Types.ObjectId();
-    groupId = new Types.ObjectId();
-    courseId = new Types.ObjectId();
-    courseAssignmentId = new Types.ObjectId();
+  afterEach(async () => {
+    await connection.collection('users').deleteMany({});
+    await connection.collection('courses').deleteMany({});
+    await connection.collection('courseassignments').deleteMany({});
+    await connection.collection('grades').deleteMany({});
+    await app.close();
+  });
 
-    accessToken = jwtService.sign({
+  afterAll(async () => {
+    await container.stop();
+  });
+
+  const setupGrades = async () => {
+    const studentId = new Types.ObjectId();
+    const groupId = new Types.ObjectId();
+    const courseId = new Types.ObjectId();
+    const courseAssignmentId = new Types.ObjectId();
+
+    const accessToken = jwtService.sign({
       sub: studentId.toHexString(),
       login: 'student_e2e',
       role: Role.STUDENT,
     });
 
-    // Seed data
     await connection.collection('users').insertOne({
       _id: studentId,
       login: 'student_e2e',
@@ -72,7 +80,7 @@ describe('Grades (e2e)', () => {
       lastName: 'Student',
       studentProfile: {
         group: groupId,
-        recordBookNumber: 'TEST-001',
+        recordBookNumber: `TEST-${studentId.toHexString().slice(-4)}`,
         year: 1,
       },
     });
@@ -80,7 +88,7 @@ describe('Grades (e2e)', () => {
     await connection.collection('courses').insertOne({
       _id: courseId,
       name: 'Test Course',
-      code: 'TC101',
+      code: `TC-${courseId.toHexString().slice(-4)}`,
       department: new Types.ObjectId(),
       semester: 1,
       credits: 3,
@@ -112,39 +120,35 @@ describe('Grades (e2e)', () => {
         value: 8,
       },
     ]);
-  });
 
-  afterEach(async () => {
-    await connection.collection('users').deleteMany({});
-    await connection.collection('courses').deleteMany({});
-    await connection.collection('courseassignments').deleteMany({});
-    await connection.collection('grades').deleteMany({});
-    await app.close();
-  });
-
-  afterAll(async () => {
-    await container.stop();
-  });
+    return { studentId, groupId, courseId, courseAssignmentId, accessToken };
+  };
 
   describe('GET /courses/grades/my/courses', () => {
     it('should return paginated list of courses with grades (200)', async () => {
+      const { accessToken, courseAssignmentId } = await setupGrades();
       const response = await request(app.getHttpServer())
         .get('/courses/grades/my/courses')
         .query({ page: 1, limit: 10 })
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
-      const body = response.body as PaginatedDto<any>;
+      const body = response.body as PaginatedDto<StudentCourseResponseDto>;
       expect(body.docs).toBeDefined();
       expect(body.docs.length).toBeGreaterThanOrEqual(1);
-      
-      const course = body.docs.find(d => d.courseName === 'Test Course');
+
+      const course = body.docs.find(
+        (d: StudentCourseResponseDto) =>
+          d.courseAssignmentId === courseAssignmentId.toHexString(),
+      );
       expect(course).toBeDefined();
+      expect(course?.courseName).toBe('Test Course');
     });
   });
 
   describe('GET /courses/grades/my/courses/:courseAssignmentId', () => {
     it('should return paginated grades for a specific course (200)', async () => {
+      const { accessToken, courseAssignmentId } = await setupGrades();
       const response = await request(app.getHttpServer())
         .get(`/courses/grades/my/courses/${courseAssignmentId.toHexString()}`)
         .query({ page: 1, limit: 10 })
@@ -158,7 +162,8 @@ describe('Grades (e2e)', () => {
       expect(body.docs[0].courseName).toBe('Test Course');
     });
 
-    it('should fail if unauthorized (401)', () => {
+    it('should fail if unauthorized (401)', async () => {
+      const { courseAssignmentId } = await setupGrades();
       return request(app.getHttpServer())
         .get(`/courses/grades/my/courses/${courseAssignmentId.toHexString()}`)
         .expect(401);
@@ -167,13 +172,18 @@ describe('Grades (e2e)', () => {
 
   describe('GET /courses/:courseAssignmentId/grades/student/:studentId', () => {
     it('should allow student to see their own grades (200)', async () => {
+      const { accessToken, courseAssignmentId, studentId } =
+        await setupGrades();
       await request(app.getHttpServer())
-        .get(`/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`)
+        .get(
+          `/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`,
+        )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
     });
 
     it('should allow teacher to see student grades (200)', async () => {
+      const { courseAssignmentId, studentId } = await setupGrades();
       const teacherToken = jwtService.sign({
         sub: new Types.ObjectId().toHexString(),
         login: 'teacher_e2e',
@@ -181,36 +191,31 @@ describe('Grades (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .get(`/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`)
+        .get(
+          `/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`,
+        )
         .set('Authorization', `Bearer ${teacherToken}`)
         .expect(200);
 
-      expect(response.body.docs.length).toBe(2);
+      const body = response.body as PaginatedDto<GradeResponseDto>;
+      expect(body.docs.length).toBe(2);
     });
 
     it('should forbid student from seeing another student grades (403)', async () => {
+      const { accessToken, courseAssignmentId } = await setupGrades();
       const otherStudentId = new Types.ObjectId();
       return request(app.getHttpServer())
-        .get(`/courses/${courseAssignmentId.toHexString()}/grades/student/${otherStudentId.toHexString()}`)
+        .get(
+          `/courses/${courseAssignmentId.toHexString()}/grades/student/${otherStudentId.toHexString()}`,
+        )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(403);
     });
   });
 
   describe('Grade CRUD (Teacher)', () => {
-    let teacherToken: string;
-    let gradeId: string;
-
-    beforeEach(() => {
-      teacherToken = jwtService.sign({
-        sub: new Types.ObjectId().toHexString(), // We'll mock teacher ownership later
-        login: 'teacher_crud_e2e',
-        role: Role.TEACHER,
-      });
-    });
-
     it('should create a grade (201)', async () => {
-      // Need to use the same teacher as in seeded courseAssignment or admin
+      const { studentId, courseAssignmentId } = await setupGrades();
       const adminToken = jwtService.sign({
         sub: new Types.ObjectId().toHexString(),
         login: 'admin_e2e',
@@ -229,12 +234,12 @@ describe('Grades (e2e)', () => {
         })
         .expect(201);
 
-      expect(response.body.value).toBe(10);
-      gradeId = response.body.id;
+      const body = response.body as GradeResponseDto;
+      expect(body.value).toBe(10);
     });
 
     it('should update a grade (200)', async () => {
-      // Seed a grade first
+      const { studentId, courseAssignmentId } = await setupGrades();
       const gid = new Types.ObjectId();
       await connection.collection('grades').insertOne({
         _id: gid,
@@ -257,10 +262,12 @@ describe('Grades (e2e)', () => {
         .send({ value: 12 })
         .expect(200);
 
-      expect(response.body.value).toBe(12);
+      const body = response.body as GradeResponseDto;
+      expect(body.value).toBe(12);
     });
 
     it('should delete a grade (200)', async () => {
+      const { studentId, courseAssignmentId } = await setupGrades();
       const gid = new Types.ObjectId();
       await connection.collection('grades').insertOne({
         _id: gid,
@@ -282,7 +289,9 @@ describe('Grades (e2e)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 
-      const deleted = await connection.collection('grades').findOne({ _id: gid });
+      const deleted = await connection
+        .collection('grades')
+        .findOne({ _id: gid });
       expect(deleted).toBeNull();
     });
   });

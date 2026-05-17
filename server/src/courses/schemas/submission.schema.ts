@@ -8,6 +8,8 @@ export type SubmissionDocument = Submission & Document;
 
 @Schema({ timestamps: true })
 export class Submission {
+  _id: MongooseSchema.Types.ObjectId;
+
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'Assignment',

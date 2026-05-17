@@ -21,10 +21,6 @@ describe('Materials (e2e)', () => {
   let connection: Connection;
   let jwtService: JwtService;
 
-  const teacherId = new Types.ObjectId();
-  const courseAssignmentId = new Types.ObjectId();
-  let accessToken: string;
-
   beforeAll(async () => {
     container = await new GenericContainer('mongo')
       .withExposedPorts(27017)
@@ -47,8 +43,22 @@ describe('Materials (e2e)', () => {
 
     connection = app.get(getConnectionToken());
     jwtService = app.get(JwtService);
+  });
 
-    accessToken = jwtService.sign({
+  afterEach(async () => {
+    await connection.collection('courseassignments').deleteMany({});
+    await connection.collection('materials').deleteMany({});
+    await app.close();
+  });
+
+  afterAll(async () => {
+    await container.stop();
+  });
+
+  const setupMaterials = async () => {
+    const teacherId = new Types.ObjectId();
+    const courseAssignmentId = new Types.ObjectId();
+    const accessToken = jwtService.sign({
       sub: teacherId.toHexString(),
       login: 'teacher_e2e',
       role: Role.TEACHER,
@@ -65,20 +75,13 @@ describe('Materials (e2e)', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-  });
 
-  afterEach(async () => {
-    await connection.collection('courseassignments').deleteMany({});
-    await connection.collection('materials').deleteMany({});
-    await app.close();
-  });
-
-  afterAll(async () => {
-    await container.stop();
-  });
+    return { teacherId, courseAssignmentId, accessToken };
+  };
 
   describe('POST /courses/:courseAssignmentId/materials', () => {
     it('should create a material (201)', async () => {
+      const { courseAssignmentId, accessToken } = await setupMaterials();
       const response = await request(app.getHttpServer())
         .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
@@ -94,7 +97,8 @@ describe('Materials (e2e)', () => {
       expect(body.id).toBeDefined();
     });
 
-    it('should fail if unauthorized (401)', () => {
+    it('should fail if unauthorized (401)', async () => {
+      const { courseAssignmentId } = await setupMaterials();
       return request(app.getHttpServer())
         .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
         .send({
@@ -104,6 +108,7 @@ describe('Materials (e2e)', () => {
     });
 
     it('should fail if user is not the teacher (403)', async () => {
+      const { courseAssignmentId } = await setupMaterials();
       const otherUserToken = jwtService.sign({
         sub: new Types.ObjectId().toHexString(),
         login: 'other_user',
@@ -122,6 +127,7 @@ describe('Materials (e2e)', () => {
 
   describe('GET /courses/:courseAssignmentId/materials', () => {
     it('should get materials for course assignment (200)', async () => {
+      const { courseAssignmentId, accessToken } = await setupMaterials();
       // First create a material so there is something to GET
       const createRes = await request(app.getHttpServer())
         .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
@@ -147,6 +153,7 @@ describe('Materials (e2e)', () => {
 
   describe('PUT /courses/:courseAssignmentId/materials/:id', () => {
     it('should update material (200)', async () => {
+      const { courseAssignmentId, accessToken } = await setupMaterials();
       const createRes = await request(app.getHttpServer())
         .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
@@ -173,6 +180,7 @@ describe('Materials (e2e)', () => {
     });
 
     it('should return 404 for non-existent material', async () => {
+      const { courseAssignmentId, accessToken } = await setupMaterials();
       const fakeId = new Types.ObjectId().toHexString();
       return request(app.getHttpServer())
         .put(`/courses/${courseAssignmentId.toHexString()}/materials/${fakeId}`)
@@ -184,6 +192,7 @@ describe('Materials (e2e)', () => {
 
   describe('DELETE /courses/:courseAssignmentId/materials/:id', () => {
     it('should delete material (200)', async () => {
+      const { courseAssignmentId, accessToken } = await setupMaterials();
       const createRes = await request(app.getHttpServer())
         .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)

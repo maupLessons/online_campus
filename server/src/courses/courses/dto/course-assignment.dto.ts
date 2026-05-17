@@ -1,26 +1,28 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
-import { UserMinimalDto } from '../../users/dto/user.dto';
+import { UserMinimalDto } from '../../../users/dto/user.dto';
+import { CourseAssignment } from '../../schemas';
+import { toId } from '../../../common/utils/to-id.util';
 
 export class CourseAssignmentDto {
   @ApiProperty()
   @Expose()
-  @Transform(({ obj }) => obj._id?.toString() || obj.id)
+  @Transform(({ obj }: { obj: CourseAssignment }) => toId(obj))
   id: string;
 
   @ApiProperty()
   @Expose()
-  @Transform(({ obj }) => obj.course?.name)
+  @Transform(({ obj }: { obj: CourseAssignment }) => obj.course?.name)
   courseName: string;
 
   @ApiProperty()
   @Expose()
-  @Transform(({ obj }) => obj.course?.code)
+  @Transform(({ obj }: { obj: CourseAssignment }) => obj.course?.code)
   courseCode: string;
 
   @ApiProperty()
   @Expose()
-  @Transform(({ obj }) => obj.course?.credits)
+  @Transform(({ obj }: { obj: CourseAssignment }) => obj.course?.credits)
   credits: number;
 
   @ApiProperty({ type: () => UserMinimalDto, required: false })
@@ -30,12 +32,12 @@ export class CourseAssignmentDto {
 
   @ApiProperty({ required: false })
   @Expose()
-  @Transform(({ obj }) => obj.group?.code)
+  @Transform(({ obj }: { obj: CourseAssignment }) => obj.group?.code)
   groupCode?: string;
 
   @ApiProperty({ required: false })
   @Expose()
-  @Transform(({ obj }) => obj.group?.specialty?.name)
+  @Transform(({ obj }: { obj: CourseAssignment }) => obj.group?.specialty?.name)
   groupSpecialty?: string;
 
   @ApiProperty()

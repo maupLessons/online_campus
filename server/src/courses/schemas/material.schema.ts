@@ -7,6 +7,8 @@ export type MaterialDocument = Material & Document;
 
 @Schema({ timestamps: true })
 export class Material {
+  _id: MongooseSchema.Types.ObjectId;
+
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'CourseAssignment',

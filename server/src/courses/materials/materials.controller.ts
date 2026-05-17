@@ -15,6 +15,7 @@ import { RolesGuard, Roles } from '../../auth/roles.guard';
 import { Role } from '../../common/types/roles.enum';
 import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { CreateMaterialDto, UpdateMaterialDto, MaterialDto } from './dto';
+import { RequestWithUser } from '../../common/types/request-with-user.interface';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -35,7 +36,7 @@ export class MaterialsController {
   async createMaterial(
     @Param('courseAssignmentId') caId: string,
     @Body() createMaterialDto: CreateMaterialDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ) {
     const { sub, role } = req.user;
     return this.materialsService.create(caId, createMaterialDto, sub, role);
@@ -47,7 +48,7 @@ export class MaterialsController {
   async updateMaterial(
     @Param('id') id: string,
     @Body() updateMaterialDto: UpdateMaterialDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ) {
     const { sub, role } = req.user;
     return this.materialsService.update(id, updateMaterialDto, sub, role);
@@ -58,7 +59,7 @@ export class MaterialsController {
   @ApiResponse({ type: MaterialDto })
   async removeMaterial(
     @Param('id') id: string,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<MaterialDto> {
     const { sub, role } = req.user;
     return this.materialsService.remove(id, sub, role);

@@ -12,7 +12,8 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../../auth/roles.guard';
 import { Role } from '../../common/types/roles.enum';
 import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
-import { SubmissionDto, SubmitAssignmentDto } from '../dto';
+import { SubmissionDto, SubmitAssignmentDto } from './dto';
+import { RequestWithUser } from '../../common/types/request-with-user.interface';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -34,7 +35,7 @@ export class SubmissionsController {
   async submitAssignment(
     @Param('id') id: string,
     @Body() dto: SubmitAssignmentDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<SubmissionDto> {
     return this.submissionsService.submitAssignment(id, dto, req.user.sub);
   }

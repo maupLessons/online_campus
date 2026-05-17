@@ -14,20 +14,21 @@ import {
 import { GradesService } from './grades.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../../auth/roles.guard';
-import { Role } from '../../common/types/roles.enum';
 import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
-import { PaginationDto } from '../../common/dto/pagination.dto';
-import { PaginatedDto } from '../../common/dto/paginated.dto';
 import {
   GradeResponseDto,
-  StudentCourseResponseDto,
-  GradeSubmissionDto,
-  SubmissionDto,
   CreateGradeDto,
   UpdateGradeDto,
   GradeJournalResponseDto,
-} from '../dto';
+  GradeSubmissionDto,
+} from './dto';
+import { StudentCourseResponseDto } from '../courses/dto';
+import { SubmissionDto } from '../submissions/dto';
+import { Role } from '../../common/types/roles.enum';
+import { RequestWithUser } from '../../common/types/request-with-user.interface';
 import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -41,7 +42,7 @@ export class GradesController {
   @ApiResponse({ type: GradeResponseDto })
   async createGrade(
     @Body() dto: CreateGradeDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<GradeResponseDto> {
     const { sub, role } = req.user;
     return this.gradesService.create(dto, sub, role);
@@ -53,7 +54,7 @@ export class GradesController {
   async updateGrade(
     @Param('id') id: string,
     @Body() dto: UpdateGradeDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<GradeResponseDto> {
     const { sub, role } = req.user;
     return this.gradesService.update(id, dto, sub, role);
@@ -61,7 +62,7 @@ export class GradesController {
 
   @Delete('grades/:id')
   @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
-  async deleteGrade(@Param('id') id: string, @Request() req: any) {
+  async deleteGrade(@Param('id') id: string, @Request() req: RequestWithUser) {
     const { sub, role } = req.user;
     return this.gradesService.remove(id, sub, role);
   }
@@ -72,7 +73,7 @@ export class GradesController {
   async gradeSubmission(
     @Param('id') id: string,
     @Body() dto: GradeSubmissionDto,
-    @Request() req: any,
+    @Request() req: RequestWithUser,
   ): Promise<SubmissionDto> {
     const { sub, role } = req.user;
     return this.gradesService.gradeSubmission(id, dto, sub, role);
@@ -92,7 +93,7 @@ export class GradesController {
   @Roles(Role.STUDENT)
   @ApiPaginatedResponse(StudentCourseResponseDto)
   async getMyCoursesWithGrades(
-    @Request() req: any,
+    @Request() req: RequestWithUser,
     @Query() paginationDto: PaginationDto,
   ) {
     return this.gradesService.findMyCoursesWithGrades(
@@ -105,7 +106,7 @@ export class GradesController {
   @Roles(Role.STUDENT)
   @ApiPaginatedResponse(GradeResponseDto)
   async getMyGradesByCourse(
-    @Request() req: any,
+    @Request() req: RequestWithUser,
     @Param('courseAssignmentId') caId: string,
     @Query() paginationDto: PaginationDto,
   ): Promise<PaginatedDto<GradeResponseDto>> {
@@ -126,7 +127,7 @@ export class GradesController {
   )
   @ApiPaginatedResponse(GradeResponseDto)
   async getStudentGradesByCourse(
-    @Request() req: any,
+    @Request() req: RequestWithUser,
     @Param('courseAssignmentId') caId: string,
     @Param('studentId') studentId: string,
     @Query() paginationDto: PaginationDto,

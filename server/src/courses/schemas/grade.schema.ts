@@ -8,6 +8,8 @@ export type GradeDocument = Grade & Document;
 
 @Schema({ timestamps: true })
 export class Grade {
+  _id: MongooseSchema.Types.ObjectId;
+
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true })
   student: User;
 

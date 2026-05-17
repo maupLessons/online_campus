@@ -5,16 +5,17 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Role } from '../common/types/roles.enum';
-import { User, UserDocument } from '../users/schemas';
+
+import { CourseAssignmentDto } from './dto';
+import { Role } from '../../common/types/roles.enum';
+import { User, UserDocument } from '../../users/schemas';
 import {
   Course,
-  CourseDocument,
   CourseAssignment,
   CourseAssignmentDocument,
-} from './schemas';
-import { CourseAssignmentDto } from './dto';
-import { transformToDtoArray } from '../common/utils/transform.util';
+  CourseDocument,
+} from '../schemas';
+import { transformToDtoArray } from '../../common/utils/transform.util';
 
 @Injectable()
 export class CoursesService {
@@ -44,8 +45,6 @@ export class CoursesService {
 
     return ca;
   }
-
-  // ============ COURSES ============
 
   async findAllCourses(): Promise<Course[]> {
     return this.courseModel.find().populate('department').exec();

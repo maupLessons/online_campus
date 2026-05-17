@@ -9,6 +9,8 @@ export type AssignmentDocument = Assignment & Document;
 
 @Schema({ timestamps: true })
 export class Assignment {
+  _id: MongooseSchema.Types.ObjectId;
+
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'CourseAssignment',

@@ -10,6 +10,9 @@ import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { ConfigService } from '@nestjs/config';
 import { SeedService } from '../src/seed/seed.service';
+import { PaginatedDto } from '../src/common/dto/paginated.dto';
+import { AssignmentDto } from '../src/courses/assignments/dto';
+import { SubmissionDto } from '../src/courses/submissions/dto';
 
 const SET_UP_TIMEOUT = 60_000;
 
@@ -18,14 +21,6 @@ describe('Assignments (e2e)', () => {
   let container: StartedTestContainer;
   let connection: Connection;
   let jwtService: JwtService;
-
-  const teacherId = new Types.ObjectId();
-  const studentId = new Types.ObjectId();
-  const groupId = new Types.ObjectId();
-  const courseAssignmentId = new Types.ObjectId();
-
-  let teacherToken: string;
-  let studentToken: string;
 
   beforeAll(async () => {
     container = await new GenericContainer('mongo')
@@ -57,48 +52,6 @@ describe('Assignments (e2e)', () => {
 
     connection = app.get(getConnectionToken());
     jwtService = app.get(JwtService);
-
-    teacherToken = jwtService.sign({
-      sub: teacherId.toHexString(),
-      login: 'teacher_e2e_unique',
-      role: Role.TEACHER,
-    });
-
-    studentToken = jwtService.sign({
-      sub: studentId.toHexString(),
-      login: 'student_e2e_unique',
-      role: Role.STUDENT,
-    });
-
-    // Seed necessary data
-    await connection.collection('users').insertOne({
-      _id: studentId,
-      login: 'student_e2e_unique',
-      role: Role.STUDENT,
-      studentProfile: { 
-        group: groupId,
-        recordBookNumber: 'E2E-ASGN-STUDENT',
-        year: 1
-      },
-      status: 'active',
-      passwordHash: 'hash',
-      email: 'student_asgn_e2e@test.com',
-      firstName: 'Student',
-      lastName: 'Test',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    await connection.collection('courseassignments').insertOne({
-      _id: courseAssignmentId,
-      teacher: teacherId,
-      course: new Types.ObjectId(),
-      group: groupId,
-      academicYear: '2023-2024',
-      semester: 1,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
   });
 
   afterEach(async () => {
@@ -119,8 +72,67 @@ describe('Assignments (e2e)', () => {
     await container.stop();
   });
 
+  const setupAssignments = async () => {
+    const teacherId = new Types.ObjectId();
+    const studentId = new Types.ObjectId();
+    const groupId = new Types.ObjectId();
+    const courseAssignmentId = new Types.ObjectId();
+
+    const teacherToken = jwtService.sign({
+      sub: teacherId.toHexString(),
+      login: 'teacher_e2e_unique',
+      role: Role.TEACHER,
+    });
+
+    const studentToken = jwtService.sign({
+      sub: studentId.toHexString(),
+      login: 'student_e2e_unique',
+      role: Role.STUDENT,
+    });
+
+    // Seed necessary data
+    await connection.collection('users').insertOne({
+      _id: studentId,
+      login: 'student_e2e_unique',
+      role: Role.STUDENT,
+      studentProfile: {
+        group: groupId,
+        recordBookNumber: `E2E-ASGN-${studentId.toHexString().slice(-4)}`,
+        year: 1,
+      },
+      status: 'active',
+      passwordHash: 'hash',
+      email: 'student_asgn_e2e@test.com',
+      firstName: 'Student',
+      lastName: 'Test',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await connection.collection('courseassignments').insertOne({
+      _id: courseAssignmentId,
+      teacher: teacherId,
+      course: new Types.ObjectId(),
+      group: groupId,
+      academicYear: '2023-2024',
+      semester: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    return {
+      teacherId,
+      studentId,
+      groupId,
+      courseAssignmentId,
+      teacherToken,
+      studentToken,
+    };
+  };
+
   describe('GET /courses/:courseAssignmentId/assignments', () => {
     it('should return assignments for course (200)', async () => {
+      const { courseAssignmentId, teacherToken } = await setupAssignments();
       await request(app.getHttpServer())
         .get(`/courses/${courseAssignmentId.toHexString()}/assignments`)
         .set('Authorization', `Bearer ${teacherToken}`)
@@ -128,6 +140,8 @@ describe('Assignments (e2e)', () => {
     });
 
     it('should return assignments with submissions for student (200)', async () => {
+      const { courseAssignmentId, studentId, studentToken, groupId } =
+        await setupAssignments();
       const assignmentId = new Types.ObjectId();
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
@@ -156,19 +170,24 @@ describe('Assignments (e2e)', () => {
         .set('Authorization', `Bearer ${studentToken}`)
         .expect(200);
 
-      expect(response.body.docs).toBeDefined();
-      expect(Array.isArray(response.body.docs)).toBe(true);
-      const assignment = response.body.docs.find(
-        (a: any) => a.id === assignmentId.toHexString(),
+      const body = response.body as PaginatedDto<AssignmentDto>;
+      expect(body.docs).toBeDefined();
+      expect(Array.isArray(body.docs)).toBe(true);
+      const assignment = body.docs.find(
+        (a: AssignmentDto) => a.id === assignmentId.toHexString(),
       );
       expect(assignment).toBeDefined();
-      expect(assignment.submission).toBeDefined();
-      expect(assignment.submission.status).toBe('submitted');
+      if (assignment) {
+        expect(assignment.submission).toBeDefined();
+        expect(assignment.submission?.status).toBe('submitted');
+      }
     });
   });
 
   describe('GET /courses/assignments/:id', () => {
     it('should return a single assignment (200)', async () => {
+      const { courseAssignmentId, teacherToken, groupId } =
+        await setupAssignments();
       const assignmentId = new Types.ObjectId();
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
@@ -188,11 +207,14 @@ describe('Assignments (e2e)', () => {
         .set('Authorization', `Bearer ${teacherToken}`)
         .expect(200);
 
-      expect(response.body.id).toBe(assignmentId.toHexString());
-      expect(response.body.title).toBe('Single Assignment');
+      const body = response.body as AssignmentDto;
+      expect(body.id).toBe(assignmentId.toHexString());
+      expect(body.title).toBe('Single Assignment');
     });
 
     it('should return assignment with submission for student (200)', async () => {
+      const { courseAssignmentId, studentId, studentToken, groupId } =
+        await setupAssignments();
       const assignmentId = new Types.ObjectId();
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
@@ -221,12 +243,14 @@ describe('Assignments (e2e)', () => {
         .set('Authorization', `Bearer ${studentToken}`)
         .expect(200);
 
-      expect(response.body.id).toBe(assignmentId.toHexString());
-      expect(response.body.submission).toBeDefined();
-      expect(response.body.submission.status).toBe('submitted');
+      const body = response.body as AssignmentDto;
+      expect(body.id).toBe(assignmentId.toHexString());
+      expect(body.submission).toBeDefined();
+      expect(body.submission?.status).toBe('submitted');
     });
 
     it('should return 404 for non-existent assignment', async () => {
+      const { teacherToken } = await setupAssignments();
       await request(app.getHttpServer())
         .get(`/courses/assignments/${new Types.ObjectId().toHexString()}`)
         .set('Authorization', `Bearer ${teacherToken}`)
@@ -236,6 +260,7 @@ describe('Assignments (e2e)', () => {
 
   describe('POST /courses/:courseAssignmentId/assignments', () => {
     it('should create an assignment (201)', async () => {
+      const { courseAssignmentId, teacherToken } = await setupAssignments();
       const response = await request(app.getHttpServer())
         .post(`/courses/${courseAssignmentId.toHexString()}/assignments`)
         .set('Authorization', `Bearer ${teacherToken}`)
@@ -248,11 +273,13 @@ describe('Assignments (e2e)', () => {
         })
         .expect(201);
 
-      expect(response.body.title).toBe('E2E Assignment');
-      expect(response.body.id).toBeDefined();
+      const body = response.body as AssignmentDto;
+      expect(body.title).toBe('E2E Assignment');
+      expect(body.id).toBeDefined();
     });
 
     it('should fail for student (403)', async () => {
+      const { courseAssignmentId, studentToken } = await setupAssignments();
       await request(app.getHttpServer())
         .post(`/courses/${courseAssignmentId.toHexString()}/assignments`)
         .set('Authorization', `Bearer ${studentToken}`)
@@ -263,8 +290,12 @@ describe('Assignments (e2e)', () => {
 
   describe('GET /courses/assignments/my', () => {
     it('should return student assignments (200)', async () => {
+      const { courseAssignmentId, studentToken, groupId } =
+        await setupAssignments();
+      const assignmentId = new Types.ObjectId();
       // Create an assignment first
       await connection.collection('assignments').insertOne({
+        _id: assignmentId,
         courseAssignment: courseAssignmentId,
         group: groupId,
         title: 'My Assignment',
@@ -281,17 +312,21 @@ describe('Assignments (e2e)', () => {
         .set('Authorization', `Bearer ${studentToken}`)
         .expect(200);
 
-      expect(response.body.docs).toBeDefined();
-      expect(Array.isArray(response.body.docs)).toBe(true);
-      const assignment = response.body.docs.find(
-        (a: any) => a.title === 'My Assignment',
+      const body = response.body as PaginatedDto<AssignmentDto>;
+      expect(body.docs).toBeDefined();
+      expect(Array.isArray(body.docs)).toBe(true);
+      const assignment = body.docs.find(
+        (a: AssignmentDto) => a.title === 'My Assignment',
       );
       expect(assignment).toBeDefined();
+      expect(assignment?.id).toBeDefined();
     });
   });
 
   describe('POST /courses/assignments/:id/submit', () => {
     it('should submit an assignment (201)', async () => {
+      const { courseAssignmentId, studentToken, groupId } =
+        await setupAssignments();
       const assignmentId = new Types.ObjectId();
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
@@ -314,10 +349,13 @@ describe('Assignments (e2e)', () => {
         })
         .expect(201);
 
-      expect(response.body.status).toBe('submitted');
+      const body = response.body as SubmissionDto;
+      expect(body.status).toBe('submitted');
     });
 
     it('should fail if submitting twice (409)', async () => {
+      const { courseAssignmentId, studentToken, groupId } =
+        await setupAssignments();
       const assignmentId = new Types.ObjectId();
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
@@ -352,6 +390,8 @@ describe('Assignments (e2e)', () => {
     });
 
     it('should fail if deadline passed (400)', async () => {
+      const { courseAssignmentId, studentToken, groupId } =
+        await setupAssignments();
       const assignmentId = new Types.ObjectId();
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
@@ -376,6 +416,7 @@ describe('Assignments (e2e)', () => {
     });
 
     it('should fail if student is from another group (403)', async () => {
+      const { courseAssignmentId, groupId } = await setupAssignments();
       const otherGroupId = new Types.ObjectId();
       const otherStudentId = new Types.ObjectId();
 
@@ -383,10 +424,10 @@ describe('Assignments (e2e)', () => {
         _id: otherStudentId,
         login: 'other_student_unique',
         role: Role.STUDENT,
-        studentProfile: { 
+        studentProfile: {
           group: otherGroupId,
           recordBookNumber: 'E2E-OTHER-STUDENT',
-          year: 1
+          year: 1,
         },
         status: 'active',
         passwordHash: 'hash',
@@ -425,6 +466,8 @@ describe('Assignments (e2e)', () => {
 
   describe('POST /courses/submissions/:id/grade', () => {
     it('should grade a submission (201)', async () => {
+      const { courseAssignmentId, teacherToken, studentId, groupId } =
+        await setupAssignments();
       const assignmentId = new Types.ObjectId();
       const submissionId = new Types.ObjectId();
 
@@ -460,8 +503,9 @@ describe('Assignments (e2e)', () => {
         })
         .expect(201);
 
-      expect(response.body.status).toBe('graded');
-      expect(response.body.score).toBe(95);
+      const body = response.body as SubmissionDto;
+      expect(body.status).toBe('graded');
+      expect(body.score).toBe(95);
     });
   });
 });

@@ -1,0 +1,43 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { Expose, Transform, Type } from 'class-transformer';
+import { FileDto } from '../../../files/dto/file.dto';
+import { Submission } from '../../schemas';
+import { toId } from '../../../common/utils/to-id.util';
+
+export class SubmissionDto {
+  @ApiProperty()
+  @Expose()
+  @Transform(({ obj }: { obj: Submission }) => toId(obj))
+  id: string;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(({ obj }: { obj: Submission }) => toId(obj.assignment))
+  assignmentId: string;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(({ obj }: { obj: Submission }) => toId(obj.student))
+  studentId: string;
+
+  @ApiProperty({ type: [FileDto] })
+  @Expose()
+  @Type(() => FileDto)
+  files: FileDto[];
+
+  @ApiProperty()
+  @Expose()
+  submittedAt: Date;
+
+  @ApiProperty()
+  @Expose()
+  status: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  score?: number;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  comment?: string;
+}

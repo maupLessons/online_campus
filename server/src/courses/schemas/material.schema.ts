@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
+import * as paginate from 'mongoose-paginate-v2';
 import { CourseAssignment } from './course-assignment.schema';
 import { File } from '../../files/file.schema';
 
@@ -33,3 +34,5 @@ export class Material {
 }
 
 export const MaterialSchema = SchemaFactory.createForClass(Material);
+
+MaterialSchema.plugin(paginate);

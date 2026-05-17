@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Request,
+  Query,
 } from '@nestjs/common';
 import { MaterialsService } from './materials.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
@@ -16,6 +17,9 @@ import { Role } from '../../common/types/roles.enum';
 import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { CreateMaterialDto, UpdateMaterialDto, MaterialDto } from './dto';
 import { RequestWithUser } from '../../common/types/request-with-user.interface';
+import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
 
 @ApiTags('courses')
 @ApiBearerAuth()
@@ -25,9 +29,12 @@ export class MaterialsController {
   constructor(private materialsService: MaterialsService) {}
 
   @Get()
-  @ApiResponse({ type: [MaterialDto] })
-  async getMaterials(@Param('courseAssignmentId') caId: string) {
-    return this.materialsService.findMaterials(caId);
+  @ApiPaginatedResponse(MaterialDto)
+  async getMaterials(
+    @Param('courseAssignmentId') caId: string,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<PaginatedDto<MaterialDto>> {
+    return this.materialsService.findMaterials(caId, paginationDto);
   }
 
   @Post()

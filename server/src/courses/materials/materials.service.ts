@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, PaginateModel } from 'mongoose';
 import {
   Material,
   MaterialDocument,
@@ -15,28 +15,39 @@ import { CreateMaterialDto, UpdateMaterialDto, MaterialDto } from './dto';
 import { Role } from '../../common/types/roles.enum';
 import {
   transformToDto,
-  transformToDtoArray,
+  transformToPaginatedDto,
 } from '../../common/utils/transform.util';
 import { toId } from '../../common/utils/to-id.util';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
 
 @Injectable()
 export class MaterialsService {
   constructor(
-    @InjectModel(Material.name) private materialModel: Model<MaterialDocument>,
+    @InjectModel(Material.name)
+    private materialModel: PaginateModel<MaterialDocument>,
     @InjectModel(CourseAssignment.name)
     private courseAssignmentModel: Model<CourseAssignmentDocument>,
   ) {}
 
-  async findMaterials(courseAssignmentId: string): Promise<MaterialDto[]> {
-    const materials = (await this.materialModel
-      .find({
-        courseAssignment: new Types.ObjectId(courseAssignmentId),
-      } as Record<string, unknown>)
-      .populate('files')
-      .lean()
-      .exec()) as MaterialDocument[];
+  async findMaterials(
+    courseAssignmentId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<MaterialDto>> {
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      populate: 'files',
+      sort: { publishDate: -1 },
+      lean: true,
+    };
 
-    return transformToDtoArray(MaterialDto, materials);
+    const result = await this.materialModel.paginate(
+      { courseAssignment: new Types.ObjectId(courseAssignmentId) },
+      options,
+    );
+
+    return transformToPaginatedDto(MaterialDto, result);
   }
 
   private async validateOwnership(

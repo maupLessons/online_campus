@@ -10,6 +10,7 @@ import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { MaterialDto } from '../src/courses/materials/dto';
 import { SeedService } from '../src/seed/seed.service';
+import { PaginatedDto } from '../src/common/dto/paginated.dto';
 
 process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';
 
@@ -145,9 +146,10 @@ describe('Materials (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
-      const body = response.body as MaterialDto[];
-      expect(Array.isArray(body)).toBe(true);
-      expect(body.some((m) => m.id === materialId)).toBe(true);
+      const body = response.body as PaginatedDto<MaterialDto>;
+      expect(body.docs).toBeDefined();
+      expect(Array.isArray(body.docs)).toBe(true);
+      expect(body.docs.some((m) => m.id === materialId)).toBe(true);
     });
   });
 
@@ -216,8 +218,8 @@ describe('Materials (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
-      const body = response.body as MaterialDto[];
-      expect(body.some((m) => m.id === materialId)).toBe(false);
+      const body = response.body as PaginatedDto<MaterialDto>;
+      expect(body.docs.some((m) => m.id === materialId)).toBe(false);
     });
   });
 });

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, PaginateModel } from 'mongoose';
 import { User, UserDocument } from '../../users/schemas';
@@ -101,9 +105,22 @@ export class AssignmentsService {
       throw new NotFoundException('Завдання не знайдено');
     }
 
-    const dto = transformToDto(AssignmentDto, assignment);
-
     if (role === Role.STUDENT && userId) {
+      const user = await this.userModel
+        .findById(userId)
+        .select('studentProfile')
+        .lean()
+        .exec();
+
+      if (
+        !user?.studentProfile ||
+        toId(user.studentProfile.group) !== toId(assignment.group)
+      ) {
+        throw new ForbiddenException(
+          'Ви не належите до групи, якій призначено це завдання',
+        );
+      }
+
       const submission = await this.submissionModel
         .findOne({
           student: new Types.ObjectId(userId),
@@ -113,6 +130,7 @@ export class AssignmentsService {
         .lean()
         .exec();
 
+      const dto = transformToDto(AssignmentDto, assignment);
       dto.submission = submission
         ? transformToDto(SubmissionDto, {
             ...submission,
@@ -120,9 +138,11 @@ export class AssignmentsService {
             studentId: toId(submission.student),
           })
         : null;
+
+      return dto;
     }
 
-    return dto;
+    return transformToDto(AssignmentDto, assignment);
   }
 
   async create(

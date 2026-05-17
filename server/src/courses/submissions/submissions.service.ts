@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, PaginateModel } from 'mongoose';
 import {
   Submission,
   SubmissionDocument,
@@ -17,28 +17,39 @@ import { User, UserDocument } from '../../users/schemas';
 import { SubmissionDto, SubmitAssignmentDto } from './dto';
 import {
   transformToDto,
-  transformToDtoArray,
+  transformToPaginatedDto,
 } from '../../common/utils/transform.util';
+import { PaginationDto } from '../../common/dto/pagination.dto';
+import { PaginatedDto } from '../../common/dto/paginated.dto';
 
 @Injectable()
 export class SubmissionsService {
   constructor(
     @InjectModel(Submission.name)
-    private submissionModel: Model<SubmissionDocument>,
+    private submissionModel: PaginateModel<SubmissionDocument>,
     @InjectModel(Assignment.name)
     private assignmentModel: Model<AssignmentDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
-  async findSubmissions(assignmentId: string): Promise<SubmissionDto[]> {
-    const submissions = await this.submissionModel
-      .find({ assignment: new Types.ObjectId(assignmentId) } as any)
-      .populate('student')
-      .populate('files')
-      .lean()
-      .exec();
+  async findSubmissions(
+    assignmentId: string,
+    pagination: PaginationDto,
+  ): Promise<PaginatedDto<SubmissionDto>> {
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      populate: ['student', 'files'],
+      sort: { submittedAt: -1 },
+      lean: true,
+    };
 
-    return transformToDtoArray(SubmissionDto, submissions);
+    const result = await this.submissionModel.paginate(
+      { assignment: new Types.ObjectId(assignmentId) } as any,
+      options as any,
+    );
+
+    return transformToPaginatedDto(SubmissionDto, result);
   }
 
   async submitAssignment(

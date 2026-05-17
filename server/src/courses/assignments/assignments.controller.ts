@@ -50,7 +50,7 @@ export class AssignmentsController {
   }
 
   @Post(':courseAssignmentId/assignments')
-  @Roles(Role.TEACHER)
+  @Roles(Role.TEACHER, Role.ADMIN)
   @ApiResponse({ type: AssignmentDto })
   async createAssignment(
     @Param('courseAssignmentId') caId: string,
@@ -62,7 +62,7 @@ export class AssignmentsController {
   }
 
   @Put('assignments/:id')
-  @Roles(Role.TEACHER)
+  @Roles(Role.TEACHER, Role.ADMIN)
   @ApiResponse({ type: AssignmentDto })
   async updateAssignment(
     @Param('id') id: string,
@@ -74,7 +74,7 @@ export class AssignmentsController {
   }
 
   @Delete('assignments/:id')
-  @Roles(Role.TEACHER)
+  @Roles(Role.TEACHER, Role.ADMIN)
   @ApiResponse({ type: AssignmentIdDto })
   async removeAssignment(
     @Param('id') id: string,

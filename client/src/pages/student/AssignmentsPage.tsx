@@ -1,19 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { Assignment } from '../../types';
+import type { Assignment, PaginatedResponse } from '../../types';
 import { useTranslation } from 'react-i18next';
 
 export default function AssignmentsPage() {
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
   const { t, i18n } = useTranslation();
   const locale = i18n.language === 'en' ? 'en-US' : 'uk-UA';
 
-  useEffect(() => {
-    api
-      .get('/courses/assignments/my')
-      .then(({ data }) => setAssignments(data))
-      .catch(() => {});
-  }, []);
+  const { data: assignments = [], isLoading } = useQuery({
+    queryKey: ['assignments', 'my'],
+    queryFn: async () => {
+      const { data } = await api.get<PaginatedResponse<Assignment>>('/courses/assignments/my');
+      return data.docs;
+    },
+  });
 
   const getStatusBadge = (assignment: Assignment) => {
     if (!assignment.submission) {
@@ -45,6 +45,14 @@ export default function AssignmentsPage() {
       color: 'bg-blue-100 text-blue-700',
     };
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -85,11 +93,9 @@ export default function AssignmentsPage() {
                   </span>
                   {a.submission?.comment && (
                     <span className="text-gray-600">
-                      {a.submission?.comment && (
-                        <p>
-                          {t('assignments.comment')}: {a.submission.comment}
-                        </p>
-                      )}
+                      <p>
+                        {t('assignments.comment')}: {a.submission.comment}
+                      </p>
                     </span>
                   )}
                 </div>

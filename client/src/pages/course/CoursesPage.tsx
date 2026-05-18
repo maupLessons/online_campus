@@ -1,15 +1,35 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
-import type { CourseAssignment } from '../../types';
+import type { CourseAssignment, PaginatedResponse } from '../../types';
 import { useTranslation } from 'react-i18next';
 
 export default function CoursesPage() {
-  const [courses, setCourses] = useState<CourseAssignment[]>([]);
   const { t } = useTranslation();
 
-  useEffect(() => {
-    api.get('/courses/my').then(({ data }) => setCourses(data)).catch(() => {});
-  }, []);
+  const { data: courses = [], isLoading } = useQuery({
+    queryKey: ['courses', 'my'],
+    queryFn: async () => {
+      const { data } = await api.get<PaginatedResponse<CourseAssignment>>('/courses/my');
+      return data.docs;
+    },
+  });
+
+  const formatTeacherName = (ca: CourseAssignment) => {
+    if (ca.teacherName) return ca.teacherName;
+    if (ca.teacher) {
+      const { lastName, firstName, middleName } = ca.teacher;
+      return [lastName, firstName, middleName].filter(Boolean).join(' ');
+    }
+    return '';
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -40,9 +60,9 @@ export default function CoursesPage() {
               <h3 className="font-semibold text-gray-900 mb-2">
                 {ca.courseName}
               </h3>
-              {ca.teacherName && (
+              {formatTeacherName(ca) && (
                 <p className="text-sm text-gray-500">
-                  {t('courses.teacher')}: {ca.teacherName}
+                  {t('courses.teacher')}: {formatTeacherName(ca)}
                 </p>
               )}
               {ca.groupCode && (

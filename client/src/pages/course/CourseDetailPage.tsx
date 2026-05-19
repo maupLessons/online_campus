@@ -78,15 +78,6 @@ export default function CourseDetailPage() {
     }
     return '';
   };
-
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
   if (isLoadingCourse) {
     return (
       <div className="flex justify-center py-12">
@@ -182,8 +173,7 @@ export default function CourseDetailPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('grades.date')}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('users.fullName')}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('nav.assignments')}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('courses.materialTitle')}</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -196,16 +186,6 @@ export default function CourseDetailPage() {
                           <div>
                             <div>{m.title}</div>
                             {m.description && <div className="text-xs text-gray-500 font-normal">{m.description}</div>}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          <div className="flex flex-col gap-1">
-                            {m.files.map(f => (
-                              <a key={f.id} href={`/api/files/download/${f.id}`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline flex items-center gap-1">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                {f.originalName} <span className="text-xs text-gray-400">({formatSize(f.size)})</span>
-                              </a>
-                            ))}
                           </div>
                         </td>
                       </tr>

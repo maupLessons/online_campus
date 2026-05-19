@@ -47,7 +47,7 @@ export class CoursesController {
     return this.coursesService.findCourseById(id);
   }
 
-  @Get('assignments/:id/details')
+  @Get('course-assignments/:id')
   @ApiResponse({ type: CourseAssignmentDto })
   async findOneAssignment(
     @Param('id') id: string,

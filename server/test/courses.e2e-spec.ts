@@ -168,11 +168,11 @@ describe('Courses (e2e)', () => {
     });
   });
 
-  describe('GET /courses/assignments/:id/details', () => {
+  describe('GET /courses/course-assignments/:id', () => {
     it('should return course assignment details (200)', async () => {
       const { accessToken, courseAssignmentId } = await setupData();
       const response = await request(app.getHttpServer())
-        .get(`/courses/assignments/${courseAssignmentId.toHexString()}/details`)
+        .get(`/courses/course-assignments/${courseAssignmentId.toHexString()}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 

@@ -10,6 +10,7 @@ import {
   CourseAssignmentSeeder,
   GradeSeeder,
   AssignmentSeeder,
+  MaterialSeeder,
 } from './seeders';
 
 @Injectable()
@@ -27,6 +28,7 @@ export class SeedService implements OnModuleInit {
     private readonly courseAssignmentSeeder: CourseAssignmentSeeder,
     private readonly gradeSeeder: GradeSeeder,
     private readonly assignmentSeeder: AssignmentSeeder,
+    private readonly materialSeeder: MaterialSeeder,
   ) {}
 
   async onModuleInit() {
@@ -48,6 +50,7 @@ export class SeedService implements OnModuleInit {
       await this.courseAssignmentSeeder.seed();
       await this.gradeSeeder.seed();
       await this.assignmentSeeder.seed();
+      await this.materialSeeder.seed();
 
       this.logger.log('Seeding process completed.');
     } catch (error) {

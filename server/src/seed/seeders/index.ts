@@ -8,3 +8,4 @@ export * from './course.seeder';
 export * from './course-assignment.seeder';
 export * from './grade.seeder';
 export * from './assignment.seeder';
+export * from './material.seeder';

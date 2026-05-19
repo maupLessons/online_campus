@@ -1,8 +1,15 @@
-import { Controller, Get, UseGuards, Request, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  UseGuards,
+  Request,
+  Query,
+  Param,
+} from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { CourseAssignmentDto, CourseDto } from './dto';
 import { RequestWithUser } from '../../common/types/request-with-user.interface';
 import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
@@ -32,5 +39,19 @@ export class CoursesController {
   ): Promise<PaginatedDto<CourseAssignmentDto>> {
     const { sub, role } = req.user;
     return this.coursesService.findMy(sub, role, paginationDto);
+  }
+
+  @Get(':id')
+  @ApiResponse({ type: CourseDto })
+  async findOne(@Param('id') id: string): Promise<CourseDto> {
+    return this.coursesService.findCourseById(id);
+  }
+
+  @Get('assignments/:id/details')
+  @ApiResponse({ type: CourseAssignmentDto })
+  async findOneAssignment(
+    @Param('id') id: string,
+  ): Promise<CourseAssignmentDto> {
+    return this.coursesService.findCourseAssignmentById(id);
   }
 }

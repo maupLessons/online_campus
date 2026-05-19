@@ -16,7 +16,10 @@ import {
   CourseAssignmentDocument,
   CourseDocument,
 } from '../schemas';
-import { transformToPaginatedDto } from '../../common/utils/transform.util';
+import {
+  transformToPaginatedDto,
+  transformToDto,
+} from '../../common/utils/transform.util';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
 
@@ -62,6 +65,34 @@ export class CoursesService {
 
     const result = await this.courseModel.paginate({}, options as any);
     return transformToPaginatedDto(CourseDto, result);
+  }
+
+  async findCourseById(id: string): Promise<CourseDto> {
+    const course = await this.courseModel.findById(id).lean().exec();
+    if (!course) {
+      throw new NotFoundException('Курс не знайдено');
+    }
+    return transformToDto(CourseDto, course);
+  }
+
+  async findCourseAssignmentById(id: string): Promise<CourseAssignmentDto> {
+    const ca = await this.courseAssignmentModel
+      .findById(id)
+      .populate([
+        'course',
+        'teacher',
+        {
+          path: 'group',
+          populate: { path: 'specialty' },
+        },
+      ])
+      .lean()
+      .exec();
+
+    if (!ca) {
+      throw new NotFoundException('Призначення курсу не знайдено');
+    }
+    return transformToDto(CourseAssignmentDto, ca);
   }
 
   async findMy(

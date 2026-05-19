@@ -144,4 +144,41 @@ describe('Courses (e2e)', () => {
       expect(body.totalDocs).toBe(1);
     });
   });
+
+  describe('GET /courses/:id', () => {
+    it('should return course by id (200)', async () => {
+      const { accessToken, courseId } = await setupData();
+      const response = await request(app.getHttpServer())
+        .get(`/courses/${courseId.toHexString()}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const body = response.body as CourseDto;
+      expect(body.id).toBe(courseId.toHexString());
+      expect(body.name).toBe('Test Course');
+    });
+
+    it('should return 404 if course not found', async () => {
+      const { accessToken } = await setupData();
+      const fakeId = new Types.ObjectId().toHexString();
+      await request(app.getHttpServer())
+        .get(`/courses/${fakeId}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(404);
+    });
+  });
+
+  describe('GET /courses/assignments/:id/details', () => {
+    it('should return course assignment details (200)', async () => {
+      const { accessToken, courseAssignmentId } = await setupData();
+      const response = await request(app.getHttpServer())
+        .get(`/courses/assignments/${courseAssignmentId.toHexString()}/details`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const body = response.body as CourseAssignmentDto;
+      expect(body.id).toBe(courseAssignmentId.toHexString());
+      expect(body.courseName).toBe('Test Course');
+    });
+  });
 });

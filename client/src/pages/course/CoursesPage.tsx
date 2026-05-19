@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import type { CourseAssignment, PaginatedResponse } from '../../types';
 import { useTranslation } from 'react-i18next';
@@ -44,9 +45,11 @@ export default function CoursesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {courses.map((ca) => (
-            <div
+            <Link
               key={ca.id}
-              className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+              to={`/courses/${ca.id}`}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow block"
+            >
               <div className="flex items-start justify-between mb-3">
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium">
                   {ca.courseCode}
@@ -73,7 +76,7 @@ export default function CoursesPage() {
               <p className="text-xs text-gray-400 mt-2">
                 {ca.academicYear}, {t('courses.semester')} {ca.semester}
               </p>
-            </div>
+            </Link>
           ))}
         </div>
       )}

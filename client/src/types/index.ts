@@ -101,20 +101,39 @@ export interface PaginatedResponse<T> {
   hasPrevPage: boolean;
 }
 
+export interface FileDto {
+  id: string;
+  originalName: string;
+  mimetype: string;
+  size: number;
+}
+
+export interface Material {
+  id: string;
+  title: string;
+  description: string;
+  files: FileDto[];
+  publishDate: string;
+}
+
 export interface Assignment {
   id: string;
   courseAssignmentId: string;
   title: string;
   description: string;
+  files: FileDto[];
   dueDate: string;
   maxScore: number;
   courseName?: string;
   submission?: {
     id: string;
+    assignmentId: string;
+    studentId: string;
+    files: FileDto[];
+    submittedAt: string;
     status: string;
     score?: number;
     comment?: string;
-    submittedAt: string;
   } | null;
 }
 
@@ -136,6 +155,12 @@ export interface Grade {
   comment?: string;
   courseName?: string;
   courseCode?: string;
+}
+
+export interface GradeJournalResponse {
+  studentId: string;
+  studentName: string;
+  grades: Grade[];
 }
 
 export interface Notification {

@@ -5,6 +5,7 @@ import LoginPage from './pages/auth/LoginPage';
 import DashboardPage from './pages/shared/DashboardPage';
 import SchedulePage from './pages/shared/SchedulePage';
 import CoursesPage from './pages/course/CoursesPage';
+import CourseDetailPage from './pages/course/CourseDetailPage';
 import AssignmentsPage from './pages/student/AssignmentsPage';
 import GradesPage from './pages/student/GradesPage';
 import NotificationsPage from './pages/shared/NotificationsPage';
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="courses" element={<CoursesPage />} />
+          <Route path="courses/:id" element={<CourseDetailPage />} />
           <Route path="assignments" element={<AssignmentsPage />} />
           <Route path="grades" element={<GradesPage />} />
           <Route path="notifications" element={<NotificationsPage />} />

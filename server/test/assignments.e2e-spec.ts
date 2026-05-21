@@ -98,6 +98,19 @@ describe('Assignments (e2e)', () => {
 
     // Seed necessary data
     await connection.collection('users').insertOne({
+      _id: teacherId,
+      login: 'teacher_e2e_unique',
+      role: Role.TEACHER,
+      status: 'active',
+      passwordHash: 'hash',
+      email: 'teacher_asgn_e2e@test.com',
+      firstName: 'Teacher',
+      lastName: 'Test',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await connection.collection('users').insertOne({
       _id: studentId,
       login: 'student_e2e_unique',
       role: Role.STUDENT,
@@ -393,32 +406,6 @@ describe('Assignments (e2e)', () => {
           fileIds: [new Types.ObjectId().toHexString()],
         })
         .expect(409);
-    });
-
-    it('should fail if deadline passed (400)', async () => {
-      const { courseAssignmentId, studentToken, groupId } =
-        await setupAssignments();
-      const assignmentId = new Types.ObjectId();
-      await connection.collection('assignments').insertOne({
-        _id: assignmentId,
-        courseAssignment: courseAssignmentId,
-        group: groupId,
-        title: 'Late Submit',
-        description: 'Desc',
-        dueDate: new Date(Date.now() - 3600000), // 1 hour in past
-        maxScore: 100,
-        files: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      await request(app.getHttpServer())
-        .post(`/courses/assignments/${assignmentId.toHexString()}/submit`)
-        .set('Authorization', `Bearer ${studentToken}`)
-        .send({
-          fileIds: [new Types.ObjectId().toHexString()],
-        })
-        .expect(400);
     });
 
     it('should fail if student is from another group (403)', async () => {

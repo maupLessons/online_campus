@@ -85,6 +85,11 @@ describe('Courses (e2e)', () => {
       _id: studentId,
       login: 'student_e2e',
       role: Role.STUDENT,
+      email: 'student_e2e@example.com',
+      firstName: 'Student',
+      lastName: 'E2E',
+      status: 'active',
+      passwordHash: 'hash',
       studentProfile: {
         group: groupId,
       },

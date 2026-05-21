@@ -84,6 +84,8 @@ describe('Grades (e2e)', () => {
       email: 'student_e2e@test.com',
       firstName: 'Test',
       lastName: 'Student',
+      status: 'active',
+      passwordHash: 'hash',
       studentProfile: {
         group: groupId,
         recordBookNumber: `TEST-${studentId.toHexString().slice(-4)}`,
@@ -190,8 +192,19 @@ describe('Grades (e2e)', () => {
 
     it('should allow teacher to see student grades (200)', async () => {
       const { courseAssignmentId, studentId } = await setupGrades();
+      const teacherId = new Types.ObjectId();
+      await connection.collection('users').insertOne({
+        _id: teacherId,
+        login: 'teacher_e2e',
+        email: 'teacher@test.com',
+        role: Role.TEACHER,
+        status: 'active',
+        firstName: 'Teacher',
+        lastName: 'E2E',
+        passwordHash: 'hash',
+      });
       const teacherToken = jwtService.sign({
-        sub: new Types.ObjectId().toHexString(),
+        sub: teacherId.toHexString(),
         login: 'teacher_e2e',
         role: Role.TEACHER,
       });
@@ -222,8 +235,19 @@ describe('Grades (e2e)', () => {
   describe('Grade CRUD (Teacher)', () => {
     it('should create a grade (201)', async () => {
       const { studentId, courseAssignmentId } = await setupGrades();
+      const adminId = new Types.ObjectId();
+      await connection.collection('users').insertOne({
+        _id: adminId,
+        login: 'admin_e2e',
+        email: 'admin@test.com',
+        role: Role.ADMIN,
+        status: 'active',
+        firstName: 'Admin',
+        lastName: 'E2E',
+        passwordHash: 'hash',
+      });
       const adminToken = jwtService.sign({
-        sub: new Types.ObjectId().toHexString(),
+        sub: adminId.toHexString(),
         login: 'admin_e2e',
         role: Role.ADMIN,
       });
@@ -256,9 +280,20 @@ describe('Grades (e2e)', () => {
         date: new Date(),
       });
 
+      const adminId = new Types.ObjectId();
+      await connection.collection('users').insertOne({
+        _id: adminId,
+        login: 'admin_e2e_update',
+        email: 'admin_upd@test.com',
+        role: Role.ADMIN,
+        status: 'active',
+        firstName: 'Admin',
+        lastName: 'E2E',
+        passwordHash: 'hash',
+      });
       const adminToken = jwtService.sign({
-        sub: new Types.ObjectId().toHexString(),
-        login: 'admin_e2e',
+        sub: adminId.toHexString(),
+        login: 'admin_e2e_update',
         role: Role.ADMIN,
       });
 
@@ -284,9 +319,20 @@ describe('Grades (e2e)', () => {
         date: new Date(),
       });
 
+      const adminId = new Types.ObjectId();
+      await connection.collection('users').insertOne({
+        _id: adminId,
+        login: 'admin_e2e_delete',
+        email: 'admin_del@test.com',
+        role: Role.ADMIN,
+        status: 'active',
+        firstName: 'Admin',
+        lastName: 'E2E',
+        passwordHash: 'hash',
+      });
       const adminToken = jwtService.sign({
-        sub: new Types.ObjectId().toHexString(),
-        login: 'admin_e2e',
+        sub: adminId.toHexString(),
+        login: 'admin_e2e_delete',
         role: Role.ADMIN,
       });
 

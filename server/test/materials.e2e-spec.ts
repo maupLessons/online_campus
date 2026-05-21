@@ -48,6 +48,7 @@ describe('Materials (e2e)', () => {
 
   afterEach(async () => {
     if (connection) {
+      await connection.collection('users').deleteMany({});
       await connection.collection('courseassignments').deleteMany({});
       await connection.collection('materials').deleteMany({});
     }
@@ -72,6 +73,19 @@ describe('Materials (e2e)', () => {
     });
 
     // Seed necessary data
+    await connection.collection('users').insertOne({
+      _id: teacherId,
+      login: 'teacher_e2e',
+      email: 'teacher_e2e@example.com',
+      role: Role.TEACHER,
+      status: 'active',
+      firstName: 'Test',
+      lastName: 'Teacher',
+      passwordHash: 'hash',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     await connection.collection('courseassignments').insertOne({
       _id: courseAssignmentId,
       teacher: teacherId,
@@ -116,8 +130,21 @@ describe('Materials (e2e)', () => {
 
     it('should fail if user is not the teacher (403)', async () => {
       const { courseAssignmentId } = await setupMaterials();
+      const otherUserId = new Types.ObjectId();
+      await connection.collection('users').insertOne({
+        _id: otherUserId,
+        login: 'other_user',
+        email: 'other@example.com',
+        role: Role.TEACHER,
+        status: 'active',
+        firstName: 'Other',
+        lastName: 'User',
+        passwordHash: 'hash',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
       const otherUserToken = jwtService.sign({
-        sub: new Types.ObjectId().toHexString(),
+        sub: otherUserId.toHexString(),
         login: 'other_user',
         role: Role.TEACHER,
       });

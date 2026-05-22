@@ -12,12 +12,13 @@ import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { GradeResponseDto } from '../src/courses/grades/dto';
 import { StudentCourseResponseDto } from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed/seed.service';
+import { describeWithDb } from './e2e-db';
 
 process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describe('Grades (e2e)', () => {
+describeWithDb('Grades (e2e)', () => {
   let app: INestApplication<App>;
   let container: StartedTestContainer;
   let connection: Connection;

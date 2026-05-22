@@ -3,9 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
-
-const describeWithDb =
-  process.env.RUN_E2E_WITH_DB === 'true' ? describe : describe.skip;
+import { describeWithDb } from './e2e-db';
 
 describeWithDb('App (e2e)', () => {
   let app: INestApplication<App>;

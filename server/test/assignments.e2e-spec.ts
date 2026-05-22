@@ -13,10 +13,11 @@ import { SeedService } from '../src/seed/seed.service';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { AssignmentDto } from '../src/courses/assignments/dto';
 import { SubmissionDto } from '../src/courses/submissions/dto';
+import { describeWithDb } from './e2e-db';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describe('Assignments (e2e)', () => {
+describeWithDb('Assignments (e2e)', () => {
   let app: INestApplication<App>;
   let container: StartedTestContainer;
   let connection: Connection;

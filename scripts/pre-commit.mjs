@@ -41,6 +41,15 @@ function run(command, args, options = {}) {
   return result.stdout ?? '';
 }
 
+function runNpm(args) {
+  if (process.env.npm_execpath) {
+    run(process.execPath, [process.env.npm_execpath, ...args]);
+    return;
+  }
+
+  run(process.platform === 'win32' ? 'npm.cmd' : 'npm', args);
+}
+
 function isCodeFile(filePath) {
   return /\.(cjs|js|jsx|mjs|ts|tsx)$/.test(filePath);
 }
@@ -91,9 +100,9 @@ const hasServerCodeChanges = stagedFiles.some(
 );
 
 if (hasClientCodeChanges) {
-  run('npm', ['--prefix', 'client', 'run', 'lint']);
+  runNpm(['--prefix', 'client', 'run', 'lint']);
 }
 
 if (hasServerCodeChanges) {
-  run('npm', ['--prefix', 'server', 'run', 'lint:check']);
+  runNpm(['--prefix', 'server', 'run', 'lint:check']);
 }

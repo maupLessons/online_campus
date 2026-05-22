@@ -13,6 +13,8 @@ async function bootstrap() {
 
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
 
+  app.setGlobalPrefix('api');
+
   // Захист: Довіра проксі (nginx, docker) для коректного req.ip
   app.set('trust proxy', 1);
 
@@ -32,7 +34,10 @@ async function bootstrap() {
   app.use(compression());
 
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.method === 'GET' && req.path === '/') {
+    if (
+      req.method === 'GET' &&
+      (req.path === '/' || req.path === '/api' || req.path === '/api/')
+    ) {
       res.status(200).json({
         message: 'API is running',
         swagger: '/api/docs',
@@ -42,8 +47,6 @@ async function bootstrap() {
 
     next();
   });
-
-  app.setGlobalPrefix('api');
 
   app.enableCors({
     origin: process.env.CLIENT_URL || 'http://localhost:5173',
@@ -75,6 +78,7 @@ async function bootstrap() {
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
   console.log(`Server running on http://localhost:${port}`);
+  console.log(`Backend API routes: http://localhost:${port}/api`);
   console.log(
     `Swagger documentation available on http://localhost:${port}/api/docs`,
   );

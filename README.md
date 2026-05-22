@@ -110,7 +110,7 @@
 | Технологія      | Версія | Призначення                           |
 | --------------- | ------ | ------------------------------------- |
 | Node.js         | 20 LTS | Runtime                               |
-| NestJS          | 10     | Framework (модулі, DI, guards, pipes) |
+| NestJS          | 11     | Framework (модулі, DI, guards, pipes) |
 | TypeScript      | 5      | Типізація                             |
 | Passport.js     | —      | Стратегія JWT-аутентифікації          |
 | `@nestjs/jwt`   | —      | JWT access/refresh tokens             |
@@ -126,13 +126,13 @@
 | ------------------- | ------ | --------------------------------- |
 | React               | 19     | UI framework                      |
 | TypeScript          | 5      | Типізація                         |
-| Vite                | 5      | Bundler / dev-сервер              |
+| Vite                | 7      | Bundler / dev-сервер              |
 | Tailwind CSS        | 4      | Утилітарні стилі                  |
-| Zustand             | 4      | State management (auth, UI state) |
+| Zustand             | 5      | State management (auth, UI state) |
 | Axios               | —      | HTTP-клієнт з interceptors        |
-| React Router        | 6      | Клієнтський роутинг               |
+| React Router        | 7      | Клієнтський роутинг               |
 | React Hook Form     | 7      | Form state management             |
-| Zod                 | 3      | Schema validation                 |
+| Zod                 | 4      | Schema validation                 |
 | @hookform/resolvers | —      | React Hook Form + Zod integration |
 | Lucide React        | —      | Icon library                      |
 
@@ -847,13 +847,23 @@ Student        (базовий доступ)
 online_campus/
 ├── docker-compose.yml
 ├── README.md
+├── .nvmrc                    # Node.js 20.19.5 для локальної розробки та CI
+├── .npmrc                    # npm policy: engine-strict, save-exact, lockfile
+├── package.json              # root tooling: Husky Git hooks
+├── package-lock.json
+├── .husky/
+│   └── pre-commit            # перевірки перед commit
+├── scripts/
+│   └── pre-commit.mjs
 ├── .github/
+│   ├── dependabot.yml
 │   └── workflows/
-│       ├── ci.yml             ← lint + test на PR
-│       └── deploy.yml         ← деплой на VPS після merge в main
+│       ├── ci.yml             ← Repository + Server + Client checks
+│       └── deploy.yml         ← деплой на VPS після push у master
 │
 ├── server/                    # NestJS Backend
 │   ├── Dockerfile
+│   ├── .npmrc
 │   ├── nest-cli.json
 │   ├── package.json
 │   ├── package-lock.json
@@ -1056,11 +1066,18 @@ docker compose up --build
 ### Локально
 
 ```bash
+# один раз після clone / pull
+nvm use
+npm --version # має бути 10.8.2
+npm ci
+cd server && npm ci
+cd ../client && npm ci
+
 # Термінал 1 — бекенд
-cd server && npm install && npm run start:dev
+cd server && npm run start:dev
 
 # Термінал 2 — фронтенд
-cd client && npm install && npm run dev
+cd client && npm run dev
 ```
 
 ### Змінні середовища (server)
@@ -1107,117 +1124,153 @@ services:
 
 ## 14. CI/CD
 
-### Рекомендована схема
+### Поточна схема
 
 ```
 Developer → git push → GitHub → GitHub Actions
                                     │
                           ┌─────────┴──────────┐
                           ▼                    ▼
-                    PR/branch              merge main
+                    PR/branch              push master
                   [ci.yml]              [deploy.yml]
-                lint + test           build → push → SSH deploy
+             audit + lint + test       git pull → docker compose up
 ```
 
 ### CI workflow (`.github/workflows/ci.yml`)
 
-Запускається на кожен pull request.
+Запускається на кожен pull request у `master` і на push у `master`.
+Workflow має три незалежні jobs: `Repository`, `Server` і `Client`.
 
 ```yaml
 name: CI
 
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
+  push:
+    branches: [master]
 
 jobs:
-  lint-and-test:
+  repository:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run lint:check
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:e2e
 
-      - name: Install server deps
-        run: npm ci
-        working-directory: server
-
-      - name: Lint
-        run: npm run lint
-        working-directory: server
-
-      - name: Test
-        run: npm run test
-        working-directory: server
-
-      - name: Build check
-        run: npm run build
-        working-directory: server
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
+      - run: npm run lint
+      - run: npm run build
 ```
+
+`npm ci` є обов'язковим для CI та deployment-перевірок: він встановлює залежності строго з `package-lock.json` і падає, якщо `package.json` та lockfile не синхронізовані. Root `package.json` використовується тільки для репозиторних інструментів, зокрема Husky.
 
 ### Deploy workflow (`.github/workflows/deploy.yml`)
 
-Запускається після merge у `main`. Будує Docker-образи, пушить до реєстру, деплоїть на VPS через SSH.
+Запускається після push у `master`. Workflow підключається до VPS через SSH, виконує `git pull origin master`, записує `.env` із GitHub Secrets і запускає `docker compose up --build -d`.
 
 ```yaml
 name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and push server image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./server
-          push: true
-          tags: yourorg/campus-server:${{ github.sha }},yourorg/campus-server:latest
-
-      - name: Build and push client image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./client
-          push: true
-          tags: yourorg/campus-client:${{ github.sha }},yourorg/campus-client:latest
-
-      - name: Deploy via SSH
+      - name: Deploy to server
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: ${{ secrets.SSH_PORT }}
           script: |
-            cd /opt/campus
-            docker compose pull
-            docker compose up -d --remove-orphans
+            cd /opt/online_campus
+            git pull origin master
+            docker compose up --build -d
             docker image prune -f
 ```
 
 ### Secrets для GitHub Actions
 
-| Secret            | Значення                        |
-| ----------------- | ------------------------------- |
-| `DOCKER_USERNAME` | логін Docker Hub (або GHCR)     |
-| `DOCKER_PASSWORD` | пароль / токен                  |
-| `VPS_HOST`        | IP або домен сервера            |
-| `VPS_USER`        | SSH-користувач (напр. `deploy`) |
-| `VPS_SSH_KEY`     | приватний SSH-ключ              |
+| Secret | Значення |
+| ------ | -------- |
+| `SSH_HOST` | IP або домен dev/prod сервера |
+| `SSH_USER` | SSH-користувач |
+| `SSH_PASSWORD` | пароль SSH-користувача |
+| `SSH_PORT` | SSH-порт |
+| `MONGO_ROOT_USERNAME` | root user MongoDB |
+| `MONGO_ROOT_PASSWORD` | root password MongoDB |
+| `MONGO_DATABASE` | назва MongoDB database |
+| `MONGO_HOST` | hostname MongoDB у Docker network |
+| `MONGO_PORT` | порт MongoDB |
+| `JWT_SECRET` | секрет для JWT |
+| `PORT` | порт backend |
+| `CLIENT_URL` | URL frontend для CORS і reset links |
+
+### Правила роботи із залежностями
+
+- Використовуйте Node.js з `.nvmrc`: `20.19.5`.
+- Підтримувані версії для проєкту: Node.js `20.19.5` і npm `10.8.2`; `engines`/`devEngines` блокують інші версії.
+- Якщо після `nvm use` npm не `10.8.2`, встановіть командний npm: `npm install -g npm@10.8.2`.
+- Для встановлення після `pull`, `rebase` або checkout гілки використовуйте тільки `npm ci` окремо в `server` і `client`.
+- `npm install` використовуйте лише коли додаєте, видаляєте або оновлюєте залежність.
+- Якщо змінюється `package.json`, у той самий commit має потрапити відповідний `package-lock.json`.
+- Не запускайте `npm audit fix --force` без окремого review: він може підняти major versions із breaking changes.
+- `.nvmrc`, `.npmrc`, `engines`, `devEngines` і `packageManager` фіксують підтримувані версії Node/npm для всієї команди.
+- Dependabot щотижня перевіряє залежності в `/`, `/server`, `/client` і GitHub Actions.
+- У GitHub Settings для `master` потрібно увімкнути branch protection і зробити checks `Repository`, `Server` та `Client` обов'язковими перед merge.
+
+### Husky hooks
+
+Husky встановлюється з root `package.json` через `prepare` після `npm ci`.
+
+Поточний `pre-commit` hook:
+
+- не дозволяє commit, якщо staged `package.json` без відповідного `package-lock.json`;
+- запускає `client` lint для staged змін у `client/src` або frontend config;
+- запускає `server` lint у check-mode для staged змін у `server/src`, `server/test` або backend config.
+
+Hook є локальним запобіжником. Обов'язковим джерелом істини залишаються GitHub Actions checks.
 
 ### Підготовка VPS
 
@@ -1227,12 +1280,11 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 
 # 2. Створити директорію проєкту
-mkdir -p /opt/campus && cd /opt/campus
+mkdir -p /opt/online_campus && cd /opt/online_campus
 
-# 3. Покласти docker-compose.prod.yml та .env
-# (один раз вручну або через ansible/terraform)
+# 3. Клонувати репозиторій і налаштувати GitHub Secrets для deploy workflow
 
-# 4. Налаштувати SSL — Nginx + Let's Encrypt (certbot або Traefik)
+# 4. Налаштувати SSL - Nginx + Let's Encrypt (certbot або Traefik)
 ```
 
 ### Альтернатива без VPS

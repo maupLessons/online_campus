@@ -11,10 +11,11 @@ import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { CourseAssignmentDto, CourseDto } from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed/seed.service';
+import { describeWithDb } from './e2e-db';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describe('Courses (e2e)', () => {
+describeWithDb('Courses (e2e)', () => {
   let app: INestApplication<App>;
   let container: StartedTestContainer;
   let connection: Connection;

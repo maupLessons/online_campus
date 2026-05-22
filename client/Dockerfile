@@ -1,17 +1,17 @@
-FROM node:20-alpine AS build
+FROM node:20.19.5-alpine AS build
 
 WORKDIR /app
 
-COPY package*.json ./
+COPY package*.json .npmrc ./
+
+RUN npm ci
 
 COPY . .
-
 
 ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 
-RUN rm -rf dist && rm -rf node_modules
-RUN npm ci && npm run build
+RUN npm run build
 
 FROM nginx:alpine
 

@@ -4,23 +4,101 @@ updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+      time: "08:00"
+      timezone: Europe/Kyiv
+    open-pull-requests-limit: 1
+    versioning-strategy: increase-if-necessary
+    cooldown:
+      semver-minor-days: 7
+      semver-patch-days: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      repo-tooling-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: npm
     directory: /server
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+      time: "08:15"
+      timezone: Europe/Kyiv
+    open-pull-requests-limit: 1
+    versioning-strategy: increase-if-necessary
+    cooldown:
+      semver-minor-days: 7
+      semver-patch-days: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      server-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: npm
     directory: /client
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+      time: "08:30"
+      timezone: Europe/Kyiv
+    open-pull-requests-limit: 1
+    versioning-strategy: increase-if-necessary
+    cooldown:
+      semver-minor-days: 7
+      semver-patch-days: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      client-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+      time: "08:45"
+      timezone: Europe/Kyiv
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      github-actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { AuditLogService } from './audit-log.service';
@@ -6,6 +7,8 @@ import { AuditLog } from './schemas/audit-log.schema';
 
 describe('AuditLogService', () => {
   let service: AuditLogService;
+  let loggerErrorSpy: jest.SpyInstance;
+  let loggerLogSpy: jest.SpyInstance;
   const auditModel = {
     create: jest.fn().mockResolvedValue({}),
     find: jest.fn(),
@@ -14,6 +17,8 @@ describe('AuditLogService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    loggerErrorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    loggerLogSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -26,6 +31,11 @@ describe('AuditLogService', () => {
     }).compile();
 
     service = module.get<AuditLogService>(AuditLogService);
+  });
+
+  afterEach(() => {
+    loggerErrorSpy.mockRestore();
+    loggerLogSpy.mockRestore();
   });
 
   it('should be defined', () => {

@@ -84,7 +84,7 @@ export default function CourseDetailPage() {
   const handleUpload = async (file: File) => {
     if (!uploadTitle.trim()) {
       alert('Будь ласка, введіть назву матеріалу перед завантаженням!');
-      return;
+      throw new Error('Помилка при завантаженні');
     }
     try {
       await filesApi.uploadMaterial(id!, uploadTitle, file);

@@ -90,9 +90,10 @@ export default function CourseDetailPage() {
       await filesApi.uploadMaterial(id!, uploadTitle, file);
       setUploadTitle('');
       await refetchMaterials();
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || 'Помилка при завантаженні';
-      alert(`Увага: ${errorMsg} test`);
+    } catch (error) {
+      const err = error as { response?: { data?: { message?: string } } };
+      const errorMsg = err.response?.data?.message || 'Помилка при завантаженні';
+      alert(`Увага: ${errorMsg}`);
       throw error;
     }
   };
@@ -120,7 +121,7 @@ export default function CourseDetailPage() {
       if (fileId) {
         try {
           await api.delete(`/files/${fileId}`);
-        } catch (fileError) {
+        } catch {
           console.warn('Файл вже видалено, продовжуємо...');
         }
       }
@@ -237,7 +238,7 @@ export default function CourseDetailPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {materialsData.docs.map((m: any) => {
+                      {materialsData.docs.map((m: Material) => {
                         const file = m.files && m.files.length > 0 ? m.files[0] : null;
                         const fileId = file ? (file.id || file._id) : undefined;
                         const fileName = file ? file.originalName : '';
@@ -245,7 +246,7 @@ export default function CourseDetailPage() {
                         return (
                           <tr key={m.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {new Date(m.publishDate || m.createdAt || Date.now()).toLocaleDateString(locale)}
+                              {new Date(m.publishDate || (m as Material & { createdAt?: string }).createdAt || 0).toLocaleDateString(locale)}
                             </td>
                             <td className="px-6 py-4 text-sm font-medium text-gray-900">
                               <div>

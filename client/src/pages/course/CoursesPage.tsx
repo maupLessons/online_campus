@@ -13,7 +13,7 @@ const formatTeacherName = (ca: CourseAssignment) => {
   return '';
 };
 
-function CourseCard({ ca, t }: { ca: CourseAssignment; t: any }) {
+function CourseCard({ ca, t }: { ca: CourseAssignment; t: (key: string) => string }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow flex flex-col h-full">
       <div className="flex items-start justify-between mb-3">

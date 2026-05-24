@@ -159,6 +159,7 @@ const handleDelete = async (fileId: string | undefined, assignmentId: string) =>
                               ? responseMessage
                               : 'Помилка при завантаженні';
                           alert(`Увага: ${errorMsg}`);
+                          throw error;
                         }
                       }} 
                     />

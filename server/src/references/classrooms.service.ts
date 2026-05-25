@@ -55,7 +55,9 @@ export class ClassroomsService {
   ): Promise<string> {
     const objectId = toReferenceObjectId(id, 'classroom');
     const classroom = await this.classroomModel
-      .findByIdAndUpdate(objectId, updateClassroomDto, { new: true })
+      .findByIdAndUpdate(objectId, updateClassroomDto, {
+        returnDocument: 'after',
+      })
       .lean()
       .exec();
     if (!classroom) {

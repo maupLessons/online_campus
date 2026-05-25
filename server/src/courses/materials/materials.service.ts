@@ -111,7 +111,7 @@ export class MaterialsService {
     }
 
     const updated = (await this.materialModel
-      .findByIdAndUpdate(id, { $set: updateData }, { new: true })
+      .findByIdAndUpdate(id, { $set: updateData }, { returnDocument: 'after' })
       .populate('files')
       .lean()
       .exec()) as MaterialDocument | null;

@@ -52,7 +52,9 @@ export class SpecialtiesService {
   ): Promise<string> {
     const objectId = toReferenceObjectId(id, 'specialty');
     const specialty = await this.specialtyModel
-      .findByIdAndUpdate(objectId, updateSpecialtyDto, { new: true })
+      .findByIdAndUpdate(objectId, updateSpecialtyDto, {
+        returnDocument: 'after',
+      })
       .exec();
     if (!specialty) {
       throwReferenceNotFound('Specialty', id);

@@ -186,11 +186,19 @@ export class AuditLogService {
         requestId: entry.requestId,
       })
       .catch((err: unknown) => {
+        if (this.isMongoClientClosedError(err)) {
+          return;
+        }
+
         this.logger.error(
           '[AUDIT] Failed to persist audit log to DB',
           err as object,
         );
       });
+  }
+
+  private isMongoClientClosedError(error: unknown): boolean {
+    return error instanceof Error && error.name === 'MongoClientClosedError';
   }
 
   private buildFilter(query: AuditLogQueryDto): QueryFilter<AuditLogDocument> {

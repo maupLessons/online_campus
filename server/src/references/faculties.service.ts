@@ -56,7 +56,9 @@ export class FacultiesService {
   ): Promise<string> {
     const objectId = toReferenceObjectId(id, 'faculty');
     const faculty = await this.facultyModel
-      .findByIdAndUpdate(objectId, updateFacultyDto, { new: true })
+      .findByIdAndUpdate(objectId, updateFacultyDto, {
+        returnDocument: 'after',
+      })
       .exec();
     if (!faculty) {
       throwReferenceNotFound('Faculty', id);

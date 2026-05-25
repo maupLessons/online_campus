@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import type { ChangeEvent } from 'react';
 
 interface FileUploaderProps {
   onUpload: (file: File) => Promise<void>;
   allowedTypes?: string[];
 }
 
-export const FileUploader: React.FC<FileUploaderProps> = ({ onUpload, allowedTypes }) => {
+export function FileUploader({ onUpload, allowedTypes }: FileUploaderProps) {
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const MAX_SIZE = 10 * 1024 * 1024; // 10MB
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (selected) {
       if (selected.size > MAX_SIZE) {
@@ -54,4 +55,4 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUpload, allowedTyp
       )}
     </div>
   );
-};
+}

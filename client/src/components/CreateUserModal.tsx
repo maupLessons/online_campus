@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import type { ChangeEvent, SyntheticEvent } from 'react';
 import api from '../services/api';
 import { Role, ROLE_LABEL_KEYS } from '../types';
 import { useTranslation } from 'react-i18next';
@@ -127,11 +128,12 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
 
   if (!isOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const value = e.target.type === 'number' ? Number(e.target.value) : e.target.value;
-    setFormData({ ...formData, [e.target.name]: value });
-    if (e.target.name === 'password') {
-      setPasswordError(validatePassword(e.target.value));
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const target = e.currentTarget;
+    const value = target.type === 'number' ? Number(target.value) : target.value;
+    setFormData({ ...formData, [target.name]: value });
+    if (target.name === 'password') {
+      setPasswordError(validatePassword(target.value));
     }
   };
 
@@ -171,7 +173,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
     return payload;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: SyntheticEvent<HTMLFormElement, SubmitEvent>,
+  ) => {
     e.preventDefault();
     setError('');
     setLoading(true);

@@ -32,6 +32,16 @@ const NAV_ITEMS: {
     roles: [Role.STUDENT],
   },
   {
+    labelKey: 'nav.surveys',
+    path: '/surveys',
+    roles: [Role.STUDENT, Role.TEACHER],
+  },
+  {
+    labelKey: 'nav.surveyAdmin',
+    path: '/surveys/admin',
+    roles: [Role.ADMIN, Role.DEAN, Role.RECTOR],
+  },
+  {
     labelKey: 'nav.users',
     path: '/users',
     roles: [Role.ADMIN, Role.PRESIDENT, Role.RECTOR, Role.DEAN],
@@ -68,6 +78,14 @@ export default function Layout() {
   };
 
   const pageTitle = useMemo(() => {
+    if (location.pathname.startsWith('/surveys/admin')) {
+      return t('nav.surveyAdmin');
+    }
+
+    if (location.pathname.startsWith('/surveys')) {
+      return t('nav.surveys');
+    }
+
     switch (location.pathname) {
       case '/dashboard':
         return t('nav.dashboard');

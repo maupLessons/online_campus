@@ -2,20 +2,46 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/auth/LoginPage';
-import DashboardPage from './pages/shared/DashboardPage';
-import SchedulePage from './pages/shared/SchedulePage';
-import CoursesPage from './pages/course/CoursesPage';
-import CourseDetailPage from './pages/course/CourseDetailPage';
-import AssignmentsPage from './pages/student/AssignmentsPage';
-import GradesPage from './pages/student/GradesPage';
-import NotificationsPage from './pages/shared/NotificationsPage';
-import UsersPage from './pages/admin/UsersPage';
-import AuditLogPage from './pages/admin/AuditLogPage';
 import { Role } from './types';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import ProfilePage from './pages/shared/ProfilePage';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { useAuthStore } from './store/authStore';
+
+const DashboardPage = lazy(() => import('./pages/shared/DashboardPage'));
+const SchedulePage = lazy(() => import('./pages/shared/SchedulePage'));
+const CoursesPage = lazy(() => import('./pages/course/CoursesPage'));
+const CourseDetailPage = lazy(() => import('./pages/course/CourseDetailPage'));
+const AssignmentsPage = lazy(() => import('./pages/student/AssignmentsPage'));
+const GradesPage = lazy(() => import('./pages/student/GradesPage'));
+const NotificationsPage = lazy(
+  () => import('./pages/shared/NotificationsPage'),
+);
+const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
+const AuditLogPage = lazy(() => import('./pages/admin/AuditLogPage'));
+const ProfilePage = lazy(() => import('./pages/shared/ProfilePage'));
+const SurveysPage = lazy(() => import('./pages/surveys/SurveysPage'));
+const SurveyPlayerPage = lazy(
+  () => import('./pages/surveys/SurveyPlayerPage'),
+);
+const SurveyAdminPage = lazy(
+  () => import('./pages/surveys/SurveyAdminPage'),
+);
+const SurveyResultsPage = lazy(
+  () => import('./pages/surveys/SurveyResultsPage'),
+);
+
+function RouteLoader() {
+  return (
+    <div className="flex justify-center py-16">
+      <div className="h-9 w-9 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+    </div>
+  );
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteLoader />}>{children}</Suspense>;
+}
 
 export default function App() {
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
@@ -39,18 +65,116 @@ export default function App() {
             </ProtectedRoute>
           }>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="schedule" element={<SchedulePage />} />
-          <Route path="courses" element={<CoursesPage />} />
-          <Route path="courses/:id" element={<CourseDetailPage />} />
-          <Route path="assignments" element={<AssignmentsPage />} />
-          <Route path="grades" element={<GradesPage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
+          <Route
+            path="dashboard"
+            element={
+              <LazyPage>
+                <DashboardPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="schedule"
+            element={
+              <LazyPage>
+                <SchedulePage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="courses"
+            element={
+              <LazyPage>
+                <CoursesPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="courses/:id"
+            element={
+              <LazyPage>
+                <CourseDetailPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="assignments"
+            element={
+              <LazyPage>
+                <AssignmentsPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="grades"
+            element={
+              <LazyPage>
+                <GradesPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="surveys"
+            element={
+              <ProtectedRoute allowedRoles={[Role.STUDENT, Role.TEACHER]}>
+                <LazyPage>
+                  <SurveysPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="surveys/:id"
+            element={
+              <ProtectedRoute allowedRoles={[Role.STUDENT, Role.TEACHER]}>
+                <LazyPage>
+                  <SurveyPlayerPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="surveys/admin"
+            element={
+              <ProtectedRoute
+                allowedRoles={[Role.ADMIN, Role.DEAN, Role.RECTOR]}>
+                <LazyPage>
+                  <SurveyAdminPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="surveys/admin/:id/results"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  Role.ADMIN,
+                  Role.DEAN,
+                  Role.RECTOR,
+                  Role.PRESIDENT,
+                ]}>
+                <LazyPage>
+                  <SurveyResultsPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="notifications"
+            element={
+              <LazyPage>
+                <NotificationsPage />
+              </LazyPage>
+            }
+          />
           <Route
             path="profile"
             element={
               <ProtectedRoute>
-                <ProfilePage />
+                <LazyPage>
+                  <ProfilePage />
+                </LazyPage>
               </ProtectedRoute>
             }
           />
@@ -64,7 +188,9 @@ export default function App() {
                   Role.RECTOR,
                   Role.DEAN,
                 ]}>
-                <UsersPage />
+                <LazyPage>
+                  <UsersPage />
+                </LazyPage>
               </ProtectedRoute>
             }
           />
@@ -72,7 +198,9 @@ export default function App() {
             path="audit-log"
             element={
               <ProtectedRoute allowedRoles={[Role.ADMIN]}>
-                <AuditLogPage />
+                <LazyPage>
+                  <AuditLogPage />
+                </LazyPage>
               </ProtectedRoute>
             }
           />

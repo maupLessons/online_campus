@@ -84,7 +84,7 @@ describe('SurveysService', () => {
     Pick<CoursesService, 'isUserAssignedToCourseTargets'>
   >;
   let notificationsService: jest.Mocked<
-    Pick<NotificationsService, 'createMany'>
+    Pick<NotificationsService, 'create' | 'createMany'>
   >;
 
   const userId = new Types.ObjectId('6622b2a00f3a22d5b625d172');
@@ -136,6 +136,7 @@ describe('SurveysService', () => {
       isUserAssignedToCourseTargets: jest.fn().mockResolvedValue(false),
     };
     notificationsService = {
+      create: jest.fn(),
       createMany: jest.fn(),
     };
 
@@ -270,7 +271,7 @@ describe('SurveysService', () => {
     );
   });
 
-  it('creates new_survey notification on publish', async () => {
+  it('creates one broadcast new_survey notification for all users on publish', async () => {
     const draftSurvey = createSurveyDoc({
       status: SurveyStatus.DRAFT,
       startDate: new Date('2099-01-01T00:00:00.000Z'),
@@ -291,16 +292,48 @@ describe('SurveysService', () => {
     });
 
     expect(draftSurvey.startDate?.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.NEW_SURVEY,
+        title: 'Нове опитування',
+        targetType: 'all',
+        actionUrl: `/surveys/${draftSurvey._id.toString()}`,
+        entityType: 'survey',
+        entityId: draftSurvey._id.toString(),
+      }),
+    );
+    expect(notificationsService.createMany).not.toHaveBeenCalled();
+  });
+
+  it('creates one new_survey notification per target group on publish', async () => {
+    const groupIds = ['6622b2a00f3a22d5b625d174', '6622b2a00f3a22d5b625d175'];
+    const draftSurvey = createSurveyDoc({
+      status: SurveyStatus.DRAFT,
+      targetType: SurveyTargetType.GROUPS,
+      targetIds: groupIds,
+    });
+    draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
+
+    surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    await service.publish(draftSurvey._id.toString(), {
+      sub: draftSurvey.createdBy.toString(),
+      login: 'dean',
+      role: Role.DEAN,
+    });
+
+    expect(notificationsService.create).not.toHaveBeenCalled();
     expect(notificationsService.createMany).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: NotificationType.NEW_SURVEY,
-          title: 'Нове опитування',
-          actionUrl: `/surveys/${draftSurvey._id.toString()}`,
-          entityType: 'survey',
-          entityId: draftSurvey._id.toString(),
-        }),
-      ]),
+      groupIds.map((groupId) => ({
+        type: NotificationType.NEW_SURVEY,
+        title: 'Нове опитування',
+        message: draftSurvey.title,
+        important: true,
+        targetType: 'group',
+        groupId,
+        actionUrl: `/surveys/${draftSurvey._id.toString()}`,
+        entityType: 'survey',
+        entityId: draftSurvey._id.toString(),
+      })),
     );
   });
 });

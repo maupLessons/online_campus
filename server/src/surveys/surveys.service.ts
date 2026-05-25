@@ -1119,7 +1119,6 @@ export class SurveysService {
 
   private async notifySurveyPublished(survey: SurveyDocument): Promise<void> {
     try {
-      const recipients = await this.resolveNotificationRecipients(survey);
       const surveyId = this.idToString(survey._id);
       const payload = {
         title: 'Нове опитування',
@@ -1131,6 +1130,26 @@ export class SurveysService {
         important: true,
       };
 
+      if (survey.targetType === SurveyTargetType.ALL) {
+        await this.notificationsService.create({
+          ...payload,
+          targetType: 'all',
+        });
+        return;
+      }
+
+      if (survey.targetType === SurveyTargetType.GROUPS) {
+        await this.notificationsService.createMany(
+          survey.targetIds.map((groupId) => ({
+            ...payload,
+            targetType: 'group',
+            groupId,
+          })),
+        );
+        return;
+      }
+
+      const recipients = await this.resolveNotificationRecipients(survey);
       if (recipients.length === 0) {
         this.logger.warn(
           `Survey notification skipped: no recipients for survey ${this.idToString(survey._id)}`,

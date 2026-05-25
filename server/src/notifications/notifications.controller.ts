@@ -16,6 +16,7 @@ import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '../common/types/roles.enum';
 import { CreateNotificationDto } from './dto/create-notification.dto';
+import { UpdateNotificationDto } from './dto/update-notification.dto';
 
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -37,6 +38,13 @@ export class NotificationsController {
     return { count };
   }
 
+  @Get('admin')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  findAllForAdmin(@Request() req: AuthenticatedRequest) {
+    return this.notificationsService.findAllForAdmin(req.user.sub);
+  }
+
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
@@ -51,14 +59,32 @@ export class NotificationsController {
     return this.notificationsService.create(body);
   }
 
+  @Patch('read-all')
+  markAllAsRead(@Request() req: AuthenticatedRequest) {
+    return this.notificationsService.markAllAsRead(req.user.sub);
+  }
+
   @Patch(':id/read')
   markAsRead(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.notificationsService.markAsRead(id, req.user.sub);
   }
 
-  @Patch('read-all')
-  markAllAsRead(@Request() req: AuthenticatedRequest) {
-    return this.notificationsService.markAllAsRead(req.user.sub);
+  @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  update(
+    @Param('id') id: string,
+    @Body() body: UpdateNotificationDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.notificationsService.update(id, body, req.user.sub);
+  }
+
+  @Delete('admin/:id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  deleteAsAdmin(@Param('id') id: string) {
+    return this.notificationsService.deleteAsAdmin(id);
   }
 
   @Delete(':id')

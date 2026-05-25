@@ -1,64 +1,67 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell } from 'lucide-react';
 
-import api from '../../services/api';
+import {
+  isRateLimitError,
+  notificationsApi,
+  notificationsQueryKeys,
+} from '../../services/notificationsApi';
+import { useAuthStore } from '../../store/authStore';
+import type { User } from '../../types';
+
+function getUserId(user: User | null) {
+  return user?.id ?? user?._id ?? null;
+}
 
 export default function NotificationsBell() {
-  const [count, setCount] = useState(0);
-
+  const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const user = useAuthStore((state) => state.user);
+  const isAuthChecked = useAuthStore((state) => state.isAuthChecked);
+  const userId = getUserId(user);
+  const isNotificationsPage = location.pathname === '/notifications';
+  const unreadCountQueryKey = notificationsQueryKeys.unreadCount(
+    userId ?? 'anonymous',
+  );
+
+  const { data: count = 0 } = useQuery({
+    queryKey: unreadCountQueryKey,
+    queryFn: notificationsApi.getUnreadCount,
+    enabled: isAuthChecked && Boolean(userId) && !isNotificationsPage,
+    refetchInterval: isNotificationsPage ? false : 60_000,
+    refetchOnMount: true,
+    refetchOnReconnect: 'always',
+    refetchOnWindowFocus: false,
+    retry: (failureCount, error) =>
+      !isRateLimitError(error) && failureCount < 1,
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
+    staleTime: 30_000,
+  });
 
   useEffect(() => {
-    const fetchUnreadCount = async () => {
-      try {
-        const { data } = await api.get('/notifications/unread-count');
+    if (!userId) {
+      queryClient.removeQueries({ queryKey: notificationsQueryKeys.root });
+    }
+  }, [queryClient, userId]);
 
-        setCount(data.count);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchUnreadCount();
-  }, []);
+  const handleOpenNotifications = () => {
+    navigate('/notifications');
+  };
 
   return (
     <button
-      onClick={() => navigate('/notifications')}
-      className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth={1.8}
-        stroke="currentColor"
-        className="w-5 h-5 text-gray-600">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M14.857 17.082a23.848 23.848 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0m5.714 0H18a2 2 0 0 0 2-2v-1.586a1 1 0 0 0-.293-.707l-1.414-1.414A2 2 0 0 1 18 9.586V9a6 6 0 1 0-12 0v.586a2 2 0 0 1-.293 1.707L4.293 12.707A1 1 0 0 0 4 13.414V15a2 2 0 0 0 2 2h2.857"
-        />
-      </svg>
+      onClick={handleOpenNotifications}
+      aria-label="Notifications"
+      className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+    >
+      <Bell className="h-5 w-5 text-gray-600" aria-hidden="true" />
 
       {count > 0 && (
-        <span
-          className="
-            absolute
-            -top-1
-            -right-1
-            min-w-[18px]
-            h-[18px]
-            px-1
-            rounded-full
-            bg-red-500
-            text-white
-            text-[11px]
-            flex
-            items-center
-            justify-center
-            font-medium
-          ">
-          {count}
+        <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-medium text-white">
+          {count > 99 ? '99+' : count}
         </span>
       )}
     </button>

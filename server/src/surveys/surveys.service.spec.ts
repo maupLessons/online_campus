@@ -77,11 +77,15 @@ describe('SurveysService', () => {
     findOne: jest.Mock;
     countDocuments: jest.Mock;
   };
-  let usersService: jest.Mocked<Pick<UsersService, 'findOne'>>;
+  let usersService: jest.Mocked<
+    Pick<UsersService, 'findOne' | 'findActiveUserIdsByRoles'>
+  >;
   let coursesService: jest.Mocked<
     Pick<CoursesService, 'isUserAssignedToCourseTargets'>
   >;
-  let notificationsService: jest.Mocked<Pick<NotificationsService, 'create'>>;
+  let notificationsService: jest.Mocked<
+    Pick<NotificationsService, 'createMany'>
+  >;
 
   const userId = new Types.ObjectId('6622b2a00f3a22d5b625d172');
   const surveyDoc = createSurveyDoc();
@@ -124,12 +128,15 @@ describe('SurveysService', () => {
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
+      findActiveUserIdsByRoles: jest
+        .fn()
+        .mockResolvedValue([userId.toHexString()]),
     };
     coursesService = {
       isUserAssignedToCourseTargets: jest.fn().mockResolvedValue(false),
     };
     notificationsService = {
-      create: jest.fn(),
+      createMany: jest.fn(),
     };
 
     service = new SurveysService(
@@ -266,8 +273,10 @@ describe('SurveysService', () => {
   it('creates new_survey notification on publish', async () => {
     const draftSurvey = createSurveyDoc({
       status: SurveyStatus.DRAFT,
+      startDate: new Date('2099-01-01T00:00:00.000Z'),
       save: jest.fn().mockImplementation(function save(this: {
         status: SurveyStatus;
+        startDate?: Date;
         publishedAt?: Date;
       }) {
         return Promise.resolve(this);
@@ -281,11 +290,17 @@ describe('SurveysService', () => {
       role: Role.DEAN,
     });
 
-    expect(notificationsService.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: NotificationType.NEW_SURVEY,
-        title: 'Нове опитування',
-      }),
+    expect(draftSurvey.startDate?.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(notificationsService.createMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: NotificationType.NEW_SURVEY,
+          title: 'Нове опитування',
+          actionUrl: `/surveys/${draftSurvey._id.toString()}`,
+          entityType: 'survey',
+          entityId: draftSurvey._id.toString(),
+        }),
+      ]),
     );
   });
 });

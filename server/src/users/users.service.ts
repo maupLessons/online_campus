@@ -553,6 +553,23 @@ export class UsersService {
     return transformToDtoArray(UserDto, users);
   }
 
+  async findActiveUserIdsByRoles(roles: Role[]): Promise<string[]> {
+    if (roles.length === 0) {
+      return [];
+    }
+
+    const users = await this.userModel
+      .find({
+        role: { $in: roles },
+        status: 'active',
+      })
+      .select('_id')
+      .lean()
+      .exec();
+
+    return users.map((user) => toId(user._id)).filter(Boolean);
+  }
+
   private async createRoleUpdateOperation(
     id: string,
     dto: ChangeUserRoleDto,

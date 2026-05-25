@@ -1,9 +1,10 @@
 import { Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Role } from '../types';
 
 interface Props {
-  children: React.ReactNode;
+  children: ReactNode;
   allowedRoles?: Role[];
 }
 

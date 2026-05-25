@@ -34,6 +34,7 @@ export const ROLE_LABELS: Record<Role, string> = {
 
 export interface User {
   id: string;
+  _id?: string;
   login: string;
   role: Role;
   email: string;
@@ -113,10 +114,14 @@ export interface FileDto {
 
 export interface Material {
   id: string;
+  courseAssignmentId?: string;
   title: string;
   description?: string;
-  files: FileDto[];
+  files?: FileDto[];
+  fileLink?: string;
+  originalName?: string;
   publishDate: string;
+  createdAt?: string;
 }
 
 export interface Assignment {
@@ -170,11 +175,179 @@ export interface GradeJournalResponse {
 
 export interface Notification {
   id: string;
+  userId?: string | null;
   type: string;
   title: string;
   message: string;
+  targetType?: 'all' | 'group';
+  groupId?: string | null;
   createdAt: string;
   readFlag: boolean;
+  important?: boolean;
+  actionUrl?: string;
+  entityType?: string | null;
+  entityId?: string | null;
+}
+
+export interface NotificationInput {
+  title: string;
+  message: string;
+  type: string;
+  targetType?: 'all' | 'group';
+  groupId?: string;
+  actionUrl?: string;
+  entityType?: string;
+  entityId?: string;
+  important?: boolean;
+}
+
+export const SurveyStatus = {
+  DRAFT: 'draft',
+  ACTIVE: 'active',
+  CLOSED: 'closed',
+} as const;
+
+export type SurveyStatus = (typeof SurveyStatus)[keyof typeof SurveyStatus];
+
+export const SurveyTargetType = {
+  ALL: 'all',
+  GROUPS: 'groups',
+  COURSE: 'course',
+} as const;
+
+export type SurveyTargetType =
+  (typeof SurveyTargetType)[keyof typeof SurveyTargetType];
+
+export const SurveyQuestionType = {
+  SINGLE: 'single',
+  MULTIPLE: 'multiple',
+  RATING: 'rating',
+  TEXT: 'text',
+} as const;
+
+export type SurveyQuestionType =
+  (typeof SurveyQuestionType)[keyof typeof SurveyQuestionType];
+
+export interface SurveyQuestion {
+  id: string;
+  type: SurveyQuestionType;
+  text: string;
+  options: string[];
+  required: boolean;
+  order: number;
+}
+
+export interface Survey {
+  id: string;
+  title: string;
+  description?: string;
+  status: SurveyStatus;
+  anonymous: boolean;
+  targetType: SurveyTargetType;
+  targetIds: string[];
+  createdBy: string;
+  startDate?: string;
+  endDate?: string;
+  publishedAt?: string;
+  closedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  questions: SurveyQuestion[];
+}
+
+export type SurveyAnswerValue = string | string[] | number;
+
+export interface SurveyAnswer {
+  questionId: string;
+  value: SurveyAnswerValue;
+}
+
+export interface SurveyMyResponse {
+  completed: boolean;
+  anonymous: boolean;
+  response: {
+    id: string;
+    surveyId: string;
+    answers: SurveyAnswer[];
+    submittedAt: string;
+  } | null;
+}
+
+export interface CreateSurveyQuestionInput {
+  type: SurveyQuestionType;
+  text: string;
+  options?: string[];
+  required?: boolean;
+  order?: number;
+}
+
+export interface CreateSurveyInput {
+  title: string;
+  description?: string;
+  anonymous?: boolean;
+  targetType?: SurveyTargetType;
+  targetIds?: string[];
+  startDate?: string;
+  endDate?: string;
+  questions: CreateSurveyQuestionInput[];
+}
+
+export interface SurveySubmitInput {
+  answers: SurveyAnswer[];
+}
+
+export interface ChoiceQuestionResult {
+  questionId: string;
+  type: typeof SurveyQuestionType.SINGLE | typeof SurveyQuestionType.MULTIPLE;
+  text: string;
+  required: boolean;
+  order: number;
+  totalAnswers: number;
+  options: {
+    value: string;
+    count: number;
+    percentage: number;
+  }[];
+}
+
+export interface RatingQuestionResult {
+  questionId: string;
+  type: typeof SurveyQuestionType.RATING;
+  text: string;
+  required: boolean;
+  order: number;
+  totalAnswers: number;
+  average: number | null;
+  min: number | null;
+  max: number | null;
+  distribution: {
+    rating: number;
+    count: number;
+    percentage: number;
+  }[];
+}
+
+export interface TextQuestionResult {
+  questionId: string;
+  type: typeof SurveyQuestionType.TEXT;
+  text: string;
+  required: boolean;
+  order: number;
+  totalAnswers: number;
+  answers: string[];
+}
+
+export type SurveyQuestionResult =
+  | ChoiceQuestionResult
+  | RatingQuestionResult
+  | TextQuestionResult;
+
+export interface SurveyResults {
+  survey: Survey;
+  anonymous: boolean;
+  totalResponses: number;
+  totalCompletions: number;
+  questions: SurveyQuestionResult[];
 }
 
 export type AuditLogResult = 'success' | 'failure';
@@ -195,16 +368,6 @@ export interface AuditLogEntry {
   requestId?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface Material {
-  id: string;
-  courseAssignmentId: string;
-  title: string;
-  description?: string;
-  fileLink: string;
-  originalName: string;
-  publishDate: string;
 }
 
 export interface Submission {

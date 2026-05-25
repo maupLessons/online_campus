@@ -1,0 +1,285 @@
+import { Types } from 'mongoose';
+import { Role } from '../common/types/roles.enum';
+import { UsersService } from '../users/users.service';
+import { NotificationsService } from './notifications.service';
+
+type QueryMock<T> = {
+  exec: jest.Mock<Promise<T>, []>;
+};
+
+type LeanQueryMock<T> = {
+  lean: jest.Mock<QueryMock<T>, []>;
+};
+
+type SortLeanQueryMock<T> = {
+  sort: jest.Mock<LeanQueryMock<T>, [Record<string, 1 | -1>]>;
+};
+
+const execQuery = <T>(value: T): QueryMock<T> => {
+  const exec = jest.fn<Promise<T>, []>();
+  exec.mockResolvedValue(value);
+  return { exec };
+};
+
+const leanQuery = <T>(value: T): LeanQueryMock<T> => {
+  const lean = jest.fn<QueryMock<T>, []>();
+  lean.mockReturnValue(execQuery(value));
+  return { lean };
+};
+
+const sortLeanQuery = <T>(value: T): SortLeanQueryMock<T> => {
+  const sort = jest.fn<LeanQueryMock<T>, [Record<string, 1 | -1>]>();
+  sort.mockReturnValue(leanQuery(value));
+  return { sort };
+};
+
+describe('NotificationsService', () => {
+  const userId = '6622b2a00f3a22d5b625d172';
+  const groupId = '6622b2a00f3a22d5b625d174';
+  const notificationId = '6622b2a00f3a22d5b625d180';
+
+  let notificationModel: {
+    create: jest.Mock;
+    insertMany: jest.Mock;
+    find: jest.Mock<SortLeanQueryMock<unknown[]>, [Record<string, unknown>]>;
+    countDocuments: jest.Mock<QueryMock<number>, [Record<string, unknown>]>;
+    findOneAndUpdate: jest.Mock;
+    updateMany: jest.Mock;
+    deleteOne: jest.Mock;
+  };
+  let usersService: jest.Mocked<Pick<UsersService, 'findOne'>>;
+  let service: NotificationsService;
+
+  beforeEach(() => {
+    notificationModel = {
+      create: jest.fn(),
+      insertMany: jest.fn(),
+      find: jest.fn<SortLeanQueryMock<unknown[]>, [Record<string, unknown>]>(),
+      countDocuments: jest.fn<QueryMock<number>, [Record<string, unknown>]>(),
+      findOneAndUpdate: jest.fn(),
+      updateMany: jest.fn(),
+      deleteOne: jest.fn(),
+    };
+    usersService = {
+      findOne: jest.fn().mockResolvedValue({
+        id: userId,
+        login: 'student',
+        email: 'student@example.com',
+        role: Role.STUDENT,
+        firstName: 'Test',
+        lastName: 'Student',
+        status: 'active',
+        studentProfile: {
+          group: groupId,
+          recordBookNumber: 'RB-1',
+          year: 1,
+        },
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    };
+
+    service = new NotificationsService(
+      notificationModel as never,
+      usersService as unknown as UsersService,
+    );
+  });
+
+  it('loads legacy broadcast notifications without target metadata', async () => {
+    notificationModel.find.mockReturnValueOnce(
+      sortLeanQuery([
+        {
+          _id: new Types.ObjectId(notificationId),
+          title: 'Нове опитування',
+          message: 'Заповніть коротку форму',
+          type: 'new_survey',
+          readBy: [userId],
+          actionUrl: 'https://example.com/phishing',
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ]),
+    );
+
+    const result = await service.findByUser(userId);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: notificationId,
+        title: 'Нове опитування',
+        type: 'new_survey',
+        targetType: 'all',
+        readFlag: true,
+      }),
+    ]);
+    expect(result[0]).not.toHaveProperty('actionUrl');
+    const [findFilter] = notificationModel.find.mock.calls[0];
+    const visibleTargets = findFilter.$or;
+    expect(Array.isArray(visibleTargets)).toBe(true);
+    expect(visibleTargets).toContainEqual({
+      userId: null,
+      targetType: { $exists: false },
+    });
+    expect(visibleTargets).toContainEqual({
+      userId: { $exists: false },
+      targetType: { $exists: false },
+    });
+  });
+
+  it('counts unread notifications across ObjectId and legacy string read markers', async () => {
+    notificationModel.countDocuments.mockReturnValueOnce(execQuery(2));
+
+    const count = await service.getUnreadCount(userId);
+
+    expect(count).toBe(2);
+    const [countFilter] = notificationModel.countDocuments.mock.calls[0];
+    const readByFilter = countFilter.readBy as { $nin?: unknown[] };
+    expect(
+      readByFilter.$nin?.some((value) => value instanceof Types.ObjectId),
+    ).toBe(true);
+    expect(readByFilter.$nin).toContain(userId);
+  });
+
+  it('counts only personal notifications for admins', async () => {
+    usersService.findOne.mockResolvedValueOnce({
+      id: userId,
+      login: 'admin',
+      email: 'admin@example.com',
+      role: Role.ADMIN,
+      firstName: 'System',
+      lastName: 'Admin',
+      status: 'active',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    notificationModel.countDocuments.mockReturnValueOnce(execQuery(0));
+
+    const count = await service.getUnreadCount(userId);
+
+    expect(count).toBe(0);
+    const [countFilter] = notificationModel.countDocuments.mock.calls[0];
+    const visibleTargets = countFilter.$or as Array<{ userId: unknown }>;
+    expect(visibleTargets).toHaveLength(2);
+    expect(visibleTargets[0]?.userId).toBeInstanceOf(Types.ObjectId);
+    expect(visibleTargets[1]).toEqual({ userId });
+  });
+
+  it('loads every notification for admin management', async () => {
+    const broadcastId = '6622b2a00f3a22d5b625d181';
+    notificationModel.find.mockReturnValueOnce(
+      sortLeanQuery([
+        {
+          _id: new Types.ObjectId(notificationId),
+          userId: new Types.ObjectId(userId),
+          title: 'Особисте',
+          message: 'Персональне повідомлення',
+          type: 'system',
+          targetType: 'all',
+          readBy: [userId],
+          createdAt: new Date('2026-01-02T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        },
+        {
+          _id: new Types.ObjectId(broadcastId),
+          userId: null,
+          title: 'Масове',
+          message: 'Для всіх користувачів',
+          type: 'announcement',
+          targetType: 'all',
+          readBy: [],
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ]),
+    );
+
+    const result = await service.findAllForAdmin(userId);
+
+    expect(notificationModel.find).toHaveBeenCalledWith();
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: notificationId,
+        title: 'Особисте',
+        userId,
+        readFlag: true,
+      }),
+      expect.objectContaining({
+        id: broadcastId,
+        title: 'Масове',
+        userId: null,
+        readFlag: false,
+      }),
+    ]);
+  });
+
+  it('deletes notifications globally for admins', async () => {
+    notificationModel.deleteOne.mockReturnValueOnce(
+      execQuery({ acknowledged: true, deletedCount: 1 }),
+    );
+
+    await expect(service.deleteAsAdmin(notificationId)).resolves.toEqual({
+      success: true,
+    });
+    const [deleteFilter] = notificationModel.deleteOne.mock.calls[0] as [
+      { _id: unknown },
+    ];
+    expect(deleteFilter._id).toBeInstanceOf(Types.ObjectId);
+  });
+
+  it('updates notification content with sanitized internal action links', async () => {
+    notificationModel.findOneAndUpdate.mockReturnValueOnce(
+      leanQuery({
+        _id: new Types.ObjectId(notificationId),
+        title: 'Оновлене оголошення',
+        message: 'Перевірте новий текст',
+        type: 'announcement',
+        targetType: 'all',
+        groupId: null,
+        readBy: [],
+        important: true,
+        actionUrl: '/notifications',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+      }),
+    );
+
+    const result = await service.update(
+      notificationId,
+      {
+        title: '  Оновлене оголошення  ',
+        message: 'Перевірте новий текст',
+        targetType: 'all',
+        actionUrl: '/notifications',
+        important: true,
+      },
+      userId,
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: notificationId,
+        title: 'Оновлене оголошення',
+        actionUrl: '/notifications',
+        important: true,
+      }),
+    );
+    const [filter, updateOperation, options] = notificationModel
+      .findOneAndUpdate.mock.calls[0] as unknown as [
+      Record<string, unknown>,
+      { $set?: Record<string, unknown> },
+      Record<string, unknown>,
+    ];
+
+    expect(filter._id).toBeInstanceOf(Types.ObjectId);
+    expect(updateOperation.$set).toMatchObject({
+      title: 'Оновлене оголошення',
+      targetType: 'all',
+      groupId: null,
+      important: true,
+    });
+    expect(options).toMatchObject({
+      returnDocument: 'after',
+      runValidators: true,
+    });
+  });
+});

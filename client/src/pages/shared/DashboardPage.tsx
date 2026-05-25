@@ -29,6 +29,10 @@ export type NotificationItem = {
   createdAt?: string;
   type?: string;
   read?: boolean;
+  readFlag?: boolean;
+  actionUrl?: string;
+  entityType?: string | null;
+  entityId?: string | null;
 };
 
 function normalizeArray<T>(value: unknown): T[] {

@@ -1,11 +1,12 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditInterceptor } from './audit-log/audit.interceptor';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
+import { UserAwareThrottlerGuard } from './common/guards/user-aware-throttler.guard';
 import { ExistsInDatabaseConstraint } from './common/validators/exists-in-database.validator';
 import { SeedModule } from './seed/seed.module';
 import { AuthModule } from './auth/auth.module';
@@ -28,10 +29,7 @@ function readPositiveNumber(
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([
-      { name: 'default', ttl: 60000, limit: 100 },
-      { name: 'auth', ttl: 900000, limit: 10 },
-    ]),
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 100 }]),
     ConfigModule.forRoot({ isGlobal: true }),
 
     MongooseModule.forRootAsync({
@@ -79,7 +77,7 @@ function readPositiveNumber(
     SurveysModule,
   ],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: UserAwareThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     ExistsInDatabaseConstraint,
   ],

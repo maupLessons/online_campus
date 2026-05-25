@@ -55,7 +55,9 @@ export class GroupsService {
   async update(id: string, updateGroupDto: UpdateGroupDto): Promise<string> {
     const objectId = toReferenceObjectId(id, 'group');
     const group = await this.groupModel
-      .findByIdAndUpdate(objectId, updateGroupDto, { new: true })
+      .findByIdAndUpdate(objectId, updateGroupDto, {
+        returnDocument: 'after',
+      })
       .exec();
     if (!group) {
       throwReferenceNotFound('Group', id);

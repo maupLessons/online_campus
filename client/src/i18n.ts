@@ -342,6 +342,8 @@ const resources = {
 
       'surveys.player.progress': 'Прогрес',
       'surveys.player.answered': 'відповідей',
+      'surveys.player.requiredAnswered': 'обовʼязкових відповідей',
+      'surveys.player.noRequiredQuestions': 'Обовʼязкових питань немає',
       'surveys.player.textPlaceholder': 'Напишіть відповідь...',
       'surveys.player.requiredError':
         'Заповніть усі обовʼязкові питання перед відправкою.',
@@ -762,6 +764,8 @@ const resources = {
 
       'surveys.player.progress': 'Progress',
       'surveys.player.answered': 'answered',
+      'surveys.player.requiredAnswered': 'required answered',
+      'surveys.player.noRequiredQuestions': 'No required questions',
       'surveys.player.textPlaceholder': 'Write your answer...',
       'surveys.player.requiredError':
         'Answer all required questions before submitting.',

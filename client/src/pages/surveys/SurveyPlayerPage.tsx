@@ -170,16 +170,32 @@ export default function SurveyPlayerPage() {
   }, [responseQuery.data?.response?.answers]);
 
   const completed = Boolean(responseQuery.data?.completed);
-  const answeredCount = completed
+  const requiredQuestions = useMemo(
+    () => sortedQuestions.filter((question) => question.required),
+    [sortedQuestions],
+  );
+  const requiredAnsweredCount = requiredQuestions.filter((question) =>
+    isAnswerProvided(answers[question.id]),
+  ).length;
+  const progressAnsweredCount = completed
     ? sortedQuestions.length
-    : sortedQuestions.filter(
-        (question) =>
-          !question.required || isAnswerProvided(answers[question.id]),
-      ).length;
-  const progress =
-    sortedQuestions.length === 0
+    : requiredAnsweredCount;
+  const progressTotalCount = completed
+    ? sortedQuestions.length
+    : requiredQuestions.length;
+  const progress = completed
+    ? 100
+    : progressTotalCount === 0
       ? 0
-      : Math.round((answeredCount / sortedQuestions.length) * 100);
+      : Math.round((progressAnsweredCount / progressTotalCount) * 100);
+  const progressCaption =
+    !completed && progressTotalCount === 0
+      ? t('surveys.player.noRequiredQuestions')
+      : `${progressAnsweredCount} / ${progressTotalCount} ${
+          completed
+            ? t('surveys.player.answered')
+            : t('surveys.player.requiredAnswered')
+        }`;
 
   useEffect(() => {
     if (!successMessage) return undefined;
@@ -327,8 +343,7 @@ export default function SurveyPlayerPage() {
               />
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              {answeredCount} / {sortedQuestions.length}{' '}
-              {t('surveys.player.answered')}
+              {progressCaption}
             </p>
           </div>
         </div>

@@ -423,15 +423,16 @@ src/
 ├── index.css                ← Tailwind base styles
 ├── types/index.ts           ← всі TS-інтерфейси
 ├── services/
-│   └── api.ts               ← Axios instance, JWT interceptors, auto-refresh
+│   ├── api.ts               ← Axios instance, JWT interceptors, auto-refresh
+│   └── surveysApi.ts        ← typed client для SurveysModule
 ├── store/
 │   ├── authStore.ts         ← Zustand: user, token, login/logout
 │   └── notificationsStore.ts
 ├── components/
 │   ├── Layout.tsx           ← sidebar + header + role-based nav
 │   ├── ProtectedRoute.tsx   ← route guard
-│   ├── RoleBadge.tsx
-│   └── NotificationBell.tsx
+│   ├── LanguageSwitcher.tsx
+│   └── notifications/
 └── pages/                   ← role-based pages architecture
     │
     ├── auth/                ← authentication pages
@@ -445,30 +446,18 @@ src/
     │   └── NewsPage.tsx
     │
     ├── student/             ← student-specific pages
-    │   ├── ProfilePage.tsx
-    │   ├── ExamsPage.tsx
-    │   ├── GradesPage.tsx
-    │   ├── DisciplineChoicePage.tsx
-    │   └── SurveysPage.tsx
+    │   ├── AssignmentsPage.tsx
+    │   └── GradesPage.tsx
     │
-    ├── teacher/             ← teacher workflows
-    │   ├── TeacherCoursesPage.tsx
-    │   ├── GradeSubmissionsPage.tsx
-    │   └── TeacherSurveysPage.tsx
-    │
-    ├── dean/                ← dean and department management pages
-    │   ├── ReportsPage.tsx
-    │   └── SurveyManagementPage.tsx
+    ├── surveys/             ← SurveysModule frontend
+    │   ├── SurveysPage.tsx
+    │   ├── SurveyPlayerPage.tsx
+    │   ├── SurveyAdminPage.tsx
+    │   └── SurveyResultsPage.tsx
     │
     ├── admin/               ← system administration pages
     │   ├── UsersPage.tsx
-    │   ├── RolesPage.tsx
-    │   ├── AuditLogsPage.tsx
-    │   └── NewsManagementPage.tsx
-    │
-    ├── dispatcher/          ← schedule management pages
-    │   ├── ScheduleManagementPage.tsx
-    │   └── ClassroomsPage.tsx
+    │   └── AuditLogPage.tsx
     │
     └── course/              ← course-related shared modules
         ├── CoursesPage.tsx
@@ -510,18 +499,18 @@ src/
 - Типи питань: single-choice (radio), multiple-choice (checkbox), text (textarea), rating (зірки / число)
 - Прогрес-бар
 - Підтвердження перед відправкою
-- Після здачі — сторінка подяки
+- Після здачі — стан подяки та перегляд збережених відповідей для неанонімних опитувань
 
-#### SurveyAdminPage _(admin, dean)_
+#### SurveyAdminPage _(admin, dean, rector)_
 
 - Таблиця всіх опитувань з фільтром по статусу
 - Форма створення: назва, опис, цільова аудиторія, анонімність, терміни
-- Конструктор питань: drag & drop порядок, додати/видалити питання, вибір типу
+- Конструктор питань: керування порядком, додати/видалити питання, вибір типу
 - Кнопки: Зберегти чернетку / Опублікувати / Закрити
 
 #### SurveyResultsPage _(admin, dean+)_
 
-- Загальна статистика: кількість отримала / кількість пройшла / відсоток охоплення
+- Загальна статистика: кількість проходжень, збережених відповідей і питань
 - По кожному питанню:
   - single/multiple_choice: горизонтальна гістограма з кількістю та відсотком
   - rating: середнє значення + розподіл
@@ -998,15 +987,16 @@ online_campus/
         ├── App.tsx
         ├── types/index.ts
         ├── services/
-        │   └── api.ts
+        │   ├── api.ts
+        │   └── surveysApi.ts
         ├── store/
         │   ├── authStore.ts
         │   └── notificationsStore.ts
         ├── components/
         │   ├── Layout.tsx
         │   ├── ProtectedRoute.tsx
-        │   ├── RoleBadge.tsx
-        │   └── NotificationBell.tsx
+        │   ├── LanguageSwitcher.tsx
+        │   └── notifications/
         └── pages/
             │
             ├── auth/
@@ -1020,30 +1010,18 @@ online_campus/
             │   └── NewsPage.tsx
             │
             ├── student/
-            │   ├── ProfilePage.tsx
-            │   ├── ExamsPage.tsx
-            │   ├── GradesPage.tsx
-            │   ├── DisciplineChoicePage.tsx
-            │   └── SurveysPage.tsx
+            │   ├── AssignmentsPage.tsx
+            │   └── GradesPage.tsx
             │
-            ├── teacher/
-            │   ├── TeacherCoursesPage.tsx
-            │   ├── GradeSubmissionsPage.tsx
-            │   └── TeacherSurveysPage.tsx
-            │
-            ├── dean/
-            │   ├── ReportsPage.tsx
-            │   └── SurveyManagementPage.tsx
+            ├── surveys/
+            │   ├── SurveysPage.tsx
+            │   ├── SurveyPlayerPage.tsx
+            │   ├── SurveyAdminPage.tsx
+            │   └── SurveyResultsPage.tsx
             │
             ├── admin/
             │   ├── UsersPage.tsx
-            │   ├── RolesPage.tsx
-            │   ├── AuditLogsPage.tsx
-            │   └── NewsManagementPage.tsx
-            │
-            ├── dispatcher/
-            │   ├── ScheduleManagementPage.tsx
-            │   └── ClassroomsPage.tsx
+            │   └── AuditLogPage.tsx
             │
             └── course/
                 ├── CoursesPage.tsx

@@ -357,7 +357,9 @@ export class SurveysService {
     }
 
     survey.status = SurveyStatus.ACTIVE;
-    survey.startDate = survey.startDate ?? now;
+    if (!survey.startDate || survey.startDate > now) {
+      survey.startDate = now;
+    }
     survey.publishedAt = now;
     survey.closedAt = undefined;
 
@@ -1118,16 +1120,16 @@ export class SurveysService {
   private async notifySurveyPublished(survey: SurveyDocument): Promise<void> {
     try {
       const recipients = await this.resolveNotificationRecipients(survey);
+      const surveyId = this.idToString(survey._id);
       const payload = {
         title: 'Нове опитування',
         message: survey.title,
         type: NotificationType.NEW_SURVEY,
+        actionUrl: `/surveys/${surveyId}`,
+        entityType: 'survey',
+        entityId: surveyId,
+        important: true,
       };
-
-      if (recipients === null) {
-        await this.notificationsService.create(payload);
-        return;
-      }
 
       if (recipients.length === 0) {
         this.logger.warn(
@@ -1136,13 +1138,11 @@ export class SurveysService {
         return;
       }
 
-      await Promise.all(
-        recipients.map((userId) =>
-          this.notificationsService.create({
-            ...payload,
-            userId,
-          }),
-        ),
+      await this.notificationsService.createMany(
+        recipients.map((userId) => ({
+          ...payload,
+          userId,
+        })),
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown error';
@@ -1152,9 +1152,12 @@ export class SurveysService {
 
   private async resolveNotificationRecipients(
     survey: SurveyDocument,
-  ): Promise<string[] | null> {
+  ): Promise<string[]> {
     if (survey.targetType === SurveyTargetType.ALL) {
-      return null;
+      return this.usersService.findActiveUserIdsByRoles([
+        Role.STUDENT,
+        Role.TEACHER,
+      ]);
     }
 
     if (survey.targetType === SurveyTargetType.GROUPS) {

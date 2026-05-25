@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import type { NotificationItem } from '../../pages/shared/DashboardPage';
@@ -11,7 +12,11 @@ export default function SurveyHighlightCard({ items }: Props) {
   const { t } = useTranslation();
 
   const surveyItems = useMemo(() => {
-    return items.filter((item) => item.type === 'survey').slice(0, 3);
+    return items
+      .filter(
+        (item) => item.type === 'new_survey' || item.entityType === 'survey',
+      )
+      .slice(0, 3);
   }, [items]);
 
   return (
@@ -31,9 +36,16 @@ export default function SurveyHighlightCard({ items }: Props) {
       ) : (
         <div className="space-y-3">
           {surveyItems.map((item, index) => (
-            <div
+            <Link
               key={`${item.id ?? item.title}-${index}`}
-              className="rounded-2xl bg-blue-500/40 px-5 py-4">
+              to={
+                item.actionUrl?.startsWith('/') &&
+                !item.actionUrl.startsWith('//')
+                  ? item.actionUrl
+                  : '/surveys'
+              }
+              className="block rounded-2xl bg-blue-500/40 px-5 py-4 transition hover:bg-blue-500/60"
+            >
               <p className="text-sm font-semibold text-white">
                 {item.title || t('dashboard.surveysTitle')}
               </p>
@@ -41,7 +53,7 @@ export default function SurveyHighlightCard({ items }: Props) {
               <p className="mt-2 text-sm leading-6 text-blue-50">
                 {item.message || t('dashboard.noExtraInfo')}
               </p>
-            </div>
+            </Link>
           ))}
         </div>
       )}

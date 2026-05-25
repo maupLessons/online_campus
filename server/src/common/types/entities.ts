@@ -137,6 +137,7 @@ export interface Notification {
   type:
     | 'schedule_change'
     | 'new_assignment'
+    | 'new_survey'
     | 'grade'
     | 'announcement'
     | 'system';
@@ -144,4 +145,8 @@ export interface Notification {
   message: string;
   createdAt: string;
   readFlag: boolean;
+  important?: boolean;
+  actionUrl?: string;
+  entityType?: string | null;
+  entityId?: string | null;
 }

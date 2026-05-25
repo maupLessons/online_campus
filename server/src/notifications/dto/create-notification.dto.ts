@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsMongoId,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
 
@@ -48,4 +50,32 @@ export class CreateNotificationDto {
   @IsOptional()
   @IsMongoId()
   groupId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Internal application path opened from the notification.',
+    example: '/surveys/6622b2a00f3a22d5b625d170',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  @Matches(/^\/(?!\/)[A-Za-z0-9/_?=&:.-]*$/)
+  actionUrl?: string;
+
+  @ApiPropertyOptional({
+    enum: ['survey', 'course', 'assignment', 'grade', 'schedule', 'system'],
+  })
+  @IsOptional()
+  @IsIn(['survey', 'course', 'assignment', 'grade', 'schedule', 'system'])
+  entityType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  entityId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  important?: boolean;
 }

@@ -179,7 +179,7 @@ export interface Notification {
   type: string;
   title: string;
   message: string;
-  targetType?: 'all' | 'group';
+  targetType?: 'all' | 'students' | 'group';
   groupId?: string | null;
   createdAt: string;
   readFlag: boolean;
@@ -193,7 +193,7 @@ export interface NotificationInput {
   title: string;
   message: string;
   type: string;
-  targetType?: 'all' | 'group';
+  targetType?: 'all' | 'students' | 'group';
   groupId?: string;
   actionUrl?: string;
   entityType?: string;

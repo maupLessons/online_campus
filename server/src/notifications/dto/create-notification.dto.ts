@@ -41,9 +41,9 @@ export class CreateNotificationDto {
   @IsMongoId()
   userId?: string;
 
-  @ApiPropertyOptional({ enum: ['all', 'group'] })
+  @ApiPropertyOptional({ enum: ['all', 'students', 'group'] })
   @IsOptional()
-  @IsIn(['all', 'group'])
+  @IsIn(['all', 'students', 'group'])
   targetType?: string;
 
   @ApiPropertyOptional()

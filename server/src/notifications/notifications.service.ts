@@ -382,6 +382,13 @@ export class NotificationsService {
         { userId: { $exists: false }, targetType: null },
       );
 
+      if (visibility.role === Role.STUDENT) {
+        visibleTargets.push(
+          { userId: null, targetType: 'students' },
+          { userId: { $exists: false }, targetType: 'students' },
+        );
+      }
+
       if (visibility.groupId && Types.ObjectId.isValid(visibility.groupId)) {
         const groupObjId = new Types.ObjectId(visibility.groupId);
         visibleTargets.push({

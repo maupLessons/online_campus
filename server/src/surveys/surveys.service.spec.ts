@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -81,7 +81,10 @@ describe('SurveysService', () => {
     Pick<UsersService, 'findOne' | 'findActiveUserIdsByRoles'>
   >;
   let coursesService: jest.Mocked<
-    Pick<CoursesService, 'isUserAssignedToCourseTargets'>
+    Pick<
+      CoursesService,
+      'isUserAssignedToCourseTargets' | 'findStudentIdsByCourseTargets'
+    >
   >;
   let notificationsService: jest.Mocked<
     Pick<NotificationsService, 'create' | 'createMany'>
@@ -134,6 +137,9 @@ describe('SurveysService', () => {
     };
     coursesService = {
       isUserAssignedToCourseTargets: jest.fn().mockResolvedValue(false),
+      findStudentIdsByCourseTargets: jest
+        .fn()
+        .mockResolvedValue([userId.toHexString()]),
     };
     notificationsService = {
       create: jest.fn(),
@@ -271,7 +277,33 @@ describe('SurveysService', () => {
     );
   });
 
-  it('creates one broadcast new_survey notification for all users on publish', async () => {
+  it('does not expose all-students surveys to teachers', async () => {
+    usersService.findOne.mockResolvedValueOnce({
+      id: userId.toHexString(),
+      login: 'teacher',
+      email: 'teacher@example.com',
+      role: Role.TEACHER,
+      firstName: 'Test',
+      lastName: 'Teacher',
+      status: 'active',
+      teacherProfile: {
+        department: '6622b2a00f3a22d5b625d177',
+        position: 'Lecturer',
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await expect(
+      service.findOne(surveyDoc._id.toString(), {
+        sub: userId.toHexString(),
+        login: 'teacher',
+        role: Role.TEACHER,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('creates one student-only new_survey notification on all-students publish', async () => {
     const draftSurvey = createSurveyDoc({
       status: SurveyStatus.DRAFT,
       startDate: new Date('2099-01-01T00:00:00.000Z'),
@@ -296,7 +328,7 @@ describe('SurveysService', () => {
       expect.objectContaining({
         type: NotificationType.NEW_SURVEY,
         title: 'Нове опитування',
-        targetType: 'all',
+        targetType: 'students',
         actionUrl: `/surveys/${draftSurvey._id.toString()}`,
         entityType: 'survey',
         entityId: draftSurvey._id.toString(),
@@ -335,5 +367,37 @@ describe('SurveysService', () => {
         entityId: draftSurvey._id.toString(),
       })),
     );
+  });
+
+  it('creates personal notifications only for students assigned to a course target', async () => {
+    const targetIds = ['6622b2a00f3a22d5b625d178'];
+    const draftSurvey = createSurveyDoc({
+      status: SurveyStatus.DRAFT,
+      targetType: SurveyTargetType.COURSE,
+      targetIds,
+    });
+    draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
+
+    surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    await service.publish(draftSurvey._id.toString(), {
+      sub: draftSurvey.createdBy.toString(),
+      login: 'dean',
+      role: Role.DEAN,
+    });
+
+    expect(coursesService.findStudentIdsByCourseTargets).toHaveBeenCalledWith(
+      targetIds,
+    );
+    expect(notificationsService.create).not.toHaveBeenCalled();
+    expect(notificationsService.createMany).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: NotificationType.NEW_SURVEY,
+        title: 'Нове опитування',
+        userId: userId.toHexString(),
+        actionUrl: `/surveys/${draftSurvey._id.toString()}`,
+        entityType: 'survey',
+        entityId: draftSurvey._id.toString(),
+      }),
+    ]);
   });
 });

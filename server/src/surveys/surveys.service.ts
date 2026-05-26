@@ -1076,7 +1076,7 @@ export class SurveysService {
     profile: UserDto,
   ): Promise<boolean> {
     if (survey.targetType === SurveyTargetType.ALL) {
-      return user.role === Role.STUDENT || user.role === Role.TEACHER;
+      return user.role === Role.STUDENT;
     }
 
     if (survey.targetType === SurveyTargetType.GROUPS) {
@@ -1088,7 +1088,7 @@ export class SurveysService {
       );
     }
 
-    if (user.role !== Role.STUDENT && user.role !== Role.TEACHER) {
+    if (user.role !== Role.STUDENT) {
       return false;
     }
 
@@ -1133,7 +1133,7 @@ export class SurveysService {
       if (survey.targetType === SurveyTargetType.ALL) {
         await this.notificationsService.create({
           ...payload,
-          targetType: 'all',
+          targetType: 'students',
         });
         return;
       }
@@ -1173,10 +1173,7 @@ export class SurveysService {
     survey: SurveyDocument,
   ): Promise<string[]> {
     if (survey.targetType === SurveyTargetType.ALL) {
-      return this.usersService.findActiveUserIdsByRoles([
-        Role.STUDENT,
-        Role.TEACHER,
-      ]);
+      return this.usersService.findActiveUserIdsByRoles([Role.STUDENT]);
     }
 
     if (survey.targetType === SurveyTargetType.GROUPS) {
@@ -1195,7 +1192,7 @@ export class SurveysService {
       ];
     }
 
-    return this.coursesService.findUserIdsByCourseTargets(survey.targetIds);
+    return this.coursesService.findStudentIdsByCourseTargets(survey.targetIds);
   }
 
   private formatSurvey(

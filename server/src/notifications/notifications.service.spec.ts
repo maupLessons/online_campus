@@ -126,6 +126,55 @@ describe('NotificationsService', () => {
     });
   });
 
+  it('includes student-targeted notifications for students', async () => {
+    notificationModel.find.mockReturnValueOnce(sortLeanQuery([]));
+
+    await service.findByUser(userId);
+
+    const [findFilter] = notificationModel.find.mock.calls[0];
+    const visibleTargets = findFilter.$or as Array<Record<string, unknown>>;
+    expect(visibleTargets).toContainEqual({
+      userId: null,
+      targetType: 'students',
+    });
+    expect(visibleTargets).toContainEqual({
+      userId: { $exists: false },
+      targetType: 'students',
+    });
+  });
+
+  it('does not include student-targeted notifications for teachers', async () => {
+    usersService.findOne.mockResolvedValueOnce({
+      id: userId,
+      login: 'teacher',
+      email: 'teacher@example.com',
+      role: Role.TEACHER,
+      firstName: 'Test',
+      lastName: 'Teacher',
+      status: 'active',
+      teacherProfile: {
+        department: '6622b2a00f3a22d5b625d177',
+        position: 'Lecturer',
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    notificationModel.find.mockReturnValueOnce(sortLeanQuery([]));
+
+    await service.findByUser(userId);
+
+    const [findFilter] = notificationModel.find.mock.calls[0];
+    const visibleTargets = findFilter.$or as Array<Record<string, unknown>>;
+    expect(visibleTargets).not.toContainEqual({
+      userId: null,
+      targetType: 'students',
+    });
+    expect(visibleTargets).not.toContainEqual({
+      userId: { $exists: false },
+      targetType: 'students',
+    });
+  });
+
   it('counts unread notifications across ObjectId and legacy string read markers', async () => {
     notificationModel.countDocuments.mockReturnValueOnce(execQuery(2));
 

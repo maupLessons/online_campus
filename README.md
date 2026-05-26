@@ -306,14 +306,14 @@ interface SurveyResponse {
 | ------ | ----------------------------- | ------------------------------- | -------------------------------------------- |
 | POST   | `/surveys`                    | admin, dean, rector             | Створити опитування                          |
 | GET    | `/surveys`                    | admin, dean, rector             | Список всіх опитувань                        |
-| GET    | `/surveys/active`             | student, teacher                | Активні опитування для поточного користувача |
+| GET    | `/surveys/active`             | student                         | Активні опитування для поточного користувача |
 | GET    | `/surveys/:id`                | авторизовані                    | Деталі опитування з питаннями                |
 | PUT    | `/surveys/:id`                | admin, dean (автор)             | Редагування (тільки в статусі draft)         |
 | PATCH  | `/surveys/:id/publish`        | admin, dean (автор)             | Публікація (draft → active)                  |
 | PATCH  | `/surveys/:id/close`          | admin, dean (автор)             | Закрити опитування (active → closed)         |
 | DELETE | `/surveys/:id`                | admin                           | Видалити (тільки draft)                      |
-| POST   | `/surveys/:id/respond`        | student, teacher                | Надіслати відповіді                          |
-| GET    | `/surveys/:id/my-response`    | student, teacher                | Перевірити — чи вже пройшов                  |
+| POST   | `/surveys/:id/respond`        | student                         | Надіслати відповіді                          |
+| GET    | `/surveys/:id/my-response`    | student                         | Перевірити — чи вже пройшов                  |
 | GET    | `/surveys/:id/results`        | admin, dean+, rector, president | Агреговані результати                        |
 | GET    | `/surveys/:id/results/export` | admin, dean+                    | Вивантаження у CSV                           |
 
@@ -487,7 +487,7 @@ src/
 
 ### 5.3 Сторінки опитувань
 
-#### SurveysPage _(student, teacher)_
+#### SurveysPage _(student)_
 
 - Список активних опитувань для поточного користувача
 - Відображення: назва, дедлайн, кількість питань, статус "пройдено / ще ні"
@@ -663,14 +663,14 @@ AuditLogEntry
 | ------ | ----------------------------- | ------------------------------- |
 | POST   | `/surveys`                    | admin, dean, rector             |
 | GET    | `/surveys`                    | admin, dean, rector             |
-| GET    | `/surveys/active`             | student, teacher                |
+| GET    | `/surveys/active`             | student                         |
 | GET    | `/surveys/:id`                | Авторизований                   |
 | PUT    | `/surveys/:id`                | admin, dean (тільки draft)      |
 | PATCH  | `/surveys/:id/publish`        | admin, dean                     |
 | PATCH  | `/surveys/:id/close`          | admin, dean                     |
 | DELETE | `/surveys/:id`                | admin (тільки draft)            |
-| POST   | `/surveys/:id/respond`        | student, teacher                |
-| GET    | `/surveys/:id/my-response`    | student, teacher                |
+| POST   | `/surveys/:id/respond`        | student                         |
+| GET    | `/surveys/:id/my-response`    | student                         |
 | GET    | `/surveys/:id/results`        | admin, dean+, rector, president |
 | GET    | `/surveys/:id/results/export` | admin, dean+                    |
 
@@ -725,7 +725,7 @@ Student        (базовий доступ)
 | Здача завдань                  | ✅      | —       | —          | —         | —    | —      | —         | —     |
 | Виставлення оцінок             | —       | ✅      | —          | ✅        | —    | —      | —         | —     |
 | Перегляд особистих оцінок      | ✅      | —       | —          | —         | —    | —      | —         | —     |
-| Проходження опитувань          | ✅      | ✅      | —          | —         | —    | —      | —         | —     |
+| Проходження опитувань          | ✅      | —       | —          | —         | —    | —      | —         | —     |
 | Створення опитувань            | —       | —       | —          | —         | ✅   | ✅     | ✅        | ✅    |
 | Перегляд результатів опитувань | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
 | Звіти по кафедрі               | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |

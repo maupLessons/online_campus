@@ -29,7 +29,7 @@ export class Notification {
 
   @Prop({
     required: true,
-    enum: ['all', 'group'],
+    enum: ['all', 'students', 'group'],
     default: 'all',
   })
   targetType: string;

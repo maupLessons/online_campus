@@ -231,22 +231,7 @@ export class CoursesService {
   }
 
   async findUserIdsByCourseTargets(targetIds: string[]): Promise<string[]> {
-    const objectIds = targetIds
-      .filter((id) => Types.ObjectId.isValid(id))
-      .map((id) => new Types.ObjectId(id));
-
-    if (objectIds.length === 0) {
-      return [];
-    }
-
-    const assignmentFilter: Record<string, unknown> = {
-      $or: [{ _id: { $in: objectIds } }, { course: { $in: objectIds } }],
-    };
-    const courseAssignments = await this.courseAssignmentModel
-      .find(assignmentFilter as never)
-      .select('teacher group')
-      .lean()
-      .exec();
+    const courseAssignments = await this.findCourseTargetAssignments(targetIds);
 
     const teacherIds = courseAssignments.map((assignment) =>
       toId(assignment.teacher),
@@ -272,5 +257,52 @@ export class CoursesService {
     const studentIds = students.map((student) => toId(student._id));
 
     return [...new Set([...teacherIds, ...studentIds])];
+  }
+
+  async findStudentIdsByCourseTargets(targetIds: string[]): Promise<string[]> {
+    const courseAssignments = await this.findCourseTargetAssignments(targetIds);
+    const groupIds = [
+      ...new Set(courseAssignments.map((assignment) => toId(assignment.group))),
+    ]
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    if (groupIds.length === 0) {
+      return [];
+    }
+
+    const studentFilter: Record<string, unknown> = {
+      role: Role.STUDENT,
+      status: 'active',
+      'studentProfile.group': { $in: groupIds },
+    };
+    const students = await this.userModel
+      .find(studentFilter as never)
+      .select('_id')
+      .lean()
+      .exec();
+    const studentIds = students.map((student) => toId(student._id));
+
+    return [...new Set(studentIds)];
+  }
+
+  private async findCourseTargetAssignments(targetIds: string[]) {
+    const objectIds = targetIds
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+
+    if (objectIds.length === 0) {
+      return [];
+    }
+
+    const assignmentFilter: Record<string, unknown> = {
+      $or: [{ _id: { $in: objectIds } }, { course: { $in: objectIds } }],
+    };
+
+    return this.courseAssignmentModel
+      .find(assignmentFilter as never)
+      .select('teacher group')
+      .lean()
+      .exec();
   }
 }

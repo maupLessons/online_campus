@@ -34,7 +34,7 @@ const NAV_ITEMS: {
   {
     labelKey: 'nav.surveys',
     path: '/surveys',
-    roles: [Role.STUDENT, Role.TEACHER],
+    roles: [Role.STUDENT],
   },
   {
     labelKey: 'nav.surveyAdmin',

@@ -25,6 +25,8 @@ interface NotificationFormProps {
   onCreated: (notification: Notification) => void | Promise<void>;
 }
 
+type NotificationTargetType = 'all' | 'students' | 'group';
+
 function NotificationForm({
   groups,
   notification,
@@ -35,8 +37,11 @@ function NotificationForm({
   const [title, setTitle] = useState(() => notification?.title ?? '');
   const [message, setMessage] = useState(() => notification?.message ?? '');
   const [type, setType] = useState(() => notification?.type ?? 'announcement');
-  const [targetType, setTargetType] = useState<'all' | 'group'>(() =>
-    notification?.targetType === 'group' ? 'group' : 'all',
+  const [targetType, setTargetType] = useState<NotificationTargetType>(() =>
+    notification?.targetType === 'group' ||
+    notification?.targetType === 'students'
+      ? notification.targetType
+      : 'all',
   );
   const [groupId, setGroupId] = useState(() => notification?.groupId ?? '');
   const [loading, setLoading] = useState(false);
@@ -240,7 +245,7 @@ function NotificationForm({
           <select
             value={targetType}
             onChange={(event) =>
-              setTargetType(event.target.value as 'all' | 'group')
+              setTargetType(event.target.value as NotificationTargetType)
             }
             style={inputStyle}
             onFocus={(event) => {
@@ -253,6 +258,7 @@ function NotificationForm({
             }}
           >
             <option value="all">Усім користувачам</option>
+            <option value="students">Усім студентам</option>
             <option value="group">Конкретній групі</option>
           </select>
         </div>

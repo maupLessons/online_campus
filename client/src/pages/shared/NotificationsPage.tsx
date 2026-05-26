@@ -288,6 +288,10 @@ export default function NotificationsPage() {
       return t('notifications.audience.group');
     }
 
+    if (notification.targetType === 'students') {
+      return t('notifications.audience.students');
+    }
+
     return t('notifications.audience.broadcast');
   };
 

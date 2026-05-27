@@ -25,7 +25,20 @@ interface NotificationFormProps {
   onCreated: (notification: Notification) => void | Promise<void>;
 }
 
-type NotificationTargetType = 'all' | 'students' | 'group';
+type NotificationTargetType =
+  | 'all'
+  | 'students'
+  | 'teachers'
+  | 'students_teachers'
+  | 'group';
+
+const notificationTargetTypes: NotificationTargetType[] = [
+  'all',
+  'students',
+  'teachers',
+  'students_teachers',
+  'group',
+];
 
 function NotificationForm({
   groups,
@@ -38,8 +51,8 @@ function NotificationForm({
   const [message, setMessage] = useState(() => notification?.message ?? '');
   const [type, setType] = useState(() => notification?.type ?? 'announcement');
   const [targetType, setTargetType] = useState<NotificationTargetType>(() =>
-    notification?.targetType === 'group' ||
-    notification?.targetType === 'students'
+    notification?.targetType !== undefined &&
+    notificationTargetTypes.includes(notification.targetType)
       ? notification.targetType
       : 'all',
   );
@@ -259,6 +272,8 @@ function NotificationForm({
           >
             <option value="all">Усім користувачам</option>
             <option value="students">Усім студентам</option>
+            <option value="teachers">Усім викладачам</option>
+            <option value="students_teachers">Студентам і викладачам</option>
             <option value="group">Конкретній групі</option>
           </select>
         </div>

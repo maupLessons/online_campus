@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
+import { Plus } from 'lucide-react';
 import { Role, type Notification, type User } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import CreateNotificationModal from '../../components/notifications/CreateNotificationModal';
@@ -292,22 +293,34 @@ export default function NotificationsPage() {
       return t('notifications.audience.students');
     }
 
+    if (notification.targetType === 'teachers') {
+      return t('notifications.audience.teachers');
+    }
+
+    if (notification.targetType === 'students_teachers') {
+      return t('notifications.audience.studentsTeachers');
+    }
+
     return t('notifications.audience.broadcast');
   };
 
   return (
     <div className="p-5">
-      <div className="mb-5 flex items-center justify-between">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">
           {t('nav.notifications')}
         </h1>
 
         {isAdmin && (
           <button
+            type="button"
             onClick={handleOpenCreateModal}
-            className="rounded-lg border border-gray-400 px-4 py-2 transition-colors hover:bg-gray-200"
+            className="inline-flex min-h-9 w-auto max-w-full items-center justify-center gap-2 self-start rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium leading-tight text-slate-700 transition-colors hover:bg-gray-100 sm:self-auto"
           >
-            ➕ {t('notifications.create')}
+            <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 whitespace-normal text-left">
+              {t('notifications.create')}
+            </span>
           </button>
         )}
       </div>

@@ -179,7 +179,7 @@ export interface Notification {
   type: string;
   title: string;
   message: string;
-  targetType?: 'all' | 'students' | 'group';
+  targetType?: 'all' | 'students' | 'teachers' | 'students_teachers' | 'group';
   groupId?: string | null;
   createdAt: string;
   readFlag: boolean;
@@ -193,7 +193,7 @@ export interface NotificationInput {
   title: string;
   message: string;
   type: string;
-  targetType?: 'all' | 'students' | 'group';
+  targetType?: 'all' | 'students' | 'teachers' | 'students_teachers' | 'group';
   groupId?: string;
   actionUrl?: string;
   entityType?: string;
@@ -211,6 +211,8 @@ export type SurveyStatus = (typeof SurveyStatus)[keyof typeof SurveyStatus];
 
 export const SurveyTargetType = {
   ALL: 'all',
+  TEACHERS: 'teachers',
+  STUDENTS_TEACHERS: 'students_teachers',
   GROUPS: 'groups',
   COURSE: 'course',
 } as const;

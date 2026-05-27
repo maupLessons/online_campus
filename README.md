@@ -266,20 +266,22 @@ interface Survey {
   id: string;
   title: string;
   description?: string;
-  createdByUserId: string;
-  targetAudience:
-    | "all_students"
-    | "all_teachers"
+  createdBy: string;
+  targetType:
+    | "all"
+    | "teachers"
     | "students_teachers"
-    | "group"
+    | "groups"
     | "course";
-  targetGroupIds?: string[]; // якщо targetAudience = 'group'
-  targetCourseIds?: string[]; // якщо targetAudience = 'course'
+  targetIds: string[]; // group ids для groups, course/course assignment ids для course, порожній масив для all/teachers/students_teachers
   status: "draft" | "active" | "closed";
-  isAnonymous: boolean; // якщо true — відповіді без userId
+  anonymous: boolean; // якщо true — відповіді без userId
   startDate?: string;
   endDate?: string;
+  publishedAt?: string;
+  closedAt?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface SurveyQuestion {

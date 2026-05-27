@@ -991,19 +991,18 @@ export default function SurveyAdminPage() {
                     )}
                   </div>
 
-                  {form.questions.length > 1 &&
-                    index === form.questions.length - 1 && (
-                      <div className="mt-4 border-t border-slate-100 pt-3">
-                        <button
-                          type="button"
-                          onClick={addQuestion}
-                          className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
-                        >
-                          <Plus className="h-4 w-4" aria-hidden="true" />
-                          {t('surveys.admin.addQuestion')}
-                        </button>
-                      </div>
-                    )}
+                  {index === form.questions.length - 1 && (
+                    <div className="mt-4 border-t border-slate-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={addQuestion}
+                        className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+                      >
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                        {t('surveys.admin.addQuestion')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

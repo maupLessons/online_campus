@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { NotificationTargetTypes } from '../dto/create-notification.dto';
 
 export type NotificationDocument = Notification & Document;
 
@@ -29,7 +30,7 @@ export class Notification {
 
   @Prop({
     required: true,
-    enum: ['all', 'students', 'group'],
+    enum: NotificationTargetTypes,
     default: 'all',
   })
   targetType: string;

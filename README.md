@@ -52,7 +52,7 @@
 - Особисті кабінети для **8 ролей** з різними наборами функцій
 - Перегляд розкладу (день / тиждень / місяць) з перевіркою конфліктів
 - Управління навчальними матеріалами, завданнями та оцінками
-- **Система опитувань студентів** — створення, проходження, аналіз результатів
+- **Система опитувань** — створення, проходження студентами та викладачами, аналіз результатів
 - Система сповіщень: зміни розкладу, нові завдання, оголошення
 - Відновлення пароля через одноразовий reset token без розкриття існування акаунта
 - Повний RBAC з ієрархією ролей та аудит-логом дій
@@ -257,7 +257,7 @@
 
 **Файли:** `src/surveys/`
 
-**Відповідальність:** створення опитувань, проходження студентами, перегляд результатів. Опитування можуть бути спрямовані на конкретні групи, курс або всіх студентів.
+**Відповідальність:** створення опитувань, проходження студентами та викладачами, перегляд результатів. Опитування можуть бути спрямовані на всіх студентів, всіх викладачів, студентів і викладачів разом, конкретні групи або студентів курсів.
 
 **Сутності:**
 
@@ -266,15 +266,22 @@ interface Survey {
   id: string;
   title: string;
   description?: string;
-  createdByUserId: string;
-  targetAudience: "all_students" | "group" | "course_year";
-  targetGroupIds?: string[]; // якщо targetAudience = 'group'
-  targetCourseYear?: number; // якщо targetAudience = 'course_year'
+  createdBy: string;
+  targetType:
+    | "all"
+    | "teachers"
+    | "students_teachers"
+    | "groups"
+    | "course";
+  targetIds: string[]; // group ids для groups, course/course assignment ids для course, порожній масив для all/teachers/students_teachers
   status: "draft" | "active" | "closed";
-  isAnonymous: boolean; // якщо true — відповіді без userId
+  anonymous: boolean; // якщо true — відповіді без userId
   startDate?: string;
   endDate?: string;
+  publishedAt?: string;
+  closedAt?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 interface SurveyQuestion {
@@ -306,20 +313,21 @@ interface SurveyResponse {
 | ------ | ----------------------------- | ------------------------------- | -------------------------------------------- |
 | POST   | `/surveys`                    | admin, dean, rector             | Створити опитування                          |
 | GET    | `/surveys`                    | admin, dean, rector             | Список всіх опитувань                        |
-| GET    | `/surveys/active`             | student                         | Активні опитування для поточного користувача |
+| GET    | `/surveys/active`             | student, teacher                | Активні опитування для поточного користувача |
 | GET    | `/surveys/:id`                | авторизовані                    | Деталі опитування з питаннями                |
 | PUT    | `/surveys/:id`                | admin, dean (автор)             | Редагування (тільки в статусі draft)         |
 | PATCH  | `/surveys/:id/publish`        | admin, dean (автор)             | Публікація (draft → active)                  |
 | PATCH  | `/surveys/:id/close`          | admin, dean (автор)             | Закрити опитування (active → closed)         |
 | DELETE | `/surveys/:id`                | admin                           | Видалити (тільки draft)                      |
-| POST   | `/surveys/:id/respond`        | student                         | Надіслати відповіді                          |
-| GET    | `/surveys/:id/my-response`    | student                         | Перевірити — чи вже пройшов                  |
+| POST   | `/surveys/:id/respond`        | student, teacher                | Надіслати відповіді                          |
+| GET    | `/surveys/:id/my-response`    | student, teacher                | Перевірити — чи вже пройшов                  |
 | GET    | `/surveys/:id/results`        | admin, dean+, rector, president | Агреговані результати                        |
 | GET    | `/surveys/:id/results/export` | admin, dean+                    | Вивантаження у CSV                           |
 
 **Логіка:**
 
-- Студент може проходити опитування **лише один раз**
+- Студент або викладач може проходити доступне йому опитування **лише один раз**
+- Аудиторія `all` означає всіх студентів; для викладачів використовуються окремі аудиторії `teachers` і `students_teachers`
 - При `isAnonymous: true` — userId не зберігається у відповіді, але факт проходження фіксується окремо (щоб не дати пройти двічі)
 - Опитування з `endDate` у минулому автоматично переводяться в статус `closed` (cron або перевірка при запиті)
 - Результати показують: кількість відповідей на кожен варіант, середнє для rating, текстові відповіді списком
@@ -487,7 +495,7 @@ src/
 
 ### 5.3 Сторінки опитувань
 
-#### SurveysPage _(student)_
+#### SurveysPage _(student, teacher)_
 
 - Список активних опитувань для поточного користувача
 - Відображення: назва, дедлайн, кількість питань, статус "пройдено / ще ні"
@@ -575,8 +583,8 @@ Grade
 
 Survey
 └── id, title, description, createdByUserId
-    targetAudience: all_students|group|course_year
-    targetGroupIds[], targetCourseYear
+    targetAudience: all_students|all_teachers|students_teachers|group|course
+    targetGroupIds[], targetCourseIds[]
     status: draft|active|closed
     isAnonymous, startDate, endDate, createdAt
 
@@ -663,14 +671,14 @@ AuditLogEntry
 | ------ | ----------------------------- | ------------------------------- |
 | POST   | `/surveys`                    | admin, dean, rector             |
 | GET    | `/surveys`                    | admin, dean, rector             |
-| GET    | `/surveys/active`             | student                         |
+| GET    | `/surveys/active`             | student, teacher                |
 | GET    | `/surveys/:id`                | Авторизований                   |
 | PUT    | `/surveys/:id`                | admin, dean (тільки draft)      |
 | PATCH  | `/surveys/:id/publish`        | admin, dean                     |
 | PATCH  | `/surveys/:id/close`          | admin, dean                     |
 | DELETE | `/surveys/:id`                | admin (тільки draft)            |
-| POST   | `/surveys/:id/respond`        | student                         |
-| GET    | `/surveys/:id/my-response`    | student                         |
+| POST   | `/surveys/:id/respond`        | student, teacher                |
+| GET    | `/surveys/:id/my-response`    | student, teacher                |
 | GET    | `/surveys/:id/results`        | admin, dean+, rector, president |
 | GET    | `/surveys/:id/results/export` | admin, dean+                    |
 
@@ -725,7 +733,7 @@ Student        (базовий доступ)
 | Здача завдань                  | ✅      | —       | —          | —         | —    | —      | —         | —     |
 | Виставлення оцінок             | —       | ✅      | —          | ✅        | —    | —      | —         | —     |
 | Перегляд особистих оцінок      | ✅      | —       | —          | —         | —    | —      | —         | —     |
-| Проходження опитувань          | ✅      | —       | —          | —         | —    | —      | —         | —     |
+| Проходження опитувань          | ✅      | ✅      | —          | —         | —    | —      | —         | —     |
 | Створення опитувань            | —       | —       | —          | —         | ✅   | ✅     | ✅        | ✅    |
 | Перегляд результатів опитувань | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
 | Звіти по кафедрі               | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |

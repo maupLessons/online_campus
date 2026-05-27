@@ -19,6 +19,16 @@ export enum NotificationType {
   SYSTEM = 'system',
 }
 
+export const NotificationTargetTypes = [
+  'all',
+  'students',
+  'teachers',
+  'students_teachers',
+  'group',
+] as const;
+
+export type NotificationTargetType = (typeof NotificationTargetTypes)[number];
+
 export class CreateNotificationDto {
   @ApiProperty({ example: 'Важливе оголошення' })
   @IsString()
@@ -41,10 +51,10 @@ export class CreateNotificationDto {
   @IsMongoId()
   userId?: string;
 
-  @ApiPropertyOptional({ enum: ['all', 'students', 'group'] })
+  @ApiPropertyOptional({ enum: NotificationTargetTypes })
   @IsOptional()
-  @IsIn(['all', 'students', 'group'])
-  targetType?: string;
+  @IsIn(NotificationTargetTypes)
+  targetType?: NotificationTargetType;
 
   @ApiPropertyOptional()
   @IsOptional()

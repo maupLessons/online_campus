@@ -116,7 +116,7 @@ export default function App() {
           <Route
             path="surveys"
             element={
-              <ProtectedRoute allowedRoles={[Role.STUDENT]}>
+              <ProtectedRoute allowedRoles={[Role.STUDENT, Role.TEACHER]}>
                 <LazyPage>
                   <SurveysPage />
                 </LazyPage>
@@ -126,7 +126,7 @@ export default function App() {
           <Route
             path="surveys/:id"
             element={
-              <ProtectedRoute allowedRoles={[Role.STUDENT]}>
+              <ProtectedRoute allowedRoles={[Role.STUDENT, Role.TEACHER]}>
                 <LazyPage>
                   <SurveyPlayerPage />
                 </LazyPage>

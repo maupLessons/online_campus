@@ -75,6 +75,15 @@ const initialForm = (): SurveyFormState => ({
   questions: [createQuestion()],
 });
 
+const surveyTargetTypesWithIds = new Set<SurveyTargetType>([
+  SurveyTargetType.GROUPS,
+  SurveyTargetType.COURSE,
+]);
+
+function surveyTargetTypeRequiresIds(targetType: SurveyTargetType) {
+  return surveyTargetTypesWithIds.has(targetType);
+}
+
 function parseTargetIds(value: string) {
   return [
     ...new Set(
@@ -174,10 +183,9 @@ function buildSurveyPayload(form: SurveyFormState): CreateSurveyInput {
     description: form.description.trim() || undefined,
     anonymous: form.anonymous,
     targetType: form.targetType,
-    targetIds:
-      form.targetType === SurveyTargetType.ALL
-        ? []
-        : parseTargetIds(form.targetIdsText),
+    targetIds: surveyTargetTypeRequiresIds(form.targetType)
+      ? parseTargetIds(form.targetIdsText)
+      : [],
     startDate: toIsoDateTime(form.startDate),
     endDate: toIsoDateTime(form.endDate),
     questions,
@@ -190,7 +198,7 @@ function validateSurveyForm(form: SurveyFormState, t: (key: string) => string) {
   }
 
   if (
-    form.targetType !== SurveyTargetType.ALL &&
+    surveyTargetTypeRequiresIds(form.targetType) &&
     parseTargetIds(form.targetIdsText).length === 0
   ) {
     return t('surveys.admin.validation.targetRequired');
@@ -719,12 +727,19 @@ export default function SurveyAdminPage() {
                 <span>{t('surveys.admin.fields.targetType')}</span>
                 <select
                   value={form.targetType}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const nextTargetType = event.target
+                      .value as SurveyTargetType;
                     setForm((current) => ({
                       ...current,
-                      targetType: event.target.value as SurveyTargetType,
-                    }))
-                  }
+                      targetType: nextTargetType,
+                      targetIdsText: surveyTargetTypeRequiresIds(
+                        nextTargetType,
+                      )
+                        ? current.targetIdsText
+                        : '',
+                    }));
+                  }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 >
                   {Object.values(SurveyTargetType).map((targetType) => (
@@ -756,7 +771,7 @@ export default function SurveyAdminPage() {
               </label>
             </div>
 
-            {form.targetType !== SurveyTargetType.ALL && (
+            {surveyTargetTypeRequiresIds(form.targetType) && (
               <label className="space-y-1 text-sm text-slate-600">
                 <span>{t('surveys.admin.fields.targetIds')}</span>
                 <textarea
@@ -975,6 +990,19 @@ export default function SurveyAdminPage() {
                       </div>
                     )}
                   </div>
+
+                  {index === form.questions.length - 1 && (
+                    <div className="mt-4 border-t border-slate-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={addQuestion}
+                        className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
+                      >
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                        {t('surveys.admin.addQuestion')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}

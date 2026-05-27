@@ -7,7 +7,10 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UsersService } from '../users/users.service';
 import { Role } from '../common/types/roles.enum';
-import { CreateNotificationDto } from './dto/create-notification.dto';
+import {
+  CreateNotificationDto,
+  type NotificationTargetType,
+} from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import {
   Notification,
@@ -19,7 +22,7 @@ type NotificationPayload = {
   message: string;
   type: string;
   userId: Types.ObjectId | null;
-  targetType: string;
+  targetType: NotificationTargetType;
   groupId: Types.ObjectId | null;
   actionUrl?: string;
   entityType: string | null;
@@ -66,6 +69,11 @@ type NotificationVisibilityContext = {
   role?: Role;
   groupId: string | null;
 };
+
+const broadcastNotificationTargets = (targetType: NotificationTargetType) => [
+  { userId: null, targetType },
+  { userId: { $exists: false }, targetType },
+];
 
 @Injectable()
 export class NotificationsService {
@@ -310,7 +318,7 @@ export class NotificationsService {
 
     if (data.targetType !== undefined) {
       payload.targetType = data.targetType;
-      if (data.targetType === 'all') {
+      if (data.targetType !== 'group') {
         payload.groupId = null;
       }
     }
@@ -384,8 +392,15 @@ export class NotificationsService {
 
       if (visibility.role === Role.STUDENT) {
         visibleTargets.push(
-          { userId: null, targetType: 'students' },
-          { userId: { $exists: false }, targetType: 'students' },
+          ...broadcastNotificationTargets('students'),
+          ...broadcastNotificationTargets('students_teachers'),
+        );
+      }
+
+      if (visibility.role === Role.TEACHER) {
+        visibleTargets.push(
+          ...broadcastNotificationTargets('teachers'),
+          ...broadcastNotificationTargets('students_teachers'),
         );
       }
 

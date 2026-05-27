@@ -6,6 +6,8 @@ export enum SurveyStatus {
 
 export enum SurveyTargetType {
   ALL = 'all',
+  TEACHERS = 'teachers',
+  STUDENTS_TEACHERS = 'students_teachers',
   GROUPS = 'groups',
   COURSE = 'course',
 }

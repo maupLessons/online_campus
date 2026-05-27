@@ -141,9 +141,17 @@ describe('NotificationsService', () => {
       userId: { $exists: false },
       targetType: 'students',
     });
+    expect(visibleTargets).toContainEqual({
+      userId: null,
+      targetType: 'students_teachers',
+    });
+    expect(visibleTargets).not.toContainEqual({
+      userId: null,
+      targetType: 'teachers',
+    });
   });
 
-  it('does not include student-targeted notifications for teachers', async () => {
+  it('includes teacher-targeted notifications for teachers only', async () => {
     usersService.findOne.mockResolvedValueOnce({
       id: userId,
       login: 'teacher',
@@ -172,6 +180,18 @@ describe('NotificationsService', () => {
     expect(visibleTargets).not.toContainEqual({
       userId: { $exists: false },
       targetType: 'students',
+    });
+    expect(visibleTargets).toContainEqual({
+      userId: null,
+      targetType: 'teachers',
+    });
+    expect(visibleTargets).toContainEqual({
+      userId: { $exists: false },
+      targetType: 'teachers',
+    });
+    expect(visibleTargets).toContainEqual({
+      userId: null,
+      targetType: 'students_teachers',
     });
   });
 

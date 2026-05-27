@@ -47,7 +47,7 @@ export class SurveysController {
   }
 
   @Get('active')
-  @Roles(Role.STUDENT)
+  @Roles(Role.STUDENT, Role.TEACHER)
   @ApiOperation({ summary: 'List active surveys available to current user' })
   findActive(@Request() req: AuthenticatedRequest) {
     return this.surveysService.findActiveForUser(req.user);
@@ -92,7 +92,7 @@ export class SurveysController {
   }
 
   @Post(':id/respond')
-  @Roles(Role.STUDENT)
+  @Roles(Role.STUDENT, Role.TEACHER)
   @ApiOperation({ summary: 'Submit a survey response' })
   respond(
     @Param('id') id: string,
@@ -103,7 +103,7 @@ export class SurveysController {
   }
 
   @Get(':id/my-response')
-  @Roles(Role.STUDENT)
+  @Roles(Role.STUDENT, Role.TEACHER)
   @ApiOperation({ summary: 'Get current user response state' })
   getMyResponse(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.surveysService.getMyResponse(id, req.user);

@@ -303,6 +303,38 @@ describe('SurveysService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  it('exposes teacher-targeted surveys to teachers', async () => {
+    const teacherSurvey = createSurveyDoc({
+      targetType: SurveyTargetType.TEACHERS,
+    });
+    surveyModel.findById.mockReturnValueOnce(execQuery(teacherSurvey));
+    usersService.findOne.mockResolvedValueOnce({
+      id: userId.toHexString(),
+      login: 'teacher',
+      email: 'teacher@example.com',
+      role: Role.TEACHER,
+      firstName: 'Test',
+      lastName: 'Teacher',
+      status: 'active',
+      teacherProfile: {
+        department: '6622b2a00f3a22d5b625d177',
+        position: 'Lecturer',
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    await expect(
+      service.findOne(teacherSurvey._id.toString(), {
+        sub: userId.toHexString(),
+        login: 'teacher',
+        role: Role.TEACHER,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({ id: teacherSurvey._id.toString() }),
+    );
+  });
+
   it('creates one student-only new_survey notification on all-students publish', async () => {
     const draftSurvey = createSurveyDoc({
       status: SurveyStatus.DRAFT,
@@ -332,6 +364,54 @@ describe('SurveysService', () => {
         actionUrl: `/surveys/${draftSurvey._id.toString()}`,
         entityType: 'survey',
         entityId: draftSurvey._id.toString(),
+      }),
+    );
+    expect(notificationsService.createMany).not.toHaveBeenCalled();
+  });
+
+  it('creates one teacher-only new_survey notification on all-teachers publish', async () => {
+    const draftSurvey = createSurveyDoc({
+      status: SurveyStatus.DRAFT,
+      targetType: SurveyTargetType.TEACHERS,
+    });
+    draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
+
+    surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    await service.publish(draftSurvey._id.toString(), {
+      sub: draftSurvey.createdBy.toString(),
+      login: 'dean',
+      role: Role.DEAN,
+    });
+
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.NEW_SURVEY,
+        targetType: 'teachers',
+        actionUrl: `/surveys/${draftSurvey._id.toString()}`,
+      }),
+    );
+    expect(notificationsService.createMany).not.toHaveBeenCalled();
+  });
+
+  it('creates one student-and-teacher new_survey notification on mixed audience publish', async () => {
+    const draftSurvey = createSurveyDoc({
+      status: SurveyStatus.DRAFT,
+      targetType: SurveyTargetType.STUDENTS_TEACHERS,
+    });
+    draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
+
+    surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    await service.publish(draftSurvey._id.toString(), {
+      sub: draftSurvey.createdBy.toString(),
+      login: 'dean',
+      role: Role.DEAN,
+    });
+
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: NotificationType.NEW_SURVEY,
+        targetType: 'students_teachers',
+        actionUrl: `/surveys/${draftSurvey._id.toString()}`,
       }),
     );
     expect(notificationsService.createMany).not.toHaveBeenCalled();

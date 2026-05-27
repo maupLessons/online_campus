@@ -36,6 +36,12 @@ import {
   SurveyTargetType,
 } from './schemas';
 
+const surveyTargetTypesWithoutIds = new Set<SurveyTargetType>([
+  SurveyTargetType.ALL,
+  SurveyTargetType.TEACHERS,
+  SurveyTargetType.STUDENTS_TEACHERS,
+]);
+
 export interface SurveyQuestionView {
   id: string;
   type: SurveyQuestionType;
@@ -1045,10 +1051,10 @@ export class SurveysService {
       ...new Set((targetIds ?? []).map((id) => id.trim())),
     ].filter(Boolean);
 
-    if (targetType === SurveyTargetType.ALL) {
+    if (surveyTargetTypesWithoutIds.has(targetType)) {
       if (normalized.length > 0) {
         throw new BadRequestException(
-          'Для targetType=all список targetIds повинен бути порожнім',
+          'Для обраної аудиторії список targetIds повинен бути порожнім',
         );
       }
       return [];
@@ -1077,6 +1083,14 @@ export class SurveysService {
   ): Promise<boolean> {
     if (survey.targetType === SurveyTargetType.ALL) {
       return user.role === Role.STUDENT;
+    }
+
+    if (survey.targetType === SurveyTargetType.TEACHERS) {
+      return user.role === Role.TEACHER;
+    }
+
+    if (survey.targetType === SurveyTargetType.STUDENTS_TEACHERS) {
+      return user.role === Role.STUDENT || user.role === Role.TEACHER;
     }
 
     if (survey.targetType === SurveyTargetType.GROUPS) {
@@ -1138,6 +1152,22 @@ export class SurveysService {
         return;
       }
 
+      if (survey.targetType === SurveyTargetType.TEACHERS) {
+        await this.notificationsService.create({
+          ...payload,
+          targetType: 'teachers',
+        });
+        return;
+      }
+
+      if (survey.targetType === SurveyTargetType.STUDENTS_TEACHERS) {
+        await this.notificationsService.create({
+          ...payload,
+          targetType: 'students_teachers',
+        });
+        return;
+      }
+
       if (survey.targetType === SurveyTargetType.GROUPS) {
         await this.notificationsService.createMany(
           survey.targetIds.map((groupId) => ({
@@ -1174,6 +1204,17 @@ export class SurveysService {
   ): Promise<string[]> {
     if (survey.targetType === SurveyTargetType.ALL) {
       return this.usersService.findActiveUserIdsByRoles([Role.STUDENT]);
+    }
+
+    if (survey.targetType === SurveyTargetType.TEACHERS) {
+      return this.usersService.findActiveUserIdsByRoles([Role.TEACHER]);
+    }
+
+    if (survey.targetType === SurveyTargetType.STUDENTS_TEACHERS) {
+      return this.usersService.findActiveUserIdsByRoles([
+        Role.STUDENT,
+        Role.TEACHER,
+      ]);
     }
 
     if (survey.targetType === SurveyTargetType.GROUPS) {

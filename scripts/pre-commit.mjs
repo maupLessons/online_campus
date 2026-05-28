@@ -47,7 +47,7 @@ function runNpm(args) {
     return;
   }
 
-  run(process.platform === 'win32' ? 'npm.cmd' : 'npm', args);
+  run('npm', args, { shell: true });
 }
 
 function isCodeFile(filePath) {

@@ -17,7 +17,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT }}
-          envs: MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_DATABASE,MONGO_HOST,MONGO_PORT,JWT_SECRET,PORT,CLIENT_URL
+          envs: MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_DATABASE,MONGO_HOST,MONGO_PORT,JWT_SECRET,PORT,CLIENT_URL,AUTH_ACCESS_COOKIE_NAME,AUTH_REFRESH_COOKIE_NAME,AUTH_ACCESS_COOKIE_PATH,AUTH_REFRESH_COOKIE_PATH,AUTH_CSRF_SECRET,AUTH_CSRF_COOKIE_NAME,AUTH_CSRF_COOKIE_PATH,AUTH_CSRF_HEADER_NAME,AUTH_COOKIE_SAMESITE,AUTH_COOKIE_SECURE
           script: |
             cd /opt/online_campus
             git pull origin master
@@ -33,6 +33,23 @@ jobs:
             CLIENT_URL=$CLIENT_URL
             EOF
 
+            append_env() {
+              if [ -n "$2" ]; then
+                printf '%s=%s\n' "$1" "$2" >> .env
+              fi
+            }
+
+            append_env AUTH_ACCESS_COOKIE_NAME "$AUTH_ACCESS_COOKIE_NAME"
+            append_env AUTH_REFRESH_COOKIE_NAME "$AUTH_REFRESH_COOKIE_NAME"
+            append_env AUTH_ACCESS_COOKIE_PATH "$AUTH_ACCESS_COOKIE_PATH"
+            append_env AUTH_REFRESH_COOKIE_PATH "$AUTH_REFRESH_COOKIE_PATH"
+            append_env AUTH_CSRF_SECRET "$AUTH_CSRF_SECRET"
+            append_env AUTH_CSRF_COOKIE_NAME "$AUTH_CSRF_COOKIE_NAME"
+            append_env AUTH_CSRF_COOKIE_PATH "$AUTH_CSRF_COOKIE_PATH"
+            append_env AUTH_CSRF_HEADER_NAME "$AUTH_CSRF_HEADER_NAME"
+            append_env AUTH_COOKIE_SAMESITE "$AUTH_COOKIE_SAMESITE"
+            append_env AUTH_COOKIE_SECURE "${AUTH_COOKIE_SECURE:-true}"
+
             docker compose up --build -d
             docker image prune -f
         env:
@@ -44,3 +61,13 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           PORT: ${{ secrets.PORT }}
           CLIENT_URL: ${{ secrets.CLIENT_URL }}
+          AUTH_ACCESS_COOKIE_NAME: ${{ secrets.AUTH_ACCESS_COOKIE_NAME }}
+          AUTH_REFRESH_COOKIE_NAME: ${{ secrets.AUTH_REFRESH_COOKIE_NAME }}
+          AUTH_ACCESS_COOKIE_PATH: ${{ secrets.AUTH_ACCESS_COOKIE_PATH }}
+          AUTH_REFRESH_COOKIE_PATH: ${{ secrets.AUTH_REFRESH_COOKIE_PATH }}
+          AUTH_CSRF_SECRET: ${{ secrets.AUTH_CSRF_SECRET }}
+          AUTH_CSRF_COOKIE_NAME: ${{ secrets.AUTH_CSRF_COOKIE_NAME }}
+          AUTH_CSRF_COOKIE_PATH: ${{ secrets.AUTH_CSRF_COOKIE_PATH }}
+          AUTH_CSRF_HEADER_NAME: ${{ secrets.AUTH_CSRF_HEADER_NAME }}
+          AUTH_COOKIE_SAMESITE: ${{ secrets.AUTH_COOKIE_SAMESITE }}
+          AUTH_COOKIE_SECURE: ${{ secrets.AUTH_COOKIE_SECURE }}

@@ -1083,6 +1083,7 @@ AUTH_ACCESS_COOKIE_NAME=campus_access_token
 AUTH_REFRESH_COOKIE_NAME=campus_refresh_token
 AUTH_ACCESS_COOKIE_PATH=/api
 AUTH_REFRESH_COOKIE_PATH=/api/auth
+AUTH_CSRF_SECRET=your-dedicated-csrf-secret-min-32-chars
 AUTH_CSRF_COOKIE_NAME=campus_csrf_token
 AUTH_CSRF_COOKIE_PATH=/
 AUTH_CSRF_HEADER_NAME=x-csrf-token
@@ -1206,6 +1207,8 @@ jobs:
 
 Запускається після push у `master`. Workflow підключається до VPS через SSH, виконує `git pull origin master`, записує `.env` із GitHub Secrets і запускає `docker compose up --build -d`.
 
+Deploy workflow передає обов'язкові `MONGO_*`, `JWT_SECRET`, `PORT`, `CLIENT_URL` та optional `AUTH_*` secrets. Порожні optional `AUTH_*` secrets не записуються в `.env`, тому застосунок використовує кодові defaults; `AUTH_COOKIE_SECURE` для deploy за замовчуванням записується як `true`.
+
 ```yaml
 name: Deploy
 
@@ -1249,9 +1252,13 @@ jobs:
 | `CLIENT_URL` | URL frontend для CORS і reset links |
 | `AUTH_ACCESS_COOKIE_NAME` | назва HttpOnly cookie для access token |
 | `AUTH_REFRESH_COOKIE_NAME` | назва HttpOnly cookie для refresh token |
+| `AUTH_ACCESS_COOKIE_PATH` | path access cookie (`/api` за замовчуванням) |
+| `AUTH_REFRESH_COOKIE_PATH` | path refresh cookie (`/api/auth` за замовчуванням) |
 | `AUTH_COOKIE_SECURE` | `true` для HTTPS-середовищ, `false` лише для локального HTTP |
 | `AUTH_COOKIE_SAMESITE` | політика cookies: `strict` за замовчуванням, `lax`/`none` лише за потреби |
+| `AUTH_CSRF_SECRET` | окремий секрет для підпису CSRF token; якщо не заданий, використовується `JWT_SECRET` |
 | `AUTH_CSRF_COOKIE_NAME` | назва readable cookie з signed CSRF token |
+| `AUTH_CSRF_COOKIE_PATH` | path readable CSRF cookie (`/` за замовчуванням) |
 | `AUTH_CSRF_HEADER_NAME` | header, який frontend надсилає для unsafe методів (`x-csrf-token`) |
 
 ### Правила роботи із залежностями

@@ -12,13 +12,13 @@ import {
   DEFAULT_CSRF_TOKEN_HEADER_NAME,
   DEFAULT_REFRESH_TOKEN_COOKIE_NAME,
   readCookie,
+  readConfiguredSecret,
   verifySignedCsrfToken,
 } from '../../auth/auth-cookie.util';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const CSRF_EXEMPT_PATHS = new Set([
   '/auth/login',
-  '/auth/logout',
   '/auth/refresh',
   '/auth/password-reset/request',
   '/auth/password-reset/confirm',
@@ -46,7 +46,11 @@ export class CsrfGuard implements CanActivate {
       configService.get<string>('AUTH_CSRF_HEADER_NAME') ??
       DEFAULT_CSRF_TOKEN_HEADER_NAME
     ).toLowerCase();
-    this.csrfSecret = configService.getOrThrow<string>('JWT_SECRET');
+    this.csrfSecret = readConfiguredSecret(
+      configService,
+      'AUTH_CSRF_SECRET',
+      'JWT_SECRET',
+    );
   }
 
   canActivate(context: ExecutionContext): boolean {

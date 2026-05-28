@@ -6,6 +6,11 @@ export const DEFAULT_REFRESH_TOKEN_COOKIE_NAME = 'campus_refresh_token';
 export const DEFAULT_CSRF_TOKEN_COOKIE_NAME = 'campus_csrf_token';
 export const DEFAULT_CSRF_TOKEN_HEADER_NAME = 'x-csrf-token';
 
+type ConfigReader = {
+  get<T = string>(propertyPath: string): T | undefined;
+  getOrThrow<T = string>(propertyPath: string): T;
+};
+
 export function readCookie(req: Request, name: string): string | null {
   const cookieHeader = req.headers.cookie;
   if (!cookieHeader) {
@@ -33,6 +38,15 @@ export function readCookie(req: Request, name: string): string | null {
   }
 
   return null;
+}
+
+export function readConfiguredSecret(
+  config: ConfigReader,
+  key: string,
+  fallbackKey: string,
+): string {
+  const value = config.get<string>(key)?.trim();
+  return value || config.getOrThrow<string>(fallbackKey);
 }
 
 export function createSignedCsrfToken(secret: string): string {

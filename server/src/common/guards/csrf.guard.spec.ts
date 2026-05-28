@@ -5,9 +5,10 @@ import { createSignedCsrfToken } from '../../auth/auth-cookie.util';
 import { CsrfGuard } from './csrf.guard';
 
 const JWT_SECRET = 'test-secret';
+const AUTH_CSRF_SECRET = 'csrf-secret';
 
-function createGuard() {
-  return new CsrfGuard(new ConfigService({ JWT_SECRET }));
+function createGuard(env: Record<string, string> = { JWT_SECRET }) {
+  return new CsrfGuard(new ConfigService(env));
 }
 
 function createContext(req: Partial<Request>) {
@@ -52,6 +53,21 @@ describe('CsrfGuard', () => {
     expect(guard.canActivate(context)).toBe(true);
   });
 
+  it('uses a dedicated CSRF secret when configured', () => {
+    const guard = createGuard({ JWT_SECRET, AUTH_CSRF_SECRET });
+    const csrfToken = createSignedCsrfToken(AUTH_CSRF_SECRET);
+    const context = createContext({
+      method: 'PATCH',
+      path: '/api/users/1',
+      headers: {
+        cookie: `campus_access_token=access; campus_csrf_token=${csrfToken}`,
+        'x-csrf-token': csrfToken,
+      },
+    });
+
+    expect(guard.canActivate(context)).toBe(true);
+  });
+
   it('rejects unsafe cookie-session requests without a matching CSRF header', () => {
     const guard = createGuard();
     const csrfToken = createSignedCsrfToken(JWT_SECRET);
@@ -66,17 +82,25 @@ describe('CsrfGuard', () => {
     expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 
-  it('keeps refresh and logout available for session recovery', () => {
+  it('keeps refresh available for session recovery', () => {
     const guard = createGuard();
+    const context = createContext({
+      method: 'POST',
+      path: '/api/auth/refresh',
+      headers: { cookie: 'campus_refresh_token=refresh' },
+    });
 
-    for (const path of ['/api/auth/refresh', '/api/auth/logout']) {
-      const context = createContext({
-        method: 'POST',
-        path,
-        headers: { cookie: 'campus_refresh_token=refresh' },
-      });
+    expect(guard.canActivate(context)).toBe(true);
+  });
 
-      expect(guard.canActivate(context)).toBe(true);
-    }
+  it('requires CSRF protection for logout with session cookies', () => {
+    const guard = createGuard();
+    const context = createContext({
+      method: 'POST',
+      path: '/api/auth/logout',
+      headers: { cookie: 'campus_refresh_token=refresh' },
+    });
+
+    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
   });
 });

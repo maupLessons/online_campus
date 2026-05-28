@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import {
   InjectThrottlerOptions,
@@ -9,6 +10,10 @@ import {
   ThrottlerStorage,
 } from '@nestjs/throttler';
 import { Request } from 'express';
+import {
+  DEFAULT_ACCESS_TOKEN_COOKIE_NAME,
+  readCookie,
+} from '../../auth/auth-cookie.util';
 
 type RequestUser = {
   sub?: unknown;
@@ -31,6 +36,7 @@ export class UserAwareThrottlerGuard extends ThrottlerGuard {
     storageService: ThrottlerStorage,
     reflector: Reflector,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {
     super(options, storageService, reflector);
   }
@@ -65,6 +71,15 @@ export class UserAwareThrottlerGuard extends ThrottlerGuard {
   }
 
   private extractBearerToken(req: Request): string | null {
+    const cookieToken = readCookie(
+      req,
+      this.configService.get<string>('AUTH_ACCESS_COOKIE_NAME') ??
+        DEFAULT_ACCESS_TOKEN_COOKIE_NAME,
+    );
+    if (cookieToken) {
+      return cookieToken;
+    }
+
     const authorization = req.headers.authorization;
     if (!authorization) {
       return null;

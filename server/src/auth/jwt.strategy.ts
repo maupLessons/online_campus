@@ -6,7 +6,12 @@ import {
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Request } from 'express';
 import { UsersService } from '../users/users.service';
+import {
+  DEFAULT_ACCESS_TOKEN_COOKIE_NAME,
+  readCookie,
+} from './auth-cookie.util';
 
 interface JwtPayload {
   sub: string;
@@ -39,8 +44,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new Error('JWT_SECRET is not set');
     }
 
+    const accessCookieName =
+      config.get<string>('AUTH_ACCESS_COOKIE_NAME') ??
+      DEFAULT_ACCESS_TOKEN_COOKIE_NAME;
+
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        (req: Request) => readCookie(req, accessCookieName),
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: secret,
     });

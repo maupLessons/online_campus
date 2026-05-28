@@ -83,7 +83,7 @@ export default function ProfilePage() {
   };
 
   useEffect(() => {
-    if (!user && isAuthenticated && localStorage.getItem('accessToken')) {
+    if (!user && isAuthenticated) {
       loadProfile();
     }
   }, [user, isAuthenticated, loadProfile]);

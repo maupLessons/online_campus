@@ -7,6 +7,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditInterceptor } from './audit-log/audit.interceptor';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { UserAwareThrottlerGuard } from './common/guards/user-aware-throttler.guard';
+import { CsrfGuard } from './common/guards/csrf.guard';
 import { ExistsInDatabaseConstraint } from './common/validators/exists-in-database.validator';
 import { SeedModule } from './seed/seed.module';
 import { AuthModule } from './auth/auth.module';
@@ -77,6 +78,7 @@ function readPositiveNumber(
     SurveysModule,
   ],
   providers: [
+    { provide: APP_GUARD, useClass: CsrfGuard },
     { provide: APP_GUARD, useClass: UserAwareThrottlerGuard },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     ExistsInDatabaseConstraint,

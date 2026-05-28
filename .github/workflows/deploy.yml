@@ -22,23 +22,37 @@ jobs:
             cd /opt/online_campus
             git pull origin master
 
-            cat > .env <<EOF
-            MONGO_ROOT_USERNAME=$MONGO_ROOT_USERNAME
-            MONGO_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD
-            MONGO_DATABASE=$MONGO_DATABASE
-            MONGO_HOST=$MONGO_HOST
-            MONGO_PORT=$MONGO_PORT
-            JWT_SECRET=$JWT_SECRET
-            PORT=$PORT
-            CLIENT_URL=$CLIENT_URL
-            EOF
+            sanitize_env_value() {
+              printf '%s' "$1" | tr -d '\r\n'
+            }
+
+            write_required_env() {
+              key="$1"
+              value="$(sanitize_env_value "$2")"
+              if [ -z "$value" ]; then
+                echo "Missing required environment variable: $key" >&2
+                exit 1
+              fi
+              printf '%s=%s\n' "$key" "$value" >> .env
+            }
 
             append_env() {
-              if [ -n "$2" ]; then
-                printf '%s=%s\n' "$1" "$2" >> .env
+              key="$1"
+              value="$(sanitize_env_value "$2")"
+              if [ -n "$value" ]; then
+                printf '%s=%s\n' "$key" "$value" >> .env
               fi
             }
 
+            : > .env
+            write_required_env MONGO_ROOT_USERNAME "$MONGO_ROOT_USERNAME"
+            write_required_env MONGO_ROOT_PASSWORD "$MONGO_ROOT_PASSWORD"
+            write_required_env MONGO_DATABASE "$MONGO_DATABASE"
+            write_required_env MONGO_HOST "$MONGO_HOST"
+            write_required_env MONGO_PORT "$MONGO_PORT"
+            write_required_env JWT_SECRET "$JWT_SECRET"
+            write_required_env PORT "$PORT"
+            write_required_env CLIENT_URL "$CLIENT_URL"
             append_env AUTH_ACCESS_COOKIE_NAME "$AUTH_ACCESS_COOKIE_NAME"
             append_env AUTH_REFRESH_COOKIE_NAME "$AUTH_REFRESH_COOKIE_NAME"
             append_env AUTH_ACCESS_COOKIE_PATH "$AUTH_ACCESS_COOKIE_PATH"

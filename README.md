@@ -96,7 +96,7 @@
 | ---------------- | ------------------------------------------------------- |
 | **Presentation** | React-компоненти, сторінки, форми                       |
 | **State**        | Zustand stores: auth, notifications                     |
-| **API Client**   | Axios-інстанс з JWT interceptors (auto-refresh)         |
+| **API Client**   | Axios-інстанс з cookie-based session interceptors       |
 | **Controller**   | NestJS controllers — прийом HTTP-запитів, валідація DTO |
 | **Service**      | Бізнес-логіка, оркестрація модулів                      |
 | **Data**         | Репозиторії / mock-дані / Mongoose ODM                  |
@@ -153,23 +153,25 @@
 
 **Файли:** `src/auth/`
 
-**Відповідальність:** аутентифікація, видача та оновлення JWT-токенів, перевірка статусу акаунту, зміна та відновлення пароля.
+**Відповідальність:** аутентифікація, видача та оновлення JWT-сесій через захищені cookies, перевірка статусу акаунту, зміна та відновлення пароля.
 
 **Компоненти:**
 
 | Файл                 | Опис                                                                                 |
 | -------------------- | ------------------------------------------------------------------------------------ |
-| `auth.controller.ts` | HTTP-ендпоінти: POST /login, POST /refresh, GET /profile, password reset             |
+| `auth.controller.ts` | HTTP-ендпоінти: POST /login, POST /refresh, GET /profile, password reset, встановлення/очищення auth cookies |
 | `auth.service.ts`    | Валідація пароля (bcrypt), генерація access/refresh токенів, одноразові reset tokens |
-| `jwt.strategy.ts`    | Passport JWT стратегія — декодує токен, додає user до request                        |
+| `jwt.strategy.ts`    | Passport JWT стратегія — читає access token з HttpOnly cookie або Bearer fallback, додає user до request |
 | `jwt-auth.guard.ts`  | Guard — перевіряє наявність та валідність access token                               |
 | `roles.guard.ts`     | Guard — перевіряє ролі за декоратором `@Roles()` з урахуванням ієрархії              |
 
 **Логіка токенів:**
 
-- `accessToken` — дія 15 хв (налаштовується через env)
-- `refreshToken` — дія 7 днів
+- `accessToken` — дія 15 хв (налаштовується через env), видається в `HttpOnly` cookie
+- `refreshToken` — дія 7 днів, видається в окремій `HttpOnly` cookie з вужчим path `/api/auth`
 - Payload: `{ sub: userId, login, role }`
+- Browser clients не отримують токени в JSON і не зберігають їх у `localStorage`
+- Для unsafe HTTP-методів frontend додає signed CSRF token з cookie `campus_csrf_token` у header `X-CSRF-Token`
 - При невірних даних — відповідь без деталей
 - Заблокований акаунт — відмова до перевірки пароля
 - Password reset token генерується криптографічно безпечно, зберігається тільки як SHA-256 hash, має TTL і стає недійсним після використання
@@ -431,10 +433,10 @@ src/
 ├── index.css                ← Tailwind base styles
 ├── types/index.ts           ← всі TS-інтерфейси
 ├── services/
-│   ├── api.ts               ← Axios instance, JWT interceptors, auto-refresh
+│   ├── api.ts               ← Axios instance, cookie session refresh/retry
 │   └── surveysApi.ts        ← typed client для SurveysModule
 ├── store/
-│   ├── authStore.ts         ← Zustand: user, token, login/logout
+│   ├── authStore.ts         ← Zustand: user, session state, login/logout
 │   └── notificationsStore.ts
 ├── components/
 │   ├── Layout.tsx           ← sidebar + header + role-based nav
@@ -612,18 +614,19 @@ AuditLogEntry
 
 ## 7. API — повний опис ендпоінтів
 
-Всі ендпоінти доступні за префіксом `/api`. Всі захищені JwtAuthGuard, крім `/api/auth/login`, `/api/auth/refresh` та password reset ендпоінтів.
+Всі ендпоінти доступні за префіксом `/api`. Всі захищені JwtAuthGuard, крім `/api/auth/login`, `/api/auth/refresh`, `/api/auth/logout` та password reset ендпоінтів.
 
 ### Аутентифікація `/api/auth`
 
 | Метод | Шлях                           | Тіло                           | Відповідь                                            | Доступ        |
 | ----- | ------------------------------ | ------------------------------ | ---------------------------------------------------- | ------------- |
-| POST  | `/auth/login`                  | `{ login, password }`          | `{ accessToken, refreshToken, user }`                | Публічний     |
-| POST  | `/auth/refresh`                | `{ refreshToken }`             | `{ accessToken, refreshToken }`                      | Публічний     |
+| POST  | `/auth/login`                  | `{ login, password }`          | `{ user }` + `HttpOnly` auth cookies                 | Публічний     |
+| POST  | `/auth/refresh`                | cookie або legacy `{ refreshToken }` | `{ success: true }` + оновлені cookies        | Публічний     |
 | POST  | `/auth/password-reset/request` | `{ identifier }`               | `{ message }` + dev reset URL тільки поза production | Публічний     |
 | POST  | `/auth/password-reset/confirm` | `{ token, newPassword }`       | `{ message }`                                        | Публічний     |
 | GET   | `/auth/profile`                | —                              | User з профілями                                     | Авторизований |
 | POST  | `/auth/change-password`        | `{ oldPassword, newPassword }` | 200                                                  | Авторизований |
+| POST  | `/auth/logout`                 | cookie або legacy `{ refreshToken }` | `{ message }` + очищення cookies              | Публічний     |
 
 ### Користувачі `/api/users`
 
@@ -748,13 +751,16 @@ Student        (базовий доступ)
 
 - **bcrypt** (cost factor 12) для хешування паролів
 - **Access token** — короткоживучий (15 хв), мінімізує вікно компрометації
-- **Refresh token** — зберігається в `httpOnly cookie` або захищеному localStorage
+- **Refresh token** — зберігається тільки в `HttpOnly` cookie, недоступній для JavaScript
+- **Cookie flags** — `HttpOnly`, `SameSite=Strict` за замовчуванням, `Secure=true` у production/HTTPS
+- **Token rotation** — refresh endpoint перевипускає access/refresh cookies і відкликає використаний refresh token
+- **CSRF** — signed double-submit token для unsafe методів (`POST`, `PUT`, `PATCH`, `DELETE`)
 
 ### HTTP-безпека
 
 - **HTTPS** обов'язково в production
 - **Helmet** — заголовки: `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, `Content-Security-Policy`
-- **CORS** — дозволений тільки домен фронтенду
+- **CORS** — дозволені тільки домени фронтенду з `CLIENT_URL`, cookies передаються лише з `credentials: true`
 - **Rate limiting** — `/auth/login` максимум 10 спроб за 15 хвилин з одного IP, password reset endpoints максимум 5 спроб за 15 хвилин
 - **Input validation** — `class-validator` + `ValidationPipe` на всіх DTO
 
@@ -764,7 +770,7 @@ Student        (базовий доступ)
 | ----------------------- | -------------------------------------------------------- |
 | SQL Injection           | Parameterized queries через Mongoose ODM                 |
 | XSS                     | `Content-Security-Policy`, React escaping                |
-| CSRF                    | `SameSite=Strict` cookie, CORS обмеження                 |
+| CSRF                    | `SameSite=Strict` cookie, signed `X-CSRF-Token`, CORS обмеження |
 | Brute Force             | Rate limiting на /auth/login та password reset endpoints |
 | Path Traversal          | Валідація file paths, заборона `../`                     |
 | Sensitive Data Exposure | Пароль ніколи не повертається в API-відповідях           |
@@ -1073,6 +1079,15 @@ cd client && npm run dev
 JWT_SECRET=your-super-secret-key-min-32-chars
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
+AUTH_ACCESS_COOKIE_NAME=campus_access_token
+AUTH_REFRESH_COOKIE_NAME=campus_refresh_token
+AUTH_ACCESS_COOKIE_PATH=/api
+AUTH_REFRESH_COOKIE_PATH=/api/auth
+AUTH_CSRF_COOKIE_NAME=campus_csrf_token
+AUTH_CSRF_COOKIE_PATH=/
+AUTH_CSRF_HEADER_NAME=x-csrf-token
+AUTH_COOKIE_SAMESITE=strict
+AUTH_COOKIE_SECURE=true
 PASSWORD_RESET_TTL_MINUTES=30
 PASSWORD_RESET_EXPOSE_TOKEN=false
 
@@ -1232,6 +1247,12 @@ jobs:
 | `JWT_SECRET` | секрет для JWT |
 | `PORT` | порт backend |
 | `CLIENT_URL` | URL frontend для CORS і reset links |
+| `AUTH_ACCESS_COOKIE_NAME` | назва HttpOnly cookie для access token |
+| `AUTH_REFRESH_COOKIE_NAME` | назва HttpOnly cookie для refresh token |
+| `AUTH_COOKIE_SECURE` | `true` для HTTPS-середовищ, `false` лише для локального HTTP |
+| `AUTH_COOKIE_SAMESITE` | політика cookies: `strict` за замовчуванням, `lax`/`none` лише за потреби |
+| `AUTH_CSRF_COOKIE_NAME` | назва readable cookie з signed CSRF token |
+| `AUTH_CSRF_HEADER_NAME` | header, який frontend надсилає для unsafe методів (`x-csrf-token`) |
 
 ### Правила роботи із залежностями
 

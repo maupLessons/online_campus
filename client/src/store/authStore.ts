@@ -10,15 +10,24 @@ interface AuthState {
   isAuthChecked: boolean;
   error: string | null;
   login: (login: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   loadProfile: () => Promise<void>;
   initializeAuth: () => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<string>;
 }
 
+function clearLegacyAuthStorage() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+}
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  isAuthenticated: !!localStorage.getItem('accessToken'),
+  isAuthenticated: false,
   isLoading: false,
   isAuthChecked: false,
   error: null,
@@ -29,9 +38,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { data } = await api.post('/auth/login', { login, password });
 
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      set({ user: data.user, isAuthenticated: true, isLoading: false });
+      clearLegacyAuthStorage();
+      set({
+        user: data.user,
+        isAuthenticated: true,
+        isLoading: false,
+        isAuthChecked: true,
+      });
     } catch (err: unknown) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
@@ -52,16 +65,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  logout: () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
+  logout: async () => {
+    try {
+      await api.post('/auth/logout', {});
+    } finally {
+      clearLegacyAuthStorage();
 
-    set({
-      user: null,
-      isAuthenticated: false,
-      isAuthChecked: true,
-      error: null,
-    });
+      set({
+        user: null,
+        isAuthenticated: false,
+        isAuthChecked: true,
+        error: null,
+      });
+    }
   },
 
   loadProfile: async () => {
@@ -70,6 +86,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({
       user: data,
       isAuthenticated: true,
+      isAuthChecked: true,
     });
   },
 
@@ -99,17 +116,6 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   initializeAuth: async () => {
-    const token = localStorage.getItem('accessToken');
-
-    if (!token) {
-      set({
-        user: null,
-        isAuthenticated: false,
-        isAuthChecked: true,
-      });
-      return;
-    }
-
     try {
       const { data } = await api.get('/auth/profile');
 
@@ -120,8 +126,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
     } catch (err: unknown) {
       if (axios.isAxiosError(err) && err.response?.status === 401) {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
+        clearLegacyAuthStorage();
 
         set({
           user: null,
@@ -134,7 +139,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       set({
         user: null,
-        isAuthenticated: true,
+        isAuthenticated: false,
         isAuthChecked: true,
       });
     }

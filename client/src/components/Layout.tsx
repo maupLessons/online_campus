@@ -63,7 +63,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    if (!user && isAuthenticated && localStorage.getItem('accessToken')) {
+    if (!user && isAuthenticated) {
       loadProfile();
     }
   }, [user, isAuthenticated, loadProfile]);
@@ -73,8 +73,11 @@ export default function Layout() {
   );
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
+    void logout()
+      .catch(() => undefined)
+      .finally(() => {
+        navigate('/login');
+      });
   };
 
   const pageTitle = useMemo(() => {

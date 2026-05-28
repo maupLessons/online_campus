@@ -1,28 +1,72 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import axios, {
+  AxiosError,
+  AxiosHeaders,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 
 const api = axios.create({
   baseURL: '/api',
+  withCredentials: true,
 });
-
-type TokenResponse = {
-  accessToken: string;
-  refreshToken: string;
-};
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
 };
 
-const TOKEN_REFRESH_MARGIN_MS = 30_000;
 const AUTH_ENDPOINTS = [
   '/auth/login',
   '/auth/refresh',
+  '/auth/logout',
   '/auth/password-reset/request',
   '/auth/password-reset/confirm',
 ];
 const AUTH_PAGES = ['/login', '/forgot-password', '/reset-password'];
+const LEGACY_TOKEN_KEYS = ['accessToken', 'refreshToken'];
+const CSRF_COOKIE_NAME = 'campus_csrf_token';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
+const MUTATING_METHODS = new Set(['delete', 'patch', 'post', 'put']);
 
-let refreshPromise: Promise<TokenResponse> | null = null;
+let refreshPromise: Promise<void> | null = null;
+
+function clearLegacyAuthStorage() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  for (const key of LEGACY_TOKEN_KEYS) {
+    localStorage.removeItem(key);
+  }
+}
+
+clearLegacyAuthStorage();
+
+function readCookie(name: string) {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const separatorIndex = cookie.indexOf('=');
+    if (separatorIndex < 0) {
+      continue;
+    }
+
+    const cookieName = cookie.slice(0, separatorIndex).trim();
+    if (cookieName !== name) {
+      continue;
+    }
+
+    const value = cookie.slice(separatorIndex + 1).trim();
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+
+  return null;
+}
 
 function getRequestPath(url?: string) {
   if (!url) {
@@ -30,7 +74,10 @@ function getRequestPath(url?: string) {
   }
 
   try {
-    return new URL(url, window.location.origin).pathname.replace(/^\/api/, '');
+    const origin =
+      typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+
+    return new URL(url, origin).pathname.replace(/^\/api/, '');
   } catch {
     return url.split('?')[0].replace(/^\/api/, '');
   }
@@ -41,71 +88,23 @@ function isAuthEndpoint(url?: string) {
   return AUTH_ENDPOINTS.some((endpoint) => path === endpoint);
 }
 
-function getJwtExpiresAt(token: string) {
-  const [, payload] = token.split('.');
+function clearSessionAndRedirect() {
+  clearLegacyAuthStorage();
 
-  if (!payload) {
-    return null;
+  if (typeof window === 'undefined') {
+    return;
   }
-
-  try {
-    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const paddedPayload = normalizedPayload.padEnd(
-      Math.ceil(normalizedPayload.length / 4) * 4,
-      '=',
-    );
-    const decodedPayload = JSON.parse(window.atob(paddedPayload)) as {
-      exp?: unknown;
-    };
-
-    return typeof decodedPayload.exp === 'number'
-      ? decodedPayload.exp * 1000
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function isTokenExpiring(token: string) {
-  const expiresAt = getJwtExpiresAt(token);
-  return expiresAt !== null && expiresAt - Date.now() <= TOKEN_REFRESH_MARGIN_MS;
-}
-
-function persistTokens(tokens: TokenResponse) {
-  localStorage.setItem('accessToken', tokens.accessToken);
-  localStorage.setItem('refreshToken', tokens.refreshToken);
-}
-
-function clearTokensAndRedirect() {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
 
   if (!AUTH_PAGES.some((page) => window.location.pathname.startsWith(page))) {
     window.location.href = '/login';
   }
 }
 
-function setAuthorizationHeader(
-  config: InternalAxiosRequestConfig,
-  token: string,
-) {
-  config.headers.Authorization = `Bearer ${token}`;
-}
-
-async function refreshTokens() {
-  const refreshToken = localStorage.getItem('refreshToken');
-
-  if (!refreshToken) {
-    throw new Error('Refresh token is missing');
-  }
-
+async function refreshSession() {
   if (!refreshPromise) {
-    refreshPromise = axios
-      .post<TokenResponse>('/api/auth/refresh', { refreshToken })
-      .then(({ data }) => {
-        persistTokens(data);
-        return data;
-      })
+    refreshPromise = api
+      .post('/auth/refresh', {})
+      .then(() => undefined)
       .finally(() => {
         refreshPromise = null;
       });
@@ -114,20 +113,15 @@ async function refreshTokens() {
   return refreshPromise;
 }
 
-api.interceptors.request.use(async (config) => {
-  let token = localStorage.getItem('accessToken');
+api.interceptors.request.use((config) => {
+  config.withCredentials = true;
 
-  if (token && !isAuthEndpoint(config.url) && isTokenExpiring(token)) {
-    try {
-      token = (await refreshTokens()).accessToken;
-    } catch (error) {
-      clearTokensAndRedirect();
-      return Promise.reject(error);
+  if (MUTATING_METHODS.has(config.method?.toLowerCase() ?? '')) {
+    const csrfToken = readCookie(CSRF_COOKIE_NAME);
+    if (csrfToken) {
+      config.headers = AxiosHeaders.from(config.headers);
+      config.headers.set(CSRF_HEADER_NAME, csrfToken);
     }
-  }
-
-  if (token) {
-    setAuthorizationHeader(config, token);
   }
 
   return config;
@@ -147,11 +141,10 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const { accessToken } = await refreshTokens();
-        setAuthorizationHeader(originalRequest, accessToken);
+        await refreshSession();
         return api(originalRequest);
       } catch {
-        clearTokensAndRedirect();
+        clearSessionAndRedirect();
       }
     }
 
@@ -181,12 +174,15 @@ export const filesApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     const fileId = uploadRes.data.fileId;
-    const submitRes = await api.post(`/courses/assignments/${assignmentId}/submit`, {
-      fileIds: [fileId],
-    });
+    const submitRes = await api.post(
+      `/courses/assignments/${assignmentId}/submit`,
+      {
+        fileIds: [fileId],
+      },
+    );
     return submitRes.data;
   },
-  
+
   deleteFile: async (fileId: string) => {
     return api.delete(`/files/${fileId}`);
   },

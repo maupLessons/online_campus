@@ -35,6 +35,7 @@ import {
   DEFAULT_CSRF_TOKEN_COOKIE_NAME,
   DEFAULT_REFRESH_TOKEN_COOKIE_NAME,
   readCookie,
+  readConfiguredSecret,
 } from './auth-cookie.util';
 
 interface RequestWithUser extends RequestWithId {
@@ -143,7 +144,11 @@ export class AuthController {
       configService.get<string>('JWT_REFRESH_EXPIRES_IN'),
       DEFAULT_REFRESH_TOKEN_MAX_AGE_MS,
     );
-    this.csrfSecret = configService.getOrThrow<string>('JWT_SECRET');
+    this.csrfSecret = readConfiguredSecret(
+      configService,
+      'AUTH_CSRF_SECRET',
+      'JWT_SECRET',
+    );
   }
 
   @Throttle({ default: { limit: 10, ttl: 900000 } })

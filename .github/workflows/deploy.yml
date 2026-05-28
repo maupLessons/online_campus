@@ -17,21 +17,52 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT }}
-          envs: MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_DATABASE,MONGO_HOST,MONGO_PORT,JWT_SECRET,PORT,CLIENT_URL
+          envs: MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_DATABASE,MONGO_HOST,MONGO_PORT,JWT_SECRET,PORT,CLIENT_URL,AUTH_ACCESS_COOKIE_NAME,AUTH_REFRESH_COOKIE_NAME,AUTH_ACCESS_COOKIE_PATH,AUTH_REFRESH_COOKIE_PATH,AUTH_CSRF_SECRET,AUTH_CSRF_COOKIE_NAME,AUTH_CSRF_COOKIE_PATH,AUTH_CSRF_HEADER_NAME,AUTH_COOKIE_SAMESITE,AUTH_COOKIE_SECURE
           script: |
             cd /opt/online_campus
             git pull origin master
 
-            cat > .env <<EOF
-            MONGO_ROOT_USERNAME=$MONGO_ROOT_USERNAME
-            MONGO_ROOT_PASSWORD=$MONGO_ROOT_PASSWORD
-            MONGO_DATABASE=$MONGO_DATABASE
-            MONGO_HOST=$MONGO_HOST
-            MONGO_PORT=$MONGO_PORT
-            JWT_SECRET=$JWT_SECRET
-            PORT=$PORT
-            CLIENT_URL=$CLIENT_URL
-            EOF
+            sanitize_env_value() {
+              printf '%s' "$1" | tr -d '\r\n'
+            }
+
+            write_required_env() {
+              key="$1"
+              value="$(sanitize_env_value "$2")"
+              if [ -z "$value" ]; then
+                echo "Missing required environment variable: $key" >&2
+                exit 1
+              fi
+              printf '%s=%s\n' "$key" "$value" >> .env
+            }
+
+            append_env() {
+              key="$1"
+              value="$(sanitize_env_value "$2")"
+              if [ -n "$value" ]; then
+                printf '%s=%s\n' "$key" "$value" >> .env
+              fi
+            }
+
+            : > .env
+            write_required_env MONGO_ROOT_USERNAME "$MONGO_ROOT_USERNAME"
+            write_required_env MONGO_ROOT_PASSWORD "$MONGO_ROOT_PASSWORD"
+            write_required_env MONGO_DATABASE "$MONGO_DATABASE"
+            write_required_env MONGO_HOST "$MONGO_HOST"
+            write_required_env MONGO_PORT "$MONGO_PORT"
+            write_required_env JWT_SECRET "$JWT_SECRET"
+            write_required_env PORT "$PORT"
+            write_required_env CLIENT_URL "$CLIENT_URL"
+            append_env AUTH_ACCESS_COOKIE_NAME "$AUTH_ACCESS_COOKIE_NAME"
+            append_env AUTH_REFRESH_COOKIE_NAME "$AUTH_REFRESH_COOKIE_NAME"
+            append_env AUTH_ACCESS_COOKIE_PATH "$AUTH_ACCESS_COOKIE_PATH"
+            append_env AUTH_REFRESH_COOKIE_PATH "$AUTH_REFRESH_COOKIE_PATH"
+            append_env AUTH_CSRF_SECRET "$AUTH_CSRF_SECRET"
+            append_env AUTH_CSRF_COOKIE_NAME "$AUTH_CSRF_COOKIE_NAME"
+            append_env AUTH_CSRF_COOKIE_PATH "$AUTH_CSRF_COOKIE_PATH"
+            append_env AUTH_CSRF_HEADER_NAME "$AUTH_CSRF_HEADER_NAME"
+            append_env AUTH_COOKIE_SAMESITE "$AUTH_COOKIE_SAMESITE"
+            append_env AUTH_COOKIE_SECURE "${AUTH_COOKIE_SECURE:-true}"
 
             docker compose up --build -d
             docker image prune -f
@@ -44,3 +75,13 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           PORT: ${{ secrets.PORT }}
           CLIENT_URL: ${{ secrets.CLIENT_URL }}
+          AUTH_ACCESS_COOKIE_NAME: ${{ secrets.AUTH_ACCESS_COOKIE_NAME }}
+          AUTH_REFRESH_COOKIE_NAME: ${{ secrets.AUTH_REFRESH_COOKIE_NAME }}
+          AUTH_ACCESS_COOKIE_PATH: ${{ secrets.AUTH_ACCESS_COOKIE_PATH }}
+          AUTH_REFRESH_COOKIE_PATH: ${{ secrets.AUTH_REFRESH_COOKIE_PATH }}
+          AUTH_CSRF_SECRET: ${{ secrets.AUTH_CSRF_SECRET }}
+          AUTH_CSRF_COOKIE_NAME: ${{ secrets.AUTH_CSRF_COOKIE_NAME }}
+          AUTH_CSRF_COOKIE_PATH: ${{ secrets.AUTH_CSRF_COOKIE_PATH }}
+          AUTH_CSRF_HEADER_NAME: ${{ secrets.AUTH_CSRF_HEADER_NAME }}
+          AUTH_COOKIE_SAMESITE: ${{ secrets.AUTH_COOKIE_SAMESITE }}
+          AUTH_COOKIE_SECURE: ${{ secrets.AUTH_COOKIE_SECURE }}

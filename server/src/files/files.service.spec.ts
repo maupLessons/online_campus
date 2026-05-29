@@ -110,6 +110,38 @@ describe('FilesService security checks', () => {
     ).resolves.toBe(file);
   });
 
+  it('blocks a student from downloading another student submission file from the same group', async () => {
+    const fileId = new Types.ObjectId();
+    const ownerId = new Types.ObjectId();
+    const requesterId = new Types.ObjectId();
+    const courseAssignmentId = new Types.ObjectId();
+    const groupId = new Types.ObjectId();
+
+    const service = createService({
+      file: { _id: fileId, uploadedBy: ownerId },
+      submissions: [
+        {
+          student: ownerId,
+          assignment: new Types.ObjectId(),
+        },
+      ],
+      submittedAssignment: { courseAssignment: courseAssignmentId },
+      courseAssignment: {
+        teacher: new Types.ObjectId(),
+        group: groupId,
+      },
+      user: { studentProfile: { group: groupId } },
+    });
+
+    await expect(
+      service.getDownloadableFileById(
+        fileId.toHexString(),
+        requesterId.toHexString(),
+        Role.STUDENT,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('rejects downloads when the file has no allowed relation to the user', async () => {
     const fileId = new Types.ObjectId();
     const ownerId = new Types.ObjectId();

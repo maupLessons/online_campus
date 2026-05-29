@@ -4,7 +4,7 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { AppModule } from '../src/app.module';
-import { SeedService } from '../src/seed/seed.service';
+import { SeedService } from '../src/seed-data/seed.service';
 import { describeWithDb } from './e2e-db';
 
 const SET_UP_TIMEOUT = 60_000;

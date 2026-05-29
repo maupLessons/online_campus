@@ -30,8 +30,10 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { RequestWithId } from '../common/middleware/request-id.middleware';
 import { Response, CookieOptions } from 'express';
 import {
+  createSignedCsrfBinding,
   createSignedCsrfToken,
   DEFAULT_ACCESS_TOKEN_COOKIE_NAME,
+  DEFAULT_CSRF_BINDING_COOKIE_NAME,
   DEFAULT_CSRF_TOKEN_COOKIE_NAME,
   DEFAULT_REFRESH_TOKEN_COOKIE_NAME,
   readCookie,
@@ -99,9 +101,11 @@ export class AuthController {
   private readonly accessCookieName: string;
   private readonly refreshCookieName: string;
   private readonly csrfCookieName: string;
+  private readonly csrfBindingCookieName: string;
   private readonly accessCookiePath: string;
   private readonly refreshCookiePath: string;
   private readonly csrfCookiePath: string;
+  private readonly csrfBindingCookiePath: string;
   private readonly cookieSecure: boolean;
   private readonly cookieSameSite: CookieOptions['sameSite'];
   private readonly accessTokenMaxAgeMs: number;
@@ -121,12 +125,17 @@ export class AuthController {
     this.csrfCookieName =
       configService.get<string>('AUTH_CSRF_COOKIE_NAME') ??
       DEFAULT_CSRF_TOKEN_COOKIE_NAME;
+    this.csrfBindingCookieName =
+      configService.get<string>('AUTH_CSRF_BINDING_COOKIE_NAME') ??
+      DEFAULT_CSRF_BINDING_COOKIE_NAME;
     this.accessCookiePath =
       configService.get<string>('AUTH_ACCESS_COOKIE_PATH') ?? '/api';
     this.refreshCookiePath =
       configService.get<string>('AUTH_REFRESH_COOKIE_PATH') ?? '/api/auth';
     this.csrfCookiePath =
       configService.get<string>('AUTH_CSRF_COOKIE_PATH') ?? '/';
+    this.csrfBindingCookiePath =
+      configService.get<string>('AUTH_CSRF_BINDING_COOKIE_PATH') ?? '/api';
     this.cookieSameSite = readSameSite(
       configService.get<string>('AUTH_COOKIE_SAMESITE'),
     );
@@ -148,6 +157,7 @@ export class AuthController {
       configService,
       'AUTH_CSRF_SECRET',
       'JWT_SECRET',
+      { requireExplicitInProduction: true },
     );
   }
 
@@ -315,6 +325,8 @@ export class AuthController {
   }
 
   private setAuthCookies(res: Response, auth: AuthTokens) {
+    const csrfBinding = createSignedCsrfBinding();
+
     res.cookie(
       this.accessCookieName,
       auth.accessToken,
@@ -329,8 +341,16 @@ export class AuthController {
       ),
     );
     res.cookie(
+      this.csrfBindingCookieName,
+      csrfBinding,
+      this.buildCookieOptions(
+        this.csrfBindingCookiePath,
+        this.refreshTokenMaxAgeMs,
+      ),
+    );
+    res.cookie(
       this.csrfCookieName,
-      createSignedCsrfToken(this.csrfSecret),
+      createSignedCsrfToken(this.csrfSecret, csrfBinding),
       this.buildCookieOptions(
         this.csrfCookiePath,
         this.refreshTokenMaxAgeMs,
@@ -351,6 +371,10 @@ export class AuthController {
     res.clearCookie(
       this.csrfCookieName,
       this.buildCookieOptions(this.csrfCookiePath, undefined, false),
+    );
+    res.clearCookie(
+      this.csrfBindingCookieName,
+      this.buildCookieOptions(this.csrfBindingCookiePath),
     );
   }
 

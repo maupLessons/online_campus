@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import {
   DEFAULT_ACCESS_TOKEN_COOKIE_NAME,
+  DEFAULT_CSRF_BINDING_COOKIE_NAME,
   DEFAULT_CSRF_TOKEN_COOKIE_NAME,
   DEFAULT_CSRF_TOKEN_HEADER_NAME,
   DEFAULT_REFRESH_TOKEN_COOKIE_NAME,
@@ -29,6 +30,7 @@ export class CsrfGuard implements CanActivate {
   private readonly accessCookieName: string;
   private readonly refreshCookieName: string;
   private readonly csrfCookieName: string;
+  private readonly csrfBindingCookieName: string;
   private readonly csrfHeaderName: string;
   private readonly csrfSecret: string;
 
@@ -42,6 +44,9 @@ export class CsrfGuard implements CanActivate {
     this.csrfCookieName =
       configService.get<string>('AUTH_CSRF_COOKIE_NAME') ??
       DEFAULT_CSRF_TOKEN_COOKIE_NAME;
+    this.csrfBindingCookieName =
+      configService.get<string>('AUTH_CSRF_BINDING_COOKIE_NAME') ??
+      DEFAULT_CSRF_BINDING_COOKIE_NAME;
     this.csrfHeaderName = (
       configService.get<string>('AUTH_CSRF_HEADER_NAME') ??
       DEFAULT_CSRF_TOKEN_HEADER_NAME
@@ -50,6 +55,7 @@ export class CsrfGuard implements CanActivate {
       configService,
       'AUTH_CSRF_SECRET',
       'JWT_SECRET',
+      { requireExplicitInProduction: true },
     );
   }
 
@@ -68,13 +74,15 @@ export class CsrfGuard implements CanActivate {
     }
 
     const cookieToken = readCookie(req, this.csrfCookieName);
+    const binding = readCookie(req, this.csrfBindingCookieName);
     const headerToken = this.getHeaderToken(req);
 
     if (
       !cookieToken ||
+      !binding ||
       !headerToken ||
       cookieToken !== headerToken ||
-      !verifySignedCsrfToken(cookieToken, this.csrfSecret)
+      !verifySignedCsrfToken(cookieToken, binding, this.csrfSecret)
     ) {
       throw new ForbiddenException('Invalid CSRF token');
     }

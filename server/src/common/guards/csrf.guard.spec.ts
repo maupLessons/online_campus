@@ -1,7 +1,10 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
-import { createSignedCsrfToken } from '../../auth/auth-cookie.util';
+import {
+  createSignedCsrfBinding,
+  createSignedCsrfToken,
+} from '../../auth/auth-cookie.util';
 import { CsrfGuard } from './csrf.guard';
 
 const JWT_SECRET = 'test-secret';
@@ -40,12 +43,13 @@ describe('CsrfGuard', () => {
 
   it('allows unsafe cookie-session requests with a valid CSRF token', () => {
     const guard = createGuard();
-    const csrfToken = createSignedCsrfToken(JWT_SECRET);
+    const csrfBinding = createSignedCsrfBinding();
+    const csrfToken = createSignedCsrfToken(JWT_SECRET, csrfBinding);
     const context = createContext({
       method: 'PATCH',
       path: '/api/users/1',
       headers: {
-        cookie: `campus_access_token=access; campus_csrf_token=${csrfToken}`,
+        cookie: `campus_access_token=access; campus_csrf_binding=${csrfBinding}; campus_csrf_token=${csrfToken}`,
         'x-csrf-token': csrfToken,
       },
     });
@@ -55,12 +59,13 @@ describe('CsrfGuard', () => {
 
   it('uses a dedicated CSRF secret when configured', () => {
     const guard = createGuard({ JWT_SECRET, AUTH_CSRF_SECRET });
-    const csrfToken = createSignedCsrfToken(AUTH_CSRF_SECRET);
+    const csrfBinding = createSignedCsrfBinding();
+    const csrfToken = createSignedCsrfToken(AUTH_CSRF_SECRET, csrfBinding);
     const context = createContext({
       method: 'PATCH',
       path: '/api/users/1',
       headers: {
-        cookie: `campus_access_token=access; campus_csrf_token=${csrfToken}`,
+        cookie: `campus_access_token=access; campus_csrf_binding=${csrfBinding}; campus_csrf_token=${csrfToken}`,
         'x-csrf-token': csrfToken,
       },
     });
@@ -70,12 +75,28 @@ describe('CsrfGuard', () => {
 
   it('rejects unsafe cookie-session requests without a matching CSRF header', () => {
     const guard = createGuard();
-    const csrfToken = createSignedCsrfToken(JWT_SECRET);
+    const csrfBinding = createSignedCsrfBinding();
+    const csrfToken = createSignedCsrfToken(JWT_SECRET, csrfBinding);
+    const context = createContext({
+      method: 'POST',
+      path: '/api/users',
+      headers: {
+        cookie: `campus_access_token=access; campus_csrf_binding=${csrfBinding}; campus_csrf_token=${csrfToken}`,
+      },
+    });
+
+    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+  });
+
+  it('rejects unsafe cookie-session requests without the HttpOnly CSRF binding', () => {
+    const guard = createGuard();
+    const csrfToken = createSignedCsrfToken(JWT_SECRET, 'binding');
     const context = createContext({
       method: 'POST',
       path: '/api/users',
       headers: {
         cookie: `campus_access_token=access; campus_csrf_token=${csrfToken}`,
+        'x-csrf-token': csrfToken,
       },
     });
 

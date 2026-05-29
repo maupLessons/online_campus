@@ -4,11 +4,16 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 export const DEFAULT_ACCESS_TOKEN_COOKIE_NAME = 'campus_access_token';
 export const DEFAULT_REFRESH_TOKEN_COOKIE_NAME = 'campus_refresh_token';
 export const DEFAULT_CSRF_TOKEN_COOKIE_NAME = 'campus_csrf_token';
+export const DEFAULT_CSRF_BINDING_COOKIE_NAME = 'campus_csrf_binding';
 export const DEFAULT_CSRF_TOKEN_HEADER_NAME = 'x-csrf-token';
 
 type ConfigReader = {
   get<T = string>(propertyPath: string): T | undefined;
   getOrThrow<T = string>(propertyPath: string): T;
+};
+
+type SecretReadOptions = {
+  requireExplicitInProduction?: boolean;
 };
 
 export function readCookie(req: Request, name: string): string | null {
@@ -44,25 +49,45 @@ export function readConfiguredSecret(
   config: ConfigReader,
   key: string,
   fallbackKey: string,
+  options: SecretReadOptions = {},
 ): string {
   const value = config.get<string>(key)?.trim();
-  return value || config.getOrThrow<string>(fallbackKey);
+  if (value) {
+    return value;
+  }
+
+  if (
+    options.requireExplicitInProduction &&
+    config.get<string>('NODE_ENV') === 'production'
+  ) {
+    throw new Error(`${key} is not set`);
+  }
+
+  return config.getOrThrow<string>(fallbackKey);
 }
 
-export function createSignedCsrfToken(secret: string): string {
+export function createSignedCsrfBinding(): string {
+  return randomBytes(32).toString('base64url');
+}
+
+export function createSignedCsrfToken(secret: string, binding: string): string {
   const nonce = randomBytes(32).toString('base64url');
-  const signature = signCsrfNonce(nonce, secret);
+  const signature = signCsrfNonce(nonce, binding, secret);
 
   return `${nonce}.${signature}`;
 }
 
-export function verifySignedCsrfToken(token: string, secret: string): boolean {
+export function verifySignedCsrfToken(
+  token: string,
+  binding: string,
+  secret: string,
+): boolean {
   const [nonce, signature] = token.split('.');
-  if (!nonce || !signature) {
+  if (!nonce || !signature || !binding) {
     return false;
   }
 
-  const expectedSignature = signCsrfNonce(nonce, secret);
+  const expectedSignature = signCsrfNonce(nonce, binding, secret);
   const provided = Buffer.from(signature);
   const expected = Buffer.from(expectedSignature);
 
@@ -71,6 +96,8 @@ export function verifySignedCsrfToken(token: string, secret: string): boolean {
   );
 }
 
-function signCsrfNonce(nonce: string, secret: string): string {
-  return createHmac('sha256', secret).update(nonce).digest('base64url');
+function signCsrfNonce(nonce: string, binding: string, secret: string): string {
+  return createHmac('sha256', secret)
+    .update(`${nonce}.${binding}`)
+    .digest('base64url');
 }

@@ -9,7 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { MaterialDto } from '../src/courses/materials/dto';
-import { SeedService } from '../src/seed/seed.service';
+import { SeedService } from '../src/seed-data/seed.service';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { describeWithDb } from './e2e-db';
 

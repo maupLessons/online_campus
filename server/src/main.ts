@@ -40,7 +40,7 @@ async function bootstrap() {
     ) {
       res.status(200).json({
         message: 'API is running',
-        swagger: '/api/docs',
+        ...(isSwaggerEnabled() ? { swagger: '/api/docs' } : {}),
       });
       return;
     }
@@ -85,24 +85,38 @@ async function bootstrap() {
     }),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle('Online Campus API')
-    .setDescription('The Online Campus API description')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addSecurityRequirements('bearer')
-    .build();
+  if (isSwaggerEnabled()) {
+    const config = new DocumentBuilder()
+      .setTitle('Online Campus API')
+      .setDescription('The Online Campus API description')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .addSecurityRequirements('bearer')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
   console.log(`Server running on http://localhost:${port}`);
   console.log(`Backend API routes: http://localhost:${port}/api`);
-  console.log(
-    `Swagger documentation available on http://localhost:${port}/api/docs`,
-  );
+  if (isSwaggerEnabled()) {
+    console.log(
+      `Swagger documentation available on http://localhost:${port}/api/docs`,
+    );
+  }
+}
+
+function isSwaggerEnabled(): boolean {
+  if (process.env.SWAGGER_ENABLED !== undefined) {
+    return ['1', 'true', 'yes'].includes(
+      process.env.SWAGGER_ENABLED.toLowerCase(),
+    );
+  }
+
+  return process.env.NODE_ENV !== 'production';
 }
 
 bootstrap().catch((err: unknown) => {

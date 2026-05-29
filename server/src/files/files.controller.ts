@@ -22,6 +22,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditInterceptor } from '../audit-log/audit.interceptor';
 import { Role } from '../common/types/roles.enum';
 
+const MAX_UPLOAD_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
 interface AuthenticatedFileRequest {
   user: {
     sub: string;
@@ -39,7 +41,11 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -56,9 +62,10 @@ export class FilesController {
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 10 * 1024 * 1024 }),
+          new MaxFileSizeValidator({ maxSize: MAX_UPLOAD_FILE_SIZE_BYTES }),
           new FileTypeValidator({
-            fileType: /(jpg|jpeg|png|pdf|msword|document|zip)/,
+            fileType:
+              /^(image\/png|image\/jpeg|application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|application\/zip|application\/x-zip-compressed)$/,
           }),
         ],
       }),
@@ -70,8 +77,16 @@ export class FilesController {
   }
 
   @Get('download/:id')
-  async downloadFile(@Param('id') id: string, @Res() res: Response) {
-    const fileInfo = await this.filesService.getFileById(id);
+  async downloadFile(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedFileRequest,
+    @Res() res: Response,
+  ) {
+    const fileInfo = await this.filesService.getDownloadableFileById(
+      id,
+      req.user.sub,
+      req.user.role,
+    );
 
     const filePath = path.join(
       __dirname,
@@ -87,6 +102,7 @@ export class FilesController {
       'Content-Disposition',
       `attachment; filename*=UTF-8''${encodedFileName}`,
     );
+    res.type(fileInfo.mimetype || 'application/octet-stream');
 
     return res.sendFile(filePath, (err) => {
       if (err) {

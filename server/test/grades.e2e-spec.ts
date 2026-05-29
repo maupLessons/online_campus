@@ -11,7 +11,7 @@ import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { GradeResponseDto } from '../src/courses/grades/dto';
 import { StudentCourseResponseDto } from '../src/courses/courses/dto';
-import { SeedService } from '../src/seed/seed.service';
+import { SeedService } from '../src/seed-data/seed.service';
 import { describeWithDb } from './e2e-db';
 
 process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';

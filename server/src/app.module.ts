@@ -9,7 +9,7 @@ import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
 import { UserAwareThrottlerGuard } from './common/guards/user-aware-throttler.guard';
 import { CsrfGuard } from './common/guards/csrf.guard';
 import { ExistsInDatabaseConstraint } from './common/validators/exists-in-database.validator';
-import { SeedModule } from './seed/seed.module';
+import { SeedModule } from './seed-data/seed.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { ScheduleModule } from './schedule/schedule.module';

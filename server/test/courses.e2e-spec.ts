@@ -10,7 +10,7 @@ import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { CourseAssignmentDto, CourseDto } from '../src/courses/courses/dto';
-import { SeedService } from '../src/seed/seed.service';
+import { SeedService } from '../src/seed-data/seed.service';
 import { describeWithDb } from './e2e-db';
 
 const SET_UP_TIMEOUT = 60_000;

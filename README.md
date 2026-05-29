@@ -171,7 +171,7 @@
 - `refreshToken` — дія 7 днів, видається в окремій `HttpOnly` cookie з вужчим path `/api/auth`
 - Payload: `{ sub: userId, login, role }`
 - Browser clients не отримують токени в JSON і не зберігають їх у `localStorage`
-- Для unsafe HTTP-методів frontend додає signed CSRF token з cookie `campus_csrf_token` у header `X-CSRF-Token`
+- Для unsafe HTTP-методів frontend додає signed CSRF token з cookie `campus_csrf_token` у header `X-CSRF-Token`; підпис прив'язаний до окремої HttpOnly binding cookie
 - При невірних даних — відповідь без деталей
 - Заблокований акаунт — відмова до перевірки пароля
 - Password reset token генерується криптографічно безпечно, зберігається тільки як SHA-256 hash, має TTL і стає недійсним після використання
@@ -754,7 +754,7 @@ Student        (базовий доступ)
 - **Refresh token** — зберігається тільки в `HttpOnly` cookie, недоступній для JavaScript
 - **Cookie flags** — `HttpOnly`, `SameSite=Strict` за замовчуванням, `Secure=true` у production/HTTPS
 - **Token rotation** — refresh endpoint перевипускає access/refresh cookies і відкликає використаний refresh token
-- **CSRF** — signed double-submit token для unsafe методів (`POST`, `PUT`, `PATCH`, `DELETE`)
+- **CSRF** — signed double-submit token для unsafe методів (`POST`, `PUT`, `PATCH`, `DELETE`) з прив'язкою до HttpOnly binding cookie
 
 ### HTTP-безпека
 
@@ -770,7 +770,7 @@ Student        (базовий доступ)
 | ----------------------- | -------------------------------------------------------- |
 | SQL Injection           | Parameterized queries через Mongoose ODM                 |
 | XSS                     | `Content-Security-Policy`, React escaping                |
-| CSRF                    | `SameSite=Strict` cookie, signed `X-CSRF-Token`, CORS обмеження |
+| CSRF                    | `SameSite=Strict` cookie, signed `X-CSRF-Token`, HttpOnly binding cookie, CORS обмеження |
 | Brute Force             | Rate limiting на /auth/login та password reset endpoints |
 | Path Traversal          | Валідація file paths, заборона `../`                     |
 | Sensitive Data Exposure | Пароль ніколи не повертається в API-відповідях           |
@@ -1086,11 +1086,14 @@ AUTH_REFRESH_COOKIE_PATH=/api/auth
 AUTH_CSRF_SECRET=your-dedicated-csrf-secret-min-32-chars
 AUTH_CSRF_COOKIE_NAME=campus_csrf_token
 AUTH_CSRF_COOKIE_PATH=/
+AUTH_CSRF_BINDING_COOKIE_NAME=campus_csrf_binding
+AUTH_CSRF_BINDING_COOKIE_PATH=/api
 AUTH_CSRF_HEADER_NAME=x-csrf-token
 AUTH_COOKIE_SAMESITE=strict
 AUTH_COOKIE_SECURE=true
 PASSWORD_RESET_TTL_MINUTES=30
 PASSWORD_RESET_EXPOSE_TOKEN=false
+SWAGGER_ENABLED=false
 
 # БД [Phase 2]
 DATABASE_URL=mongodb://mongo:27017/campus
@@ -1256,10 +1259,13 @@ jobs:
 | `AUTH_REFRESH_COOKIE_PATH` | path refresh cookie (`/api/auth` за замовчуванням) |
 | `AUTH_COOKIE_SECURE` | `true` для HTTPS-середовищ, `false` лише для локального HTTP |
 | `AUTH_COOKIE_SAMESITE` | політика cookies: `strict` за замовчуванням, `lax`/`none` лише за потреби |
-| `AUTH_CSRF_SECRET` | окремий секрет для підпису CSRF token; якщо не заданий, використовується `JWT_SECRET` |
+| `AUTH_CSRF_SECRET` | окремий секрет для підпису CSRF token; обов'язковий у production |
 | `AUTH_CSRF_COOKIE_NAME` | назва readable cookie з signed CSRF token |
 | `AUTH_CSRF_COOKIE_PATH` | path readable CSRF cookie (`/` за замовчуванням) |
+| `AUTH_CSRF_BINDING_COOKIE_NAME` | назва HttpOnly binding cookie, до якої прив'язано CSRF token |
+| `AUTH_CSRF_BINDING_COOKIE_PATH` | path HttpOnly CSRF binding cookie (`/api` за замовчуванням) |
 | `AUTH_CSRF_HEADER_NAME` | header, який frontend надсилає для unsafe методів (`x-csrf-token`) |
+| `SWAGGER_ENABLED` | `true` для dev, `false`/unset у production; Swagger вимкнений у production за замовчуванням |
 
 ### Правила роботи із залежностями
 

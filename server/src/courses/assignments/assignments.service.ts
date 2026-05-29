@@ -28,6 +28,7 @@ import {
 } from '../../common/utils/transform.util';
 import { SubmissionDto } from '../submissions/dto';
 import { toId } from '../../common/utils/to-id.util';
+import { FilesService } from '../../files/files.service';
 
 type SubmissionLookup = {
   assignment: unknown;
@@ -43,6 +44,7 @@ export class AssignmentsService {
     @InjectModel(Submission.name)
     private submissionModel: Model<SubmissionDocument>,
     private coursesService: CoursesService,
+    private readonly filesService: FilesService,
   ) {}
 
   async findAssignments(
@@ -163,6 +165,8 @@ export class AssignmentsService {
     );
 
     const { fileIds, ...rest } = dto;
+    await this.filesService.assertFilesCanBeAttached(fileIds, userId, role);
+
     const assignment = new this.assignmentModel({
       ...rest,
       courseAssignment: new Types.ObjectId(courseAssignmentId),
@@ -196,6 +200,7 @@ export class AssignmentsService {
     Object.assign(assignment, rest);
 
     if (fileIds) {
+      await this.filesService.assertFilesCanBeAttached(fileIds, userId, role);
       assignment.files = fileIds.map(
         (fid) => new Types.ObjectId(fid),
       ) as unknown as typeof assignment.files;

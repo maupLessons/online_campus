@@ -20,6 +20,7 @@ import {
 import { toId } from '../../common/utils/to-id.util';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
+import { FilesService } from '../../files/files.service';
 
 @Injectable()
 export class MaterialsService {
@@ -28,6 +29,7 @@ export class MaterialsService {
     private materialModel: PaginateModel<MaterialDocument>,
     @InjectModel(CourseAssignment.name)
     private courseAssignmentModel: Model<CourseAssignmentDocument>,
+    private readonly filesService: FilesService,
   ) {}
 
   async findMaterials(
@@ -80,6 +82,8 @@ export class MaterialsService {
     await this.validateOwnership(courseAssignmentId, userId, role);
 
     const { fileIds, ...rest } = createMaterialDto;
+    await this.filesService.assertFilesCanBeAttached(fileIds, userId, role);
+
     const newMaterial = new this.materialModel({
       ...rest,
       courseAssignment: new Types.ObjectId(courseAssignmentId),
@@ -107,6 +111,7 @@ export class MaterialsService {
     const { fileIds, ...rest } = updateMaterialDto;
     const updateData: Record<string, unknown> = { ...rest };
     if (fileIds) {
+      await this.filesService.assertFilesCanBeAttached(fileIds, userId, role);
       updateData.files = fileIds.map((fid) => new Types.ObjectId(fid));
     }
 

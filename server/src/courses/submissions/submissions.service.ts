@@ -20,6 +20,8 @@ import {
 } from '../../common/utils/transform.util';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
+import { FilesService } from '../../files/files.service';
+import { Role } from '../../common/types/roles.enum';
 
 @Injectable()
 export class SubmissionsService {
@@ -29,6 +31,7 @@ export class SubmissionsService {
     @InjectModel(Assignment.name)
     private assignmentModel: Model<AssignmentDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly filesService: FilesService,
   ) {}
 
   async findSubmissions(
@@ -91,6 +94,12 @@ export class SubmissionsService {
     if (existing) {
       throw new ConflictException('Ви вже здали це завдання');
     }
+
+    await this.filesService.assertFilesCanBeAttached(
+      dto.fileIds,
+      studentId,
+      Role.STUDENT,
+    );
 
     const fileObjectIds = dto.fileIds.map((id) => new Types.ObjectId(id));
     const submission = new this.submissionModel({

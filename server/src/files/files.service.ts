@@ -246,6 +246,7 @@ export class FilesService {
         .exec();
 
       if (
+        role !== Role.STUDENT &&
         submittedAssignment &&
         (await this.canAccessCourseAssignment(
           toId(submittedAssignment.courseAssignment),

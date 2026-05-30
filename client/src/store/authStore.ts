@@ -3,6 +3,9 @@ import axios from 'axios';
 import api from '../services/api';
 import type { User } from '../types';
 
+const PUBLIC_AUTH_PATHS = ['/login', '/forgot-password', '/reset-password'];
+const CSRF_COOKIE_NAME = 'campus_csrf_token';
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -24,6 +27,41 @@ function clearLegacyAuthStorage() {
 
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
+}
+
+function isPublicAuthPage() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return PUBLIC_AUTH_PATHS.some((path) =>
+    window.location.pathname.startsWith(path),
+  );
+}
+
+function readCookie(name: string) {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const cookies = document.cookie.split(';');
+  for (const cookie of cookies) {
+    const separatorIndex = cookie.indexOf('=');
+    if (separatorIndex < 0) {
+      continue;
+    }
+
+    const cookieName = cookie.slice(0, separatorIndex).trim();
+    if (cookieName === name) {
+      return cookie.slice(separatorIndex + 1).trim();
+    }
+  }
+
+  return null;
+}
+
+function hasSessionHint() {
+  return Boolean(readCookie(CSRF_COOKIE_NAME));
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -129,6 +167,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   initializeAuth: async () => {
+    if (isPublicAuthPage() && !hasSessionHint()) {
+      clearLegacyAuthStorage();
+      set({
+        user: null,
+        isAuthenticated: false,
+        isAuthChecked: true,
+        error: null,
+        isLoading: false,
+      });
+      return;
+    }
+
     try {
       const { data } = await api.get('/auth/profile');
 

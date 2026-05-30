@@ -1095,13 +1095,25 @@ PASSWORD_RESET_TTL_MINUTES=30
 PASSWORD_RESET_EXPOSE_TOKEN=false
 SWAGGER_ENABLED=false
 
-# БД [Phase 2]
-DATABASE_URL=mongodb://mongo:27017/campus
+# MongoDB
+MONGO_ROOT_USERNAME=admin
+MONGO_ROOT_PASSWORD=your-strong-mongo-root-password
+MONGO_DATABASE=campus_db
+MONGO_HOST=mongodb
+MONGO_PORT=27017
+MONGO_RETRY_ATTEMPTS=20
+MONGO_RETRY_DELAY_MS=3000
+MONGO_SERVER_SELECTION_TIMEOUT_MS=5000
 
 # Production
 PORT=3000
 NODE_ENV=production
 ```
+
+У локальному `docker-compose.yml` MongoDB доступна backend-контейнеру через
+внутрішню Docker network (`mongodb:27017`) і не публікується на host-порт за
+замовчуванням. Це прибирає конфлікти з локально встановленою MongoDB або іншими
+проєктами, які вже займають `127.0.0.1:27017`.
 
 ### Production (VPS)
 

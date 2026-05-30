@@ -93,28 +93,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   loadProfile: async () => {
-    try {
-      const { data } = await api.get('/auth/profile');
+    const { data } = await api.get('/auth/profile');
 
-      set({
-        user: data,
-        isAuthenticated: true,
-        isAuthChecked: true,
-        error: null,
-      });
-    } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.status === 401) {
-        clearLegacyAuthStorage();
-        set({
-          user: null,
-          isAuthenticated: false,
-          isAuthChecked: true,
-          error: null,
-        });
-      }
-
-      throw err;
-    }
+    set({
+      user: data,
+      isAuthenticated: true,
+      isAuthChecked: true,
+      error: null,
+    });
   },
 
   changePassword: async (oldPassword: string, newPassword: string) => {

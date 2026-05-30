@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,7 +11,13 @@ import LanguageSwitcher from '../../components/LanguageSwitcher';
 export default function LoginPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { login: doLogin, isLoading, error } = useAuthStore();
+  const {
+    login: doLogin,
+    isAuthenticated,
+    isAuthChecked,
+    isLoading,
+    error,
+  } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
 
   const {
@@ -25,6 +31,12 @@ export default function LoginPage() {
       password: '',
     },
   });
+
+  useEffect(() => {
+    if (isAuthChecked && isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthChecked, isAuthenticated, navigate]);
 
   const onSubmit = async (values: LoginFormData) => {
     try {

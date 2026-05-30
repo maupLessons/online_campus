@@ -7,6 +7,7 @@ import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import { lazy, Suspense, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { useAuthStore } from './store/authStore';
+import { AUTH_SESSION_EXPIRED_EVENT } from './services/api';
 
 const DashboardPage = lazy(() => import('./pages/shared/DashboardPage'));
 const SchedulePage = lazy(() => import('./pages/shared/SchedulePage'));
@@ -45,10 +46,19 @@ function LazyPage({ children }: { children: ReactNode }) {
 
 export default function App() {
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
+  const expireSession = useAuthStore((state) => state.expireSession);
 
   useEffect(() => {
     initializeAuth();
   }, [initializeAuth]);
+
+  useEffect(() => {
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, expireSession);
+
+    return () => {
+      window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, expireSession);
+    };
+  }, [expireSession]);
 
   return (
     <BrowserRouter>

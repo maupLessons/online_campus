@@ -14,6 +14,7 @@ interface AuthState {
   loadProfile: () => Promise<void>;
   initializeAuth: () => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<string>;
+  expireSession: () => void;
 }
 
 function clearLegacyAuthStorage() {
@@ -31,6 +32,17 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: false,
   isAuthChecked: false,
   error: null,
+
+  expireSession: () => {
+    clearLegacyAuthStorage();
+    set({
+      user: null,
+      isAuthenticated: false,
+      isAuthChecked: true,
+      error: null,
+      isLoading: false,
+    });
+  },
 
   login: async (login: string, password: string) => {
     set({ isLoading: true, error: null });
@@ -81,13 +93,28 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   loadProfile: async () => {
-    const { data } = await api.get('/auth/profile');
+    try {
+      const { data } = await api.get('/auth/profile');
 
-    set({
-      user: data,
-      isAuthenticated: true,
-      isAuthChecked: true,
-    });
+      set({
+        user: data,
+        isAuthenticated: true,
+        isAuthChecked: true,
+        error: null,
+      });
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        clearLegacyAuthStorage();
+        set({
+          user: null,
+          isAuthenticated: false,
+          isAuthChecked: true,
+          error: null,
+        });
+      }
+
+      throw err;
+    }
   },
 
   changePassword: async (oldPassword: string, newPassword: string) => {

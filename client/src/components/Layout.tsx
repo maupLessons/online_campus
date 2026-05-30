@@ -64,7 +64,7 @@ export default function Layout() {
 
   useEffect(() => {
     if (!user && isAuthenticated) {
-      loadProfile();
+      void loadProfile().catch(() => undefined);
     }
   }, [user, isAuthenticated, loadProfile]);
 

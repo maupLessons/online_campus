@@ -5,7 +5,7 @@ import axios, {
 } from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL?.trim() || '/api',
   withCredentials: true,
 });
 
@@ -25,8 +25,10 @@ const LEGACY_TOKEN_KEYS = ['accessToken', 'refreshToken'];
 const CSRF_COOKIE_NAME = 'campus_csrf_token';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 const MUTATING_METHODS = new Set(['delete', 'patch', 'post', 'put']);
+export const AUTH_SESSION_EXPIRED_EVENT = 'campus:auth-session-expired';
 
 let refreshPromise: Promise<void> | null = null;
+let sessionExpirationHandled = false;
 
 function clearLegacyAuthStorage() {
   if (typeof window === 'undefined') {
@@ -88,15 +90,30 @@ function isAuthEndpoint(url?: string) {
   return AUTH_ENDPOINTS.some((endpoint) => path === endpoint);
 }
 
-function clearSessionAndRedirect() {
+function isAuthPage() {
+  return AUTH_PAGES.some((page) => window.location.pathname.startsWith(page));
+}
+
+function resetSessionExpirationHandling() {
+  sessionExpirationHandled = false;
+}
+
+function expireSession() {
   clearLegacyAuthStorage();
 
   if (typeof window === 'undefined') {
     return;
   }
 
-  if (!AUTH_PAGES.some((page) => window.location.pathname.startsWith(page))) {
-    window.location.href = '/login';
+  if (sessionExpirationHandled) {
+    return;
+  }
+
+  sessionExpirationHandled = true;
+  window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
+
+  if (!isAuthPage()) {
+    window.location.replace('/login');
   }
 }
 
@@ -128,9 +145,22 @@ api.interceptors.request.use((config) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const path = getRequestPath(response.config.url);
+    if (path === '/auth/login' || path === '/auth/refresh') {
+      resetSessionExpirationHandling();
+    }
+
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as RetriableRequestConfig | undefined;
+    const requestPath = getRequestPath(originalRequest?.url);
+
+    if (error.response?.status === 401 && requestPath === '/auth/refresh') {
+      expireSession();
+      return Promise.reject(error);
+    }
 
     if (
       error.response?.status === 401 &&
@@ -144,7 +174,7 @@ api.interceptors.response.use(
         await refreshSession();
         return api(originalRequest);
       } catch {
-        clearSessionAndRedirect();
+        expireSession();
       }
     }
 

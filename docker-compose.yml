@@ -23,10 +23,7 @@ services:
       - campus
 
   client:
-    build:
-      context: ./client
-      args:
-        - VITE_API_URL=/api
+    build: ./client
     restart: unless-stopped
     ports:
       - '5173:80'

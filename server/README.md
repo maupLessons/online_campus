@@ -50,8 +50,11 @@ $ npm run start:prod
 # unit tests
 $ npm run test
 
-# e2e tests
+# e2e smoke tests
 $ npm run test:e2e
+
+# DB-backed e2e tests (requires Docker/Testcontainers)
+$ npm run test:e2e:db
 
 # test coverage
 $ npm run test:cov

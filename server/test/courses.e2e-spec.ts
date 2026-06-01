@@ -1,22 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { Connection, Types } from 'mongoose';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { CourseAssignmentDto, CourseDto } from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed-data/seed.service';
-import { describeWithDb } from './e2e-db';
+import { configureApp } from '../src/app.config';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describeWithDb('Courses (e2e)', () => {
-  let app: INestApplication<App>;
+describe('Courses (e2e)', () => {
+  let app: NestExpressApplication;
   let container: StartedTestContainer;
   let connection: Connection;
   let jwtService: JwtService;
@@ -38,8 +37,8 @@ describeWithDb('Courses (e2e)', () => {
       .useValue({ onModuleInit: jest.fn() })
       .compile();
 
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    configureApp(app, { swaggerEnabled: false });
     await app.init();
 
     connection = app.get(getConnectionToken());
@@ -121,7 +120,7 @@ describeWithDb('Courses (e2e)', () => {
     it('should return paginated courses (200)', async () => {
       const { accessToken } = await setupData();
       const response = await request(app.getHttpServer())
-        .get('/courses')
+        .get('/api/courses')
         .set('Authorization', `Bearer ${accessToken}`)
         .query({ page: 1, limit: 10 })
         .expect(200);
@@ -138,7 +137,7 @@ describeWithDb('Courses (e2e)', () => {
     it('should return paginated student courses (200)', async () => {
       const { accessToken } = await setupData();
       const response = await request(app.getHttpServer())
-        .get('/courses/my')
+        .get('/api/courses/my')
         .set('Authorization', `Bearer ${accessToken}`)
         .query({ page: 1, limit: 10 })
         .expect(200);
@@ -155,7 +154,7 @@ describeWithDb('Courses (e2e)', () => {
     it('should return course by id (200)', async () => {
       const { accessToken, courseId } = await setupData();
       const response = await request(app.getHttpServer())
-        .get(`/courses/${courseId.toHexString()}`)
+        .get(`/api/courses/${courseId.toHexString()}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
@@ -168,7 +167,7 @@ describeWithDb('Courses (e2e)', () => {
       const { accessToken } = await setupData();
       const fakeId = new Types.ObjectId().toHexString();
       await request(app.getHttpServer())
-        .get(`/courses/${fakeId}`)
+        .get(`/api/courses/${fakeId}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(404);
     });
@@ -178,7 +177,9 @@ describeWithDb('Courses (e2e)', () => {
     it('should return course assignment details (200)', async () => {
       const { accessToken, courseAssignmentId } = await setupData();
       const response = await request(app.getHttpServer())
-        .get(`/courses/course-assignments/${courseAssignmentId.toHexString()}`)
+        .get(
+          `/api/courses/course-assignments/${courseAssignmentId.toHexString()}`,
+        )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 

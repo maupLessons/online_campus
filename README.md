@@ -871,7 +871,7 @@ online_campus/
 │   ├── package.json
 │   ├── package-lock.json
 │   ├── tsconfig.json
-│   ├── test/                  # e2e specs
+│   ├── test/                  # e2e smoke + DB-backed specs
 │   └── src/
 │       ├── main.ts
 │       ├── app.module.ts
@@ -1171,8 +1171,8 @@ jobs:
   repository:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -1185,8 +1185,8 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -1204,8 +1204,8 @@ jobs:
       run:
         working-directory: client
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -1217,6 +1217,8 @@ jobs:
 ```
 
 `npm ci` є обов'язковим для CI та deployment-перевірок: він встановлює залежності строго з `package-lock.json` і падає, якщо `package.json` та lockfile не синхронізовані. Root `package.json` використовується тільки для репозиторних інструментів, зокрема Husky.
+
+Backend `npm run test:e2e` запускає швидкі smoke-перевірки без MongoDB, щоб CI мав детермінований e2e-сигнал. Повний DB-backed набір із Testcontainers запускається окремо командою `npm run test:e2e:db` у `server/` і потребує доступного Docker daemon.
 
 ### Deploy workflow (`.github/workflows/deploy.yml`)
 

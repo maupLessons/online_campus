@@ -1,0 +1,16 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": ".",
+  "testEnvironment": "node",
+  "testMatch": [
+    "<rootDir>/app.e2e-spec.ts",
+    "<rootDir>/assignments.e2e-spec.ts",
+    "<rootDir>/courses.e2e-spec.ts",
+    "<rootDir>/grades.e2e-spec.ts",
+    "<rootDir>/materials.e2e-spec.ts"
+  ],
+  "detectOpenHandles": true,
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  }
+}

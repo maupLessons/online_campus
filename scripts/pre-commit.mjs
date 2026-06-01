@@ -18,6 +18,17 @@ const packagePairs = [
   },
 ];
 
+const LOCKFILE_RELEVANT_FIELDS = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+  'bundleDependencies',
+  'bundledDependencies',
+  'overrides',
+  'workspaces',
+];
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     stdio: options.capture ? 'pipe' : 'inherit',
@@ -39,6 +50,22 @@ function run(command, args, options = {}) {
   }
 
   return result.stdout ?? '';
+}
+
+function readJsonFromGit(ref) {
+  const content = run('git', ['show', ref], { capture: true });
+  return JSON.parse(content);
+}
+
+function hasLockfileRelevantManifestChange(manifest) {
+  const stagedManifest = readJsonFromGit(`:${manifest}`);
+  const headManifest = readJsonFromGit(`HEAD:${manifest}`);
+
+  return LOCKFILE_RELEVANT_FIELDS.some(
+    (field) =>
+      JSON.stringify(stagedManifest[field] ?? null) !==
+      JSON.stringify(headManifest[field] ?? null),
+  );
 }
 
 function runNpm(args) {
@@ -70,7 +97,9 @@ if (stagedFiles.length === 0) {
 const stagedFileSet = new Set(stagedFiles);
 const missingLockfiles = packagePairs.filter(
   ({ manifest, lockfile }) =>
-    stagedFileSet.has(manifest) && !stagedFileSet.has(lockfile),
+    stagedFileSet.has(manifest) &&
+    hasLockfileRelevantManifestChange(manifest) &&
+    !stagedFileSet.has(lockfile),
 );
 
 if (missingLockfiles.length > 0) {

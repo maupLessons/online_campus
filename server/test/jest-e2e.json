@@ -2,7 +2,8 @@
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",
-  "testRegex": ".e2e-spec.ts$",
+  "testMatch": ["<rootDir>/smoke.e2e-spec.ts"],
+  "detectOpenHandles": true,
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   }

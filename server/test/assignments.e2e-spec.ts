@@ -1,24 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { Connection, Types } from 'mongoose';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { SeedService } from '../src/seed-data/seed.service';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { AssignmentDto } from '../src/courses/assignments/dto';
 import { SubmissionDto } from '../src/courses/submissions/dto';
-import { describeWithDb } from './e2e-db';
+import { configureApp } from '../src/app.config';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describeWithDb('Assignments (e2e)', () => {
-  let app: INestApplication<App>;
+describe('Assignments (e2e)', () => {
+  let app: NestExpressApplication;
   let container: StartedTestContainer;
   let connection: Connection;
   let jwtService: JwtService;
@@ -47,8 +46,8 @@ describeWithDb('Assignments (e2e)', () => {
       })
       .compile();
 
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    configureApp(app, { swaggerEnabled: false });
     await app.init();
 
     connection = app.get(getConnectionToken());
@@ -154,7 +153,7 @@ describeWithDb('Assignments (e2e)', () => {
     it('should return assignments for course (200)', async () => {
       const { courseAssignmentId, teacherToken } = await setupAssignments();
       await request(app.getHttpServer())
-        .get(`/courses/${courseAssignmentId.toHexString()}/assignments`)
+        .get(`/api/courses/${courseAssignmentId.toHexString()}/assignments`)
         .set('Authorization', `Bearer ${teacherToken}`)
         .expect(200);
     });
@@ -186,7 +185,7 @@ describeWithDb('Assignments (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .get(`/courses/${courseAssignmentId.toHexString()}/assignments`)
+        .get(`/api/courses/${courseAssignmentId.toHexString()}/assignments`)
         .set('Authorization', `Bearer ${studentToken}`)
         .expect(200);
 
@@ -223,7 +222,7 @@ describeWithDb('Assignments (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .get(`/courses/assignments/${assignmentId.toHexString()}`)
+        .get(`/api/courses/assignments/${assignmentId.toHexString()}`)
         .set('Authorization', `Bearer ${teacherToken}`)
         .expect(200);
 
@@ -259,7 +258,7 @@ describeWithDb('Assignments (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .get(`/courses/assignments/${assignmentId.toHexString()}`)
+        .get(`/api/courses/assignments/${assignmentId.toHexString()}`)
         .set('Authorization', `Bearer ${studentToken}`)
         .expect(200);
 
@@ -272,7 +271,7 @@ describeWithDb('Assignments (e2e)', () => {
     it('should return 404 for non-existent assignment', async () => {
       const { teacherToken } = await setupAssignments();
       await request(app.getHttpServer())
-        .get(`/courses/assignments/${new Types.ObjectId().toHexString()}`)
+        .get(`/api/courses/assignments/${new Types.ObjectId().toHexString()}`)
         .set('Authorization', `Bearer ${teacherToken}`)
         .expect(404);
     });
@@ -282,7 +281,7 @@ describeWithDb('Assignments (e2e)', () => {
     it('should create an assignment (201)', async () => {
       const { courseAssignmentId, teacherToken } = await setupAssignments();
       const response = await request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/assignments`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/assignments`)
         .set('Authorization', `Bearer ${teacherToken}`)
         .send({
           title: 'E2E Assignment',
@@ -301,7 +300,7 @@ describeWithDb('Assignments (e2e)', () => {
     it('should fail for student (403)', async () => {
       const { courseAssignmentId, studentToken } = await setupAssignments();
       await request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/assignments`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/assignments`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({ title: 'Forbidden' })
         .expect(403);
@@ -328,7 +327,7 @@ describeWithDb('Assignments (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .get('/courses/assignments/my')
+        .get('/api/courses/assignments/my')
         .set('Authorization', `Bearer ${studentToken}`)
         .expect(200);
 
@@ -362,10 +361,10 @@ describeWithDb('Assignments (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .post(`/courses/assignments/${assignmentId.toHexString()}/submit`)
+        .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({
-          fileIds: [new Types.ObjectId().toHexString()],
+          fileIds: [],
         })
         .expect(201);
 
@@ -392,19 +391,19 @@ describeWithDb('Assignments (e2e)', () => {
 
       // First submission
       await request(app.getHttpServer())
-        .post(`/courses/assignments/${assignmentId.toHexString()}/submit`)
+        .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({
-          fileIds: [new Types.ObjectId().toHexString()],
+          fileIds: [],
         })
         .expect(201);
 
       // Second submission
       await request(app.getHttpServer())
-        .post(`/courses/assignments/${assignmentId.toHexString()}/submit`)
+        .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({
-          fileIds: [new Types.ObjectId().toHexString()],
+          fileIds: [],
         })
         .expect(409);
     });
@@ -449,10 +448,10 @@ describeWithDb('Assignments (e2e)', () => {
       });
 
       await request(app.getHttpServer())
-        .post(`/courses/assignments/${assignmentId.toHexString()}/submit`)
+        .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${otherStudentToken}`)
         .send({
-          fileIds: [new Types.ObjectId().toHexString()],
+          fileIds: [],
         })
         .expect(403);
     });
@@ -489,7 +488,7 @@ describeWithDb('Assignments (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .post(`/courses/submissions/${submissionId.toHexString()}/grade`)
+        .post(`/api/courses/submissions/${submissionId.toHexString()}/grade`)
         .set('Authorization', `Bearer ${teacherToken}`)
         .send({
           score: 95,

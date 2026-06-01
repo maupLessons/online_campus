@@ -1,25 +1,24 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { Connection, Types } from 'mongoose';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { GradeResponseDto } from '../src/courses/grades/dto';
 import { StudentCourseResponseDto } from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed-data/seed.service';
-import { describeWithDb } from './e2e-db';
+import { configureApp } from '../src/app.config';
 
 process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describeWithDb('Grades (e2e)', () => {
-  let app: INestApplication<App>;
+describe('Grades (e2e)', () => {
+  let app: NestExpressApplication;
   let container: StartedTestContainer;
   let connection: Connection;
   let jwtService: JwtService;
@@ -40,8 +39,8 @@ describeWithDb('Grades (e2e)', () => {
       .useValue({ onModuleInit: jest.fn() })
       .compile();
 
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    configureApp(app, { swaggerEnabled: false });
     await app.init();
 
     connection = app.get(getConnectionToken());
@@ -137,7 +136,7 @@ describeWithDb('Grades (e2e)', () => {
     it('should return paginated list of courses with grades (200)', async () => {
       const { accessToken, courseAssignmentId } = await setupGrades();
       const response = await request(app.getHttpServer())
-        .get('/courses/grades/my/courses')
+        .get('/api/courses/grades/my/courses')
         .query({ page: 1, limit: 10 })
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
@@ -159,7 +158,9 @@ describeWithDb('Grades (e2e)', () => {
     it('should return paginated grades for a specific course (200)', async () => {
       const { accessToken, courseAssignmentId } = await setupGrades();
       const response = await request(app.getHttpServer())
-        .get(`/courses/grades/my/courses/${courseAssignmentId.toHexString()}`)
+        .get(
+          `/api/courses/grades/my/courses/${courseAssignmentId.toHexString()}`,
+        )
         .query({ page: 1, limit: 10 })
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
@@ -174,7 +175,9 @@ describeWithDb('Grades (e2e)', () => {
     it('should fail if unauthorized (401)', async () => {
       const { courseAssignmentId } = await setupGrades();
       return request(app.getHttpServer())
-        .get(`/courses/grades/my/courses/${courseAssignmentId.toHexString()}`)
+        .get(
+          `/api/courses/grades/my/courses/${courseAssignmentId.toHexString()}`,
+        )
         .expect(401);
     });
   });
@@ -185,7 +188,7 @@ describeWithDb('Grades (e2e)', () => {
         await setupGrades();
       await request(app.getHttpServer())
         .get(
-          `/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`,
+          `/api/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`,
         )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
@@ -212,7 +215,7 @@ describeWithDb('Grades (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .get(
-          `/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`,
+          `/api/courses/${courseAssignmentId.toHexString()}/grades/student/${studentId.toHexString()}`,
         )
         .set('Authorization', `Bearer ${teacherToken}`)
         .expect(200);
@@ -226,7 +229,7 @@ describeWithDb('Grades (e2e)', () => {
       const otherStudentId = new Types.ObjectId();
       return request(app.getHttpServer())
         .get(
-          `/courses/${courseAssignmentId.toHexString()}/grades/student/${otherStudentId.toHexString()}`,
+          `/api/courses/${courseAssignmentId.toHexString()}/grades/student/${otherStudentId.toHexString()}`,
         )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(403);
@@ -254,7 +257,7 @@ describeWithDb('Grades (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .post('/courses/grades')
+        .post('/api/courses/grades')
         .set('Authorization', `Bearer ${adminToken}`)
         .send({
           studentId: studentId.toHexString(),
@@ -299,7 +302,7 @@ describeWithDb('Grades (e2e)', () => {
       });
 
       const response = await request(app.getHttpServer())
-        .patch(`/courses/grades/${gid.toHexString()}`)
+        .patch(`/api/courses/grades/${gid.toHexString()}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ value: 12 })
         .expect(200);
@@ -338,7 +341,7 @@ describeWithDb('Grades (e2e)', () => {
       });
 
       await request(app.getHttpServer())
-        .delete(`/courses/grades/${gid.toHexString()}`)
+        .delete(`/api/courses/grades/${gid.toHexString()}`)
         .set('Authorization', `Bearer ${adminToken}`)
         .expect(200);
 

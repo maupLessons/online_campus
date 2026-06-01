@@ -1,16 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module';
 import { SeedService } from '../src/seed-data/seed.service';
-import { describeWithDb } from './e2e-db';
+import { configureApp } from '../src/app.config';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describeWithDb('App (e2e)', () => {
-  let app: INestApplication<App>;
+describe('App (e2e)', () => {
+  let app: NestExpressApplication;
   let container: StartedTestContainer;
 
   beforeAll(async () => {
@@ -30,9 +29,8 @@ describeWithDb('App (e2e)', () => {
       .useValue({ onModuleInit: jest.fn() })
       .compile();
 
-    app = moduleFixture.createNestApplication();
-    app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    configureApp(app, { swaggerEnabled: false });
     await app.init();
   });
 

@@ -1,24 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
-import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { Connection, Types } from 'mongoose';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { MaterialDto } from '../src/courses/materials/dto';
 import { SeedService } from '../src/seed-data/seed.service';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
-import { describeWithDb } from './e2e-db';
+import { configureApp } from '../src/app.config';
 
 process.env.JWT_SECRET = 'test-secret-key-for-e2e-testing';
 
 const SET_UP_TIMEOUT = 60_000;
 
-describeWithDb('Materials (e2e)', () => {
-  let app: INestApplication<App>;
+describe('Materials (e2e)', () => {
+  let app: NestExpressApplication;
   let container: StartedTestContainer;
   let connection: Connection;
   let jwtService: JwtService;
@@ -39,8 +38,8 @@ describeWithDb('Materials (e2e)', () => {
       .useValue({ onModuleInit: jest.fn() })
       .compile();
 
-    app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ transform: true }));
+    app = moduleFixture.createNestApplication<NestExpressApplication>();
+    configureApp(app, { swaggerEnabled: false });
     await app.init();
 
     connection = app.get(getConnectionToken());
@@ -105,7 +104,7 @@ describeWithDb('Materials (e2e)', () => {
     it('should create a material (201)', async () => {
       const { courseAssignmentId, accessToken } = await setupMaterials();
       const response = await request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
           title: 'E2E Test Material',
@@ -122,7 +121,7 @@ describeWithDb('Materials (e2e)', () => {
     it('should fail if unauthorized (401)', async () => {
       const { courseAssignmentId } = await setupMaterials();
       return request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .send({
           title: 'Unauthorized Material',
         })
@@ -151,7 +150,7 @@ describeWithDb('Materials (e2e)', () => {
       });
 
       return request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${otherUserToken}`)
         .send({
           title: 'Forbidden Material',
@@ -165,7 +164,7 @@ describeWithDb('Materials (e2e)', () => {
       const { courseAssignmentId, accessToken } = await setupMaterials();
       // First create a material so there is something to GET
       const createRes = await request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
           title: 'Get Test Material',
@@ -176,7 +175,7 @@ describeWithDb('Materials (e2e)', () => {
       const materialId = (createRes.body as MaterialDto).id;
 
       const response = await request(app.getHttpServer())
-        .get(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .get(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
@@ -191,7 +190,7 @@ describeWithDb('Materials (e2e)', () => {
     it('should update material (200)', async () => {
       const { courseAssignmentId, accessToken } = await setupMaterials();
       const createRes = await request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
           title: 'Before Update',
@@ -203,7 +202,7 @@ describeWithDb('Materials (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .put(
-          `/courses/${courseAssignmentId.toHexString()}/materials/${materialId}`,
+          `/api/courses/${courseAssignmentId.toHexString()}/materials/${materialId}`,
         )
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
@@ -219,7 +218,9 @@ describeWithDb('Materials (e2e)', () => {
       const { courseAssignmentId, accessToken } = await setupMaterials();
       const fakeId = new Types.ObjectId().toHexString();
       return request(app.getHttpServer())
-        .put(`/courses/${courseAssignmentId.toHexString()}/materials/${fakeId}`)
+        .put(
+          `/api/courses/${courseAssignmentId.toHexString()}/materials/${fakeId}`,
+        )
         .set('Authorization', `Bearer ${accessToken}`)
         .send({ title: 'New Title' })
         .expect(404);
@@ -230,7 +231,7 @@ describeWithDb('Materials (e2e)', () => {
     it('should delete material (200)', async () => {
       const { courseAssignmentId, accessToken } = await setupMaterials();
       const createRes = await request(app.getHttpServer())
-        .post(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
         .send({
           title: 'To Delete',
@@ -242,13 +243,13 @@ describeWithDb('Materials (e2e)', () => {
 
       await request(app.getHttpServer())
         .delete(
-          `/courses/${courseAssignmentId.toHexString()}/materials/${materialId}`,
+          `/api/courses/${courseAssignmentId.toHexString()}/materials/${materialId}`,
         )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
       const response = await request(app.getHttpServer())
-        .get(`/courses/${courseAssignmentId.toHexString()}/materials`)
+        .get(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 

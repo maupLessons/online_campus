@@ -1,4 +1,5 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   UserSeeder,
   FacultySeeder,
@@ -19,6 +20,7 @@ export class SeedService implements OnModuleInit {
   private readonly logger = new Logger(SeedService.name);
 
   constructor(
+    private readonly configService: ConfigService,
     private readonly userSeeder: UserSeeder,
     private readonly facultySeeder: FacultySeeder,
     private readonly departmentSeeder: DepartmentSeeder,
@@ -34,6 +36,20 @@ export class SeedService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
+    if (!this.isDemoSeedEnabled()) {
+      this.logger.log(
+        'Demo database seeding is disabled. Set SEED_DEMO_DATA=true only for local development fixtures.',
+      );
+      return;
+    }
+
+    if (this.isProduction() && !this.isProductionDemoSeedAllowed()) {
+      this.logger.warn(
+        'Demo database seeding was requested in production and blocked. Set SEED_DEMO_DATA_IN_PRODUCTION=true only for disposable demo environments.',
+      );
+      return;
+    }
+
     this.logger.log('Checking database for seeding...');
     await this.seed();
   }
@@ -58,6 +74,25 @@ export class SeedService implements OnModuleInit {
       this.logger.log('Seeding process completed.');
     } catch (error) {
       this.logger.error('Error during seeding:', error);
+      throw error;
     }
   }
+
+  private isDemoSeedEnabled(): boolean {
+    return isTruthy(this.configService.get<string>('SEED_DEMO_DATA'));
+  }
+
+  private isProduction(): boolean {
+    return this.configService.get<string>('NODE_ENV') === 'production';
+  }
+
+  private isProductionDemoSeedAllowed(): boolean {
+    return isTruthy(
+      this.configService.get<string>('SEED_DEMO_DATA_IN_PRODUCTION'),
+    );
+  }
+}
+
+function isTruthy(value: string | undefined): boolean {
+  return ['1', 'true', 'yes'].includes((value ?? '').toLowerCase());
 }

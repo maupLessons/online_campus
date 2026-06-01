@@ -85,7 +85,7 @@
 │                                                          │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │                 DATA LAYER                        │   │
-│  │  In-Memory Mock → MongoDB (Mongoose) [Phase 2]      │   │
+│  │  MongoDB 7 + Mongoose ODM                         │   │
 │  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -99,7 +99,7 @@
 | **API Client**   | Axios-інстанс з cookie-based session interceptors       |
 | **Controller**   | NestJS controllers — прийом HTTP-запитів, валідація DTO |
 | **Service**      | Бізнес-логіка, оркестрація модулів                      |
-| **Data**         | Репозиторії / mock-дані / Mongoose ODM                  |
+| **Data**         | MongoDB collections через Mongoose ODM                  |
 
 ---
 
@@ -789,8 +789,9 @@ Student        (базовий доступ)
 
 ### База даних
 
-- Phase 1: In-memory mock data
-- Phase 2: MongoDB через Mongoose (одна зміна в data layer, бізнес-логіка не змінюється)
+- Phase 1: in-memory mock data — завершено як історичний MVP-етап
+- Phase 2: MongoDB через Mongoose — завершено для runtime-модулів
+- `server/src/common/mock-data` використовується тільки як fixture-source для контрольованих demo seeders, не як runtime data layer
 
 ### Нові типи сповіщень
 
@@ -821,14 +822,14 @@ Student        (базовий доступ)
 
 ### Фаза 2 — База даних + File Upload + Опитування
 
-| #   | Завдання                                            |
-| --- | --------------------------------------------------- |
-| 1   | MongoDB + Mongoose ODM замість mock-даних           |
-| 2   | Міграції схеми                                      |
-| 3   | FileModule — завантаження файлів (матеріали, здачі) |
-| 4   | CRUD для всіх довідників через UI                   |
-| 5   | **SurveysModule** — бекенд + фронтенд (повний цикл) |
-| 6   | Модуль відвідуваності                               |
+| #   | Завдання                                            | Статус       |
+| --- | --------------------------------------------------- | ------------ |
+| 1   | MongoDB + Mongoose ODM замість mock-даних           | ✅ Готово    |
+| 2   | Міграції схеми                                      | ⏳ У роботі  |
+| 3   | FileModule — завантаження файлів (матеріали, здачі) | ✅ Готово    |
+| 4   | CRUD для всіх довідників через UI                   | ⏳ У роботі  |
+| 5   | **SurveysModule** — бекенд + фронтенд (повний цикл) | ✅ Готово    |
+| 6   | Модуль відвідуваності                               | ⏳ Заплановано |
 
 ### Фаза 3 — Production Ready
 
@@ -976,7 +977,7 @@ online_campus/
 │       │   ├── audit-log.service.spec.ts
 │       │   └── audit.interceptor.ts
 │       │
-│       ├── seed/              # demo data seeders
+│       ├── seed-data/         # optional demo data seeders for local fixtures
 │       │   ├── seed.module.ts
 │       │   ├── seed.service.ts
 │       │   └── seeders/
@@ -988,7 +989,7 @@ online_campus/
 │           ├── types/
 │           ├── utils/
 │           ├── validators/
-│           └── mock-data/
+│           └── mock-data/     # seed fixtures only; not used by runtime services
 │
 └── client/                    # React Frontend
     ├── Dockerfile
@@ -1105,10 +1106,20 @@ MONGO_RETRY_ATTEMPTS=20
 MONGO_RETRY_DELAY_MS=3000
 MONGO_SERVER_SELECTION_TIMEOUT_MS=5000
 
+# Demo fixtures
+SEED_DEMO_DATA=false
+SEED_DEMO_DATA_IN_PRODUCTION=false
+
 # Production
 PORT=3000
 NODE_ENV=production
 ```
+
+Demo seeders копіюють fixture-дані з `server/src/common/mock-data` у MongoDB
+лише коли `SEED_DEMO_DATA=true`. У production seeders заблоковані за
+замовчуванням навіть із цим прапорцем; `SEED_DEMO_DATA_IN_PRODUCTION=true`
+дозволено тільки для одноразових demo-баз, бо fixture-користувачі мають відомий
+пароль.
 
 У локальному `docker-compose.yml` MongoDB доступна backend-контейнеру через
 внутрішню Docker network (`mongodb:27017`) і не публікується на host-порт за
@@ -1280,6 +1291,8 @@ jobs:
 | `AUTH_CSRF_BINDING_COOKIE_PATH` | path HttpOnly CSRF binding cookie (`/api` за замовчуванням) |
 | `AUTH_CSRF_HEADER_NAME` | header, який frontend надсилає для unsafe методів (`x-csrf-token`) |
 | `SWAGGER_ENABLED` | `true` для dev, `false`/unset у production; Swagger вимкнений у production за замовчуванням |
+| `SEED_DEMO_DATA` | optional; `true` тільки для локальних fixture-даних, `false`/unset для shared dev/prod |
+| `SEED_DEMO_DATA_IN_PRODUCTION` | emergency/demo-only override; не додавати у production secrets |
 
 ### Правила роботи із залежностями
 
@@ -1360,4 +1373,4 @@ mkdir -p /opt/online_campus && cd /opt/online_campus
 
 ---
 
-_Документ актуальний станом на травень 2026._
+_Документ актуальний станом на червень 2026._

@@ -42,3 +42,5 @@ export class Assignment {
 
 export const AssignmentSchema = SchemaFactory.createForClass(Assignment);
 AssignmentSchema.plugin(paginate);
+AssignmentSchema.index({ courseAssignment: 1, createdAt: -1 });
+AssignmentSchema.index({ group: 1, dueDate: 1 });

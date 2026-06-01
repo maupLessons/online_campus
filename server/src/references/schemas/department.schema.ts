@@ -4,7 +4,7 @@ import * as mongoose from 'mongoose';
 import { User } from '../../users/schemas';
 import { Faculty } from './faculty.schema';
 
-@Schema()
+@Schema({ timestamps: true })
 export class Department extends Document {
   @Prop({ required: true })
   name: string;
@@ -21,3 +21,7 @@ export class Department extends Document {
 }
 
 export const DepartmentSchema = SchemaFactory.createForClass(Department);
+
+DepartmentSchema.index({ faculty: 1 });
+DepartmentSchema.index({ head: 1 }, { sparse: true });
+DepartmentSchema.index({ faculty: 1, name: 1 }, { unique: true });

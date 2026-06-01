@@ -31,3 +31,10 @@ export const CourseAssignmentSchema =
   SchemaFactory.createForClass(CourseAssignment);
 
 CourseAssignmentSchema.plugin(paginate);
+CourseAssignmentSchema.index({ course: 1 });
+CourseAssignmentSchema.index({ group: 1, academicYear: 1, semester: 1 });
+CourseAssignmentSchema.index({ teacher: 1, academicYear: 1, semester: 1 });
+CourseAssignmentSchema.index(
+  { course: 1, group: 1, academicYear: 1, semester: 1 },
+  { unique: true },
+);

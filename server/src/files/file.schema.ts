@@ -22,3 +22,6 @@ export class File {
 }
 
 export const FileSchema = SchemaFactory.createForClass(File);
+
+FileSchema.index({ storagePath: 1 }, { unique: true });
+FileSchema.index({ uploadedBy: 1, createdAt: -1 });

@@ -36,3 +36,4 @@ export class Material {
 export const MaterialSchema = SchemaFactory.createForClass(Material);
 
 MaterialSchema.plugin(paginate);
+MaterialSchema.index({ courseAssignment: 1, publishDate: -1 });

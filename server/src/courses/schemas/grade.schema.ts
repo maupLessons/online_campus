@@ -38,3 +38,5 @@ export class Grade {
 
 export const GradeSchema = SchemaFactory.createForClass(Grade);
 GradeSchema.plugin(paginate);
+GradeSchema.index({ student: 1, courseAssignment: 1, date: -1 });
+GradeSchema.index({ courseAssignment: 1, type: 1, date: -1 });

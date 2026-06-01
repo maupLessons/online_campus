@@ -32,3 +32,4 @@ export class Course {
 export const CourseSchema = SchemaFactory.createForClass(Course);
 
 CourseSchema.plugin(paginate);
+CourseSchema.index({ department: 1, semester: 1 });

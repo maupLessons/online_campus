@@ -47,3 +47,6 @@ export class Submission {
 export const SubmissionSchema = SchemaFactory.createForClass(Submission);
 
 SubmissionSchema.plugin(paginate);
+SubmissionSchema.index({ assignment: 1, student: 1 }, { unique: true });
+SubmissionSchema.index({ student: 1, submittedAt: -1 });
+SubmissionSchema.index({ assignment: 1, status: 1, submittedAt: -1 });

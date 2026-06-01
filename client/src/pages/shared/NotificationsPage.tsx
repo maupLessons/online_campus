@@ -315,10 +315,10 @@ export default function NotificationsPage() {
           <button
             type="button"
             onClick={handleOpenCreateModal}
-            className="inline-flex min-h-9 w-auto max-w-full items-center justify-center gap-2 self-start rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium leading-tight text-slate-700 transition-colors hover:bg-gray-100 sm:self-auto"
+            className="inline-flex w-auto max-w-full items-center justify-center gap-2 self-start rounded-lg border border-gray-400 px-4 py-2 text-base font-normal leading-normal text-slate-900 transition-colors hover:bg-gray-200 sm:self-auto"
           >
             <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 whitespace-normal text-left">
+            <span className="min-w-0 whitespace-nowrap text-left">
               {t('notifications.create')}
             </span>
           </button>

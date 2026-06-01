@@ -4,7 +4,7 @@ import * as mongoose from 'mongoose';
 import { User } from '../../users/schemas';
 import { Specialty } from './specialty.schema';
 
-@Schema()
+@Schema({ timestamps: true })
 export class Group extends Document {
   @Prop({ required: true })
   code: string;
@@ -24,3 +24,7 @@ export class Group extends Document {
 }
 
 export const GroupSchema = SchemaFactory.createForClass(Group);
+
+GroupSchema.index({ code: 1 }, { unique: true });
+GroupSchema.index({ specialty: 1, course: 1 });
+GroupSchema.index({ curator: 1 }, { sparse: true });

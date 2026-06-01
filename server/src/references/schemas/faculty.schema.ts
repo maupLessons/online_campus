@@ -3,7 +3,7 @@ import { Document } from 'mongoose';
 import * as mongoose from 'mongoose';
 import { User } from '../../users/schemas';
 
-@Schema()
+@Schema({ timestamps: true })
 export class Faculty extends Document {
   @Prop({ required: true })
   name: string;
@@ -13,3 +13,6 @@ export class Faculty extends Document {
 }
 
 export const FacultySchema = SchemaFactory.createForClass(Faculty);
+
+FacultySchema.index({ name: 1 }, { unique: true });
+FacultySchema.index({ dean: 1 }, { sparse: true });

@@ -21,3 +21,6 @@ export class Classroom extends Document {
 }
 
 export const ClassroomSchema = SchemaFactory.createForClass(Classroom);
+
+ClassroomSchema.index({ building: 1, roomNumber: 1 }, { unique: true });
+ClassroomSchema.index({ type: 1 });

@@ -94,7 +94,13 @@ export class UsersController {
   }
 
   @Get('department/:departmentId')
-  @Roles(Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
+  @Roles(
+    Role.DEPARTMENT_HEAD,
+    Role.DEAN,
+    Role.RECTOR,
+    Role.PRESIDENT,
+    Role.ADMIN,
+  )
   getTeachersByDepartment(@Param('departmentId') departmentId: string) {
     return this.usersService.getTeachersByDepartment(departmentId);
   }

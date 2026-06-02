@@ -47,7 +47,15 @@ export class Notification {
 
   @Prop({
     type: String,
-    enum: ['survey', 'course', 'assignment', 'grade', 'schedule', 'system'],
+    enum: [
+      'survey',
+      'elective',
+      'course',
+      'assignment',
+      'grade',
+      'schedule',
+      'system',
+    ],
     default: null,
   })
   entityType?: string | null;

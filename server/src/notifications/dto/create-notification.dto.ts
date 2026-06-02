@@ -72,10 +72,26 @@ export class CreateNotificationDto {
   actionUrl?: string;
 
   @ApiPropertyOptional({
-    enum: ['survey', 'course', 'assignment', 'grade', 'schedule', 'system'],
+    enum: [
+      'survey',
+      'elective',
+      'course',
+      'assignment',
+      'grade',
+      'schedule',
+      'system',
+    ],
   })
   @IsOptional()
-  @IsIn(['survey', 'course', 'assignment', 'grade', 'schedule', 'system'])
+  @IsIn([
+    'survey',
+    'elective',
+    'course',
+    'assignment',
+    'grade',
+    'schedule',
+    'system',
+  ])
   entityType?: string;
 
   @ApiPropertyOptional()

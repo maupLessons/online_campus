@@ -14,6 +14,7 @@ import {
   Course,
   CourseAssignment,
   CourseAssignmentDocument,
+  CourseAssignmentSource,
   CourseDocument,
 } from '../schemas';
 import {
@@ -138,15 +139,27 @@ export class CoursesService {
       };
     }
 
+    const studentObjectId = new Types.ObjectId(studentId);
     const options = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
       populate: ['course', 'teacher'],
+      sort: { academicYear: -1, semester: -1, createdAt: -1 },
       lean: true,
     };
 
     const result = await this.courseAssignmentModel.paginate(
-      { group: user.studentProfile.group },
+      {
+        group: user.studentProfile.group,
+        $or: [
+          { source: { $exists: false } },
+          { source: CourseAssignmentSource.STANDARD },
+          {
+            source: CourseAssignmentSource.ELECTIVE,
+            enrolledStudents: studentObjectId,
+          },
+        ],
+      },
       options as any,
     );
 

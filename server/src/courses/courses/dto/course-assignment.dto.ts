@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Transform, Type } from 'class-transformer';
 import { UserMinimalDto } from '../../../users/dto/user.dto';
-import { CourseAssignment } from '../../schemas';
+import { CourseAssignment, CourseAssignmentSource } from '../../schemas';
 import { toId } from '../../../common/utils/to-id.util';
 
 export class CourseAssignmentDto {
@@ -47,4 +47,8 @@ export class CourseAssignmentDto {
   @ApiProperty()
   @Expose()
   semester: number;
+
+  @ApiProperty({ enum: CourseAssignmentSource, required: false })
+  @Expose()
+  source?: CourseAssignmentSource;
 }

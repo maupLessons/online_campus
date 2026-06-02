@@ -43,7 +43,7 @@
 │                    Кампус — єдина система                │
 │  Auth · Users · Schedule · Courses · Surveys            │
 │  Notifications · References · AuditLog                  │
-│  Elective disciplines [next]                            │
+│  Elective disciplines                                   │
 │                 Власна БД (MongoDB)                      │
 └─────────────────────────────────────────────────────────┘
                            │ optional link / future SSO

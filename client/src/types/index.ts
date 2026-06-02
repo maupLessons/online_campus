@@ -83,6 +83,7 @@ export interface CourseAssignment {
   courseName?: string;
   courseCode?: string;
   credits?: number;
+  source?: 'standard' | 'elective';
   teacherName?: string;
   teacher?: {
     id: string;
@@ -350,6 +351,136 @@ export interface SurveyResults {
   totalResponses: number;
   totalCompletions: number;
   questions: SurveyQuestionResult[];
+}
+
+export const ElectiveDisciplineStatus = {
+  DRAFT: 'draft',
+  ACTIVE: 'active',
+  ARCHIVED: 'archived',
+} as const;
+
+export type ElectiveDisciplineStatus =
+  (typeof ElectiveDisciplineStatus)[keyof typeof ElectiveDisciplineStatus];
+
+export const ElectivePeriodStatus = {
+  DRAFT: 'draft',
+  ACTIVE: 'active',
+  CLOSED: 'closed',
+  FINALIZED: 'finalized',
+} as const;
+
+export type ElectivePeriodStatus =
+  (typeof ElectivePeriodStatus)[keyof typeof ElectivePeriodStatus];
+
+export interface ReferenceView {
+  id: string;
+  name?: string;
+  code?: string;
+}
+
+export interface ElectiveDiscipline {
+  id: string;
+  code: string;
+  title: string;
+  description?: string;
+  department: ReferenceView;
+  teacher?: ReferenceView | null;
+  semester: number;
+  credits: number;
+  capacity: number;
+  enrolledCount: number;
+  availableSeats: number;
+  status: ElectiveDisciplineStatus;
+  createdBy: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ElectivePeriod {
+  id: string;
+  title: string;
+  academicYear: string;
+  semester: number;
+  startsAt: string;
+  endsAt: string;
+  status: ElectivePeriodStatus;
+  targetGroups: ReferenceView[];
+  requiredChoices: number;
+  createdBy: string;
+  publishedAt?: string;
+  closedAt?: string;
+  finalizedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ElectiveSelection {
+  id: string;
+  periodId: string;
+  discipline: ElectiveDiscipline;
+  student: ReferenceView;
+  group: ReferenceView;
+  selectedAt: string;
+  courseAssignmentId?: string;
+  finalizedAt?: string;
+}
+
+export interface ActiveElectivePeriod {
+  period: ElectivePeriod;
+  disciplines: ElectiveDiscipline[];
+  selections: ElectiveSelection[];
+  selectedCount: number;
+  remainingChoices: number;
+}
+
+export interface CreateElectiveDisciplineInput {
+  code: string;
+  title: string;
+  description?: string;
+  departmentId: string;
+  teacherId?: string;
+  semester: number;
+  credits: number;
+  capacity: number;
+}
+
+export interface CreateElectivePeriodInput {
+  title: string;
+  academicYear: string;
+  semester: number;
+  startsAt: string;
+  endsAt: string;
+  targetGroupIds: string[];
+  requiredChoices: number;
+}
+
+export interface ElectivePeriodResults {
+  period: ElectivePeriod;
+  totalSelections: number;
+  disciplines: Array<{
+    discipline: ElectiveDiscipline;
+    selectedCount: number;
+    capacity: number;
+    groups: Array<{ group: ReferenceView; selectedCount: number }>;
+    students: Array<{
+      id: string;
+      login?: string;
+      fullName: string;
+      group: ReferenceView;
+    }>;
+  }>;
+}
+
+export interface ElectivePeriodFinalization {
+  period: ElectivePeriod;
+  totalSelections: number;
+  courseAssignments: Array<{
+    id: string;
+    courseId: string;
+    disciplineId: string;
+    groupId: string;
+    studentCount: number;
+  }>;
 }
 
 export type AuditLogResult = 'success' | 'failure';

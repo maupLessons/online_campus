@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
+import RouteErrorBoundary from './components/RouteErrorBoundary';
 import LoginPage from './pages/auth/LoginPage';
 import { Role } from './types';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
@@ -31,6 +32,10 @@ const SurveyAdminPage = lazy(
 const SurveyResultsPage = lazy(
   () => import('./pages/surveys/SurveyResultsPage'),
 );
+const ElectivesPage = lazy(() => import('./pages/electives/ElectivesPage'));
+const ElectiveAdminPage = lazy(
+  () => import('./pages/electives/ElectiveAdminPage'),
+);
 
 function RouteLoader() {
   return (
@@ -41,7 +46,11 @@ function RouteLoader() {
 }
 
 function LazyPage({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<RouteLoader />}>{children}</Suspense>;
+  return (
+    <RouteErrorBoundary compact>
+      <Suspense fallback={<RouteLoader />}>{children}</Suspense>
+    </RouteErrorBoundary>
+  );
 }
 
 export default function App() {
@@ -62,27 +71,28 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ForgotPasswordPage />} />
+      <RouteErrorBoundary>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ForgotPasswordPage />} />
 
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout />
-            </ProtectedRoute>
-          }>
-          <Route index element={<Navigate to="/dashboard" replace />} />
           <Route
-            path="dashboard"
+            path="/"
             element={
-              <LazyPage>
-                <DashboardPage />
-              </LazyPage>
-            }
-          />
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="dashboard"
+              element={
+                <LazyPage>
+                  <DashboardPage />
+                </LazyPage>
+              }
+            />
           <Route
             path="schedule"
             element={
@@ -171,6 +181,33 @@ export default function App() {
             }
           />
           <Route
+            path="electives"
+            element={
+              <ProtectedRoute allowedRoles={[Role.STUDENT]}>
+                <LazyPage>
+                  <ElectivesPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="electives/admin"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  Role.ADMIN,
+                  Role.DEPARTMENT_HEAD,
+                  Role.DEAN,
+                  Role.RECTOR,
+                  Role.PRESIDENT,
+                ]}>
+                <LazyPage>
+                  <ElectiveAdminPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="notifications"
             element={
               <LazyPage>
@@ -216,8 +253,9 @@ export default function App() {
           />
         </Route>
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </RouteErrorBoundary>
     </BrowserRouter>
   );
 }

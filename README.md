@@ -31,7 +31,7 @@
 
 ### Призначення
 
-Система є **повністю автономною** — не залежить від жодних зовнішніх університетських систем і керує всіма даними самостійно: курсами, оцінками, розкладом, опитуваннями тощо.
+Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, розклад, курси, оцінки, опитування, сповіщення, довідники та аудит. Moodle не вбудовується в портал як внутрішній модуль і не дублюється функціонально; він залишається окремою потужною LMS-системою, до якої портал може надати лише зовнішній перехід або, за окремим рішенням, простий SSO-вхід.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -42,8 +42,14 @@
 ┌─────────────────────────────────────────────────────────┐
 │                    Кампус — єдина система                │
 │  Auth · Users · Schedule · Courses · Surveys            │
-│  Notifications · AuditLog · References                  │
+│  Notifications · References · AuditLog                  │
+│  Elective disciplines [next]                            │
 │                 Власна БД (MongoDB)                      │
+└─────────────────────────────────────────────────────────┘
+                           │ optional link / future SSO
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│              Moodle — зовнішня LMS, не частина порталу   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -53,6 +59,7 @@
 - Перегляд розкладу (день / тиждень / місяць) з перевіркою конфліктів
 - Управління навчальними матеріалами, завданнями та оцінками
 - **Система опитувань** — створення, проходження студентами та викладачами, аналіз результатів
+- **Вибіркові дисципліни** — наступний критичний модуль: вибір студентом із запропонованого переліку та фіксація результату в кабінеті
 - Система сповіщень: зміни розкладу, нові завдання, оголошення
 - Відновлення пароля через одноразовий reset token без розкриття існування акаунта
 - Повний RBAC з ієрархією ролей та аудит-логом дій
@@ -80,6 +87,7 @@
 │  │  AuthModule · UsersModule · ScheduleModule        │   │
 │  │  CoursesModule · SurveysModule                    │   │
 │  │  NotificationsModule · ReferencesModule           │   │
+│  │  ElectiveDisciplinesModule                         │   │
 │  │  AuditLogModule                                   │   │
 │  └──────────────────────────────────────────────────┘   │
 │                                                          │
@@ -231,7 +239,7 @@
 
 **Файли:** `src/courses/`
 
-**Відповідальність:** дисципліни, матеріали, завдання, здачі, оцінки — повністю власні, без зовнішніх інтеграцій.
+**Відповідальність:** дисципліни, матеріали, завдання, здачі, оцінки в межах порталу. За потреби курс може мати зовнішнє посилання на Moodle як окрему LMS, але без дублювання Moodle-функціоналу всередині порталу.
 
 **Ендпоінти та доступ:**
 
@@ -255,7 +263,7 @@
 
 ---
 
-### 4.5 SurveysModule _(нове)_
+### 4.5 SurveysModule
 
 **Файли:** `src/surveys/`
 
@@ -336,7 +344,101 @@ interface SurveyResponse {
 
 ---
 
-### 4.6 ReferencesModule
+### 4.6 ElectiveDisciplinesModule
+
+**Файли:** `src/elective-disciplines/`
+
+**Відповідальність:** вибір студентами вибіркових дисциплін із запропонованого переліку та фіксація результатів у кабінеті. Це окремий критичний портал-процес, який має зберігатися у MongoDB і не залежати від Moodle.
+
+**Сутності:**
+
+```typescript
+interface ElectiveDiscipline {
+  id: string;
+  code: string;
+  title: string;
+  description?: string;
+  department: { id: string; name?: string };
+  teacher?: { id: string; name?: string } | null;
+  semester: number;
+  credits: number;
+  capacity: number;
+  enrolledCount: number;
+  availableSeats: number;
+  status: "draft" | "active" | "archived";
+}
+
+interface ElectiveSelectionPeriod {
+  id: string;
+  title: string;
+  academicYear: string;
+  semester: number;
+  startsAt: string;
+  endsAt: string;
+  status: "draft" | "active" | "closed" | "finalized";
+  targetGroups: Array<{ id: string; code?: string }>;
+  requiredChoices: number;
+  finalizedAt?: string;
+}
+
+interface ElectiveSelection {
+  id: string;
+  periodId: string;
+  discipline: ElectiveDiscipline;
+  student: { id: string; name?: string };
+  group: { id: string; code?: string };
+  selectedAt: string;
+  courseAssignmentId?: string;
+  finalizedAt?: string;
+}
+```
+
+**Ендпоінти:**
+
+| Метод | Шлях | Доступ | Опис |
+| ----- | ---- | ------ | ---- |
+| GET | `/electives/active` | student | Доступні періоди та дисципліни для поточного студента |
+| GET | `/electives/my` | student | Мій поточний/історичний вибір |
+| POST | `/electives/periods/:periodId/select` | student | Зафіксувати вибір дисципліни |
+| DELETE | `/electives/periods/:periodId/selections/:selectionId` | student | Скасувати свій вибір у відкритому періоді |
+| GET | `/electives/disciplines` | admin, department_head, dean+ | Список дисциплін |
+| POST | `/electives/disciplines` | admin, department_head, dean+ | Створити дисципліну-чернетку |
+| PUT | `/electives/disciplines/:id` | admin, department_head, dean+ | Оновити дисципліну |
+| PATCH | `/electives/disciplines/:id/status` | admin, department_head, dean+ | Активувати або архівувати дисципліну |
+| GET | `/electives/periods` | admin, dean+ | Список періодів вибору |
+| POST | `/electives/periods` | admin, dean+ | Створити період вибору |
+| PUT | `/electives/periods/:id` | admin, dean+ | Оновити чернетку періоду |
+| PATCH | `/electives/periods/:id/status` | admin, dean+ | Відкрити або закрити період |
+| POST | `/electives/periods/:id/finalize` | admin, dean+ | Фіналізувати закритий період, створити навчальні курси та додати їх у `Мої дисципліни` вибраних студентів |
+| GET | `/electives/periods/:id/results` | admin, dean+ | Результати вибору |
+| GET | `/electives/periods/:id/results/export` | admin, dean+ | Експорт CSV |
+
+**Frontend routes:**
+
+| Шлях | Доступ | Опис |
+| ---- | ------ | ---- |
+| `/electives` | student | Активні періоди, доступні дисципліни, вибір/скасування |
+| `/electives/admin` | admin, department_head, dean, rector, president | Каталог дисциплін; періоди вибору та CSV export доступні admin/dean/rector/president |
+
+**Бізнес-правила:**
+
+- студент може обирати дисципліни тільки в активний період і тільки для своєї групи;
+- кількість виборів обмежується `requiredChoices`;
+- одна дисципліна не може бути вибрана двічі одним студентом у межах періоду;
+- ліміт місць контролюється атомарно на рівні MongoDB, щоб уникнути race condition;
+- керівник кафедри може керувати дисциплінами тільки своєї кафедри;
+- викладач дисципліни має бути активним користувачем і належати до кафедри цієї дисципліни;
+- після відкриття періоду студентам цільових груп створюються групові сповіщення;
+- після закриття періоду адміністратор/декан/ректор/президент фіналізує результати окремою дією;
+- фіналізація створює або оновлює `Course` та `CourseAssignment` з `source: "elective"` і `enrolledStudents`, тому вибіркова дисципліна зʼявляється у `Мої дисципліни` тільки у студентів, які її реально обрали;
+- для фіналізації кожна вибрана дисципліна повинна мати призначеного активного викладача;
+- після фіналізації студентам надсилаються персональні сповіщення з переходом у `/courses`;
+- кожен вибір і адміністративна дія проходить через захищені API та глобальний audit interceptor;
+- після закриття періоду результати та CSV-експорт доступні для деканату, ректора, президента та адміністратора.
+
+---
+
+### 4.7 ReferencesModule
 
 **Файли:** `src/references/`
 
@@ -357,7 +459,7 @@ interface SurveyResponse {
 
 ---
 
-### 4.7 NotificationsModule
+### 4.8 NotificationsModule
 
 **Файли:** `src/notifications/`
 
@@ -386,7 +488,7 @@ interface SurveyResponse {
 
 ---
 
-### 4.8 AuditLogModule
+### 4.9 AuditLogModule
 
 **Файли:** `src/audit-log/`
 
@@ -739,6 +841,8 @@ Student        (базовий доступ)
 | Проходження опитувань          | ✅      | ✅      | —          | —         | —    | —      | —         | —     |
 | Створення опитувань            | —       | —       | —          | —         | ✅   | ✅     | ✅        | ✅    |
 | Перегляд результатів опитувань | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
+| Вибір вибіркових дисциплін     | ✅      | —       | —          | —         | —    | —      | —         | —     |
+| Керування вибірковими дисциплінами | —   | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
 | Звіти по кафедрі               | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
 | Управління користувачами       | —       | —       | —          | —         | —    | —      | —         | ✅    |
 | Перегляд аудит-логу            | —       | —       | —          | —         | —    | —      | —         | ✅    |
@@ -829,7 +933,19 @@ Student        (базовий доступ)
 | 3   | FileModule — завантаження файлів (матеріали, здачі) | ✅ Готово    |
 | 4   | CRUD для всіх довідників через UI                   | ⏳ У роботі  |
 | 5   | **SurveysModule** — бекенд + фронтенд (повний цикл) | ✅ Готово    |
-| 6   | Модуль відвідуваності                               | ⏳ Заплановано |
+| 6   | **ElectiveDisciplinesModule — вибіркові дисципліни** | ✅ Готово    |
+| 7   | Модуль відвідуваності                               | ⏳ Заплановано |
+
+### ElectiveDisciplinesModule — реалізовано
+
+Модуль **вибіркових дисциплін** закриває бізнес-критичний процес вибору дисциплін через кабінет:
+
+- довідник запропонованих вибіркових дисциплін із кафедрою, семестром, кредитами, описом, викладачем і лімітом місць;
+- періоди вибору з датами старту/завершення та статусами draft/active/closed;
+- вибір студентом дисципліни через кабінет із перевіркою групи, дедлайнів, доступності та ліміту місць;
+- фіксація вибору в MongoDB з audit trail і забороною дублювання;
+- перегляд результатів для адміністратора, деканату та керівництва;
+- експорт результатів у CSV із групою кожного студента.
 
 ### Фаза 3 — Production Ready
 
@@ -941,6 +1057,14 @@ online_campus/
 │       │   ├── surveys.service.ts
 │       │   └── surveys.service.spec.ts
 │       │
+│       ├── elective-disciplines/ # elective catalog, periods, selections, results
+│       │   ├── dto/
+│       │   ├── schemas/
+│       │   ├── elective-disciplines.module.ts
+│       │   ├── elective-disciplines.controller.ts
+│       │   ├── elective-disciplines.service.ts
+│       │   └── elective-disciplines.service.spec.ts
+│       │
 │       ├── references/        # faculties, departments, groups, specialties, classrooms
 │       │   ├── dto/
 │       │   ├── schemas/
@@ -1003,7 +1127,9 @@ online_campus/
         ├── types/index.ts
         ├── services/
         │   ├── api.ts
-        │   └── surveysApi.ts
+        │   ├── notificationsApi.ts
+        │   ├── surveysApi.ts
+        │   └── electivesApi.ts
         ├── store/
         │   ├── authStore.ts
         │   └── notificationsStore.ts
@@ -1022,7 +1148,7 @@ online_campus/
             │   ├── DashboardPage.tsx
             │   ├── SchedulePage.tsx
             │   ├── NotificationsPage.tsx
-            │   └── NewsPage.tsx
+            │   └── ProfilePage.tsx
             │
             ├── student/
             │   ├── AssignmentsPage.tsx
@@ -1033,6 +1159,10 @@ online_campus/
             │   ├── SurveyPlayerPage.tsx
             │   ├── SurveyAdminPage.tsx
             │   └── SurveyResultsPage.tsx
+            │
+            ├── electives/
+            │   ├── ElectivesPage.tsx
+            │   └── ElectiveAdminPage.tsx
             │
             ├── admin/
             │   ├── UsersPage.tsx

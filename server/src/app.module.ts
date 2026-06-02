@@ -18,6 +18,7 @@ import { ReferencesModule } from './references/references.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FilesModule } from './files/files.module';
 import { SurveysModule } from './surveys/surveys.module';
+import { ElectiveDisciplinesModule } from './elective-disciplines/elective-disciplines.module';
 
 function readPositiveNumber(
   config: ConfigService,
@@ -76,6 +77,7 @@ function readPositiveNumber(
     AuditLogModule,
     FilesModule,
     SurveysModule,
+    ElectiveDisciplinesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CsrfGuard },

@@ -20,6 +20,11 @@ function CourseCard({ ca, t }: { ca: CourseAssignment; t: (key: string) => strin
         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-medium">
           {ca.courseCode}
         </span>
+        {ca.source === 'elective' && (
+          <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded font-medium">
+            {t('courses.elective')}
+          </span>
+        )}
         {ca.credits && (
           <span className="text-xs text-gray-400">
             {ca.credits} {t('courses.credits')}

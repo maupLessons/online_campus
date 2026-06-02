@@ -1,0 +1,215 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  Request,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles, RolesGuard } from '../auth/roles.guard';
+import { AuthenticatedRequest } from '../common/types/authenticated-request';
+import { Role } from '../common/types/roles.enum';
+import {
+  CreateElectiveDisciplineDto,
+  CreateElectivePeriodDto,
+  ElectiveDisciplineQueryDto,
+  ElectivePeriodQueryDto,
+  SelectElectiveDto,
+  SetElectiveDisciplineStatusDto,
+  SetElectivePeriodStatusDto,
+  UpdateElectiveDisciplineDto,
+  UpdateElectivePeriodDto,
+} from './dto';
+import { ElectiveDisciplinesService } from './elective-disciplines.service';
+
+const disciplineManagers = [
+  Role.ADMIN,
+  Role.DEPARTMENT_HEAD,
+  Role.DEAN,
+  Role.RECTOR,
+  Role.PRESIDENT,
+];
+
+const periodManagers = [Role.ADMIN, Role.DEAN, Role.RECTOR, Role.PRESIDENT];
+
+@ApiTags('elective-disciplines')
+@ApiBearerAuth()
+@Controller('electives')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class ElectiveDisciplinesController {
+  constructor(private readonly electivesService: ElectiveDisciplinesService) {}
+
+  @Get('active')
+  @Roles(Role.STUDENT)
+  @ApiOperation({ summary: 'List active elective periods for current student' })
+  findActive(@Request() req: AuthenticatedRequest) {
+    return this.electivesService.findActiveForStudent(req.user);
+  }
+
+  @Get('my')
+  @Roles(Role.STUDENT)
+  @ApiOperation({ summary: 'List current student elective selections' })
+  findMySelections(@Request() req: AuthenticatedRequest) {
+    return this.electivesService.findMySelections(req.user);
+  }
+
+  @Post('periods/:periodId/select')
+  @Roles(Role.STUDENT)
+  @ApiOperation({ summary: 'Select an elective discipline for a period' })
+  selectDiscipline(
+    @Param('periodId') periodId: string,
+    @Body() dto: SelectElectiveDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.selectDiscipline(periodId, dto, req.user);
+  }
+
+  @Delete('periods/:periodId/selections/:selectionId')
+  @Roles(Role.STUDENT)
+  @ApiOperation({ summary: 'Cancel current student elective selection' })
+  cancelSelection(
+    @Param('periodId') periodId: string,
+    @Param('selectionId') selectionId: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.cancelSelection(
+      periodId,
+      selectionId,
+      req.user,
+    );
+  }
+
+  @Post('disciplines')
+  @Roles(...disciplineManagers)
+  @ApiOperation({ summary: 'Create elective discipline draft' })
+  createDiscipline(
+    @Body() dto: CreateElectiveDisciplineDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.createDiscipline(dto, req.user);
+  }
+
+  @Get('disciplines')
+  @Roles(...disciplineManagers)
+  @ApiOperation({ summary: 'List elective disciplines for managers' })
+  listDisciplines(
+    @Query() query: ElectiveDisciplineQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.listDisciplines(query, req.user);
+  }
+
+  @Put('disciplines/:id')
+  @Roles(...disciplineManagers)
+  @ApiOperation({ summary: 'Update elective discipline' })
+  updateDiscipline(
+    @Param('id') id: string,
+    @Body() dto: UpdateElectiveDisciplineDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.updateDiscipline(id, dto, req.user);
+  }
+
+  @Patch('disciplines/:id/status')
+  @Roles(...disciplineManagers)
+  @ApiOperation({ summary: 'Change elective discipline status' })
+  setDisciplineStatus(
+    @Param('id') id: string,
+    @Body() dto: SetElectiveDisciplineStatusDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.setDisciplineStatus(id, dto, req.user);
+  }
+
+  @Post('periods')
+  @Roles(...periodManagers)
+  @ApiOperation({ summary: 'Create elective selection period draft' })
+  createPeriod(
+    @Body() dto: CreateElectivePeriodDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.createPeriod(dto, req.user);
+  }
+
+  @Get('periods')
+  @Roles(...periodManagers)
+  @ApiOperation({ summary: 'List elective selection periods for managers' })
+  listPeriods(
+    @Query() query: ElectivePeriodQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.listPeriods(query, req.user);
+  }
+
+  @Put('periods/:id')
+  @Roles(...periodManagers)
+  @ApiOperation({ summary: 'Update elective selection period draft' })
+  updatePeriod(
+    @Param('id') id: string,
+    @Body() dto: UpdateElectivePeriodDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.updatePeriod(id, dto, req.user);
+  }
+
+  @Patch('periods/:id/status')
+  @Roles(...periodManagers)
+  @ApiOperation({ summary: 'Change elective selection period status' })
+  setPeriodStatus(
+    @Param('id') id: string,
+    @Body() dto: SetElectivePeriodStatusDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.setPeriodStatus(id, dto, req.user);
+  }
+
+  @Post('periods/:id/finalize')
+  @Roles(...periodManagers)
+  @ApiOperation({
+    summary:
+      'Finalize elective period and create course assignments for selections',
+  })
+  finalizePeriod(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.electivesService.finalizePeriod(id, req.user);
+  }
+
+  @Get('periods/:id/results')
+  @Roles(...periodManagers)
+  @ApiOperation({ summary: 'Get elective selection period results' })
+  getResults(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
+    return this.electivesService.getPeriodResults(id, req.user);
+  }
+
+  @Get('periods/:id/results/export')
+  @Roles(...periodManagers)
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @ApiOperation({ summary: 'Export elective selection period results as CSV' })
+  async exportResults(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const csv = await this.electivesService.exportPeriodResultsCsv(
+      id,
+      req.user,
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="elective-period-${id}-results.csv"`,
+    );
+    return csv;
+  }
+}

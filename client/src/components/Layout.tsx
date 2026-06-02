@@ -42,6 +42,22 @@ const NAV_ITEMS: {
     roles: [Role.ADMIN, Role.DEAN, Role.RECTOR],
   },
   {
+    labelKey: 'nav.electives',
+    path: '/electives',
+    roles: [Role.STUDENT],
+  },
+  {
+    labelKey: 'nav.electiveAdmin',
+    path: '/electives/admin',
+    roles: [
+      Role.ADMIN,
+      Role.DEPARTMENT_HEAD,
+      Role.DEAN,
+      Role.RECTOR,
+      Role.PRESIDENT,
+    ],
+  },
+  {
     labelKey: 'nav.users',
     path: '/users',
     roles: [Role.ADMIN, Role.PRESIDENT, Role.RECTOR, Role.DEAN],
@@ -72,12 +88,10 @@ export default function Layout() {
     user ? item.roles.includes(user.role) : false,
   );
 
-  const handleLogout = () => {
-    void logout()
-      .catch(() => undefined)
-      .finally(() => {
-        navigate('/login');
-      });
+  const handleLogout = async () => {
+    setSidebarOpen(false);
+    await logout().catch(() => undefined);
+    navigate('/login', { replace: true });
   };
 
   const pageTitle = useMemo(() => {
@@ -87,6 +101,14 @@ export default function Layout() {
 
     if (location.pathname.startsWith('/surveys')) {
       return t('nav.surveys');
+    }
+
+    if (location.pathname.startsWith('/electives/admin')) {
+      return t('nav.electiveAdmin');
+    }
+
+    if (location.pathname.startsWith('/electives')) {
+      return t('nav.electives');
     }
 
     switch (location.pathname) {

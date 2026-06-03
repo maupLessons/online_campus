@@ -3,6 +3,7 @@ import { Document, Schema as MongooseSchema } from 'mongoose';
 import * as paginate from 'mongoose-paginate-v2';
 import { User } from '../../users/schemas';
 import { CourseAssignment } from './course-assignment.schema';
+import { LessonJournalEntry } from './lesson-journal-entry.schema';
 
 export type GradeDocument = Grade & Document;
 
@@ -19,6 +20,16 @@ export class Grade {
     required: true,
   })
   courseAssignment: CourseAssignment;
+
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: LessonJournalEntry.name,
+    default: null,
+  })
+  lessonJournalEntry?:
+    | LessonJournalEntry
+    | MongooseSchema.Types.ObjectId
+    | null;
 
   @Prop({ required: true, default: Date.now })
   date: Date;
@@ -40,3 +51,4 @@ export const GradeSchema = SchemaFactory.createForClass(Grade);
 GradeSchema.plugin(paginate);
 GradeSchema.index({ student: 1, courseAssignment: 1, date: -1 });
 GradeSchema.index({ courseAssignment: 1, type: 1, date: -1 });
+GradeSchema.index({ lessonJournalEntry: 1, student: 1, type: 1 });

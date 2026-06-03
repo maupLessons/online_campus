@@ -17,6 +17,11 @@ export class CourseAssignmentDto {
 
   @ApiProperty()
   @Expose()
+  @Transform(({ obj }: { obj: CourseAssignment }) => toId(obj.course))
+  courseId: string;
+
+  @ApiProperty()
+  @Expose()
   @Transform(({ obj }: { obj: CourseAssignment }) => obj.course?.code)
   courseCode: string;
 
@@ -30,10 +35,20 @@ export class CourseAssignmentDto {
   @Type(() => UserMinimalDto)
   teacher?: UserMinimalDto;
 
+  @ApiProperty()
+  @Expose()
+  @Transform(({ obj }: { obj: CourseAssignment }) => toId(obj.teacher))
+  teacherId: string;
+
   @ApiProperty({ required: false })
   @Expose()
   @Transform(({ obj }: { obj: CourseAssignment }) => obj.group?.code)
   groupCode?: string;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(({ obj }: { obj: CourseAssignment }) => toId(obj.group))
+  groupId: string;
 
   @ApiProperty({ required: false })
   @Expose()

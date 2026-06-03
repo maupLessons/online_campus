@@ -10,6 +10,7 @@ import { CourseAssignmentDto, CourseDto } from './dto';
 import { Role } from '../../common/types/roles.enum';
 import { toId } from '../../common/utils/to-id.util';
 import { User, UserDocument } from '../../users/schemas';
+import { UserDto } from '../../users/dto/user.dto';
 import {
   Course,
   CourseAssignment,
@@ -20,6 +21,7 @@ import {
 import {
   transformToPaginatedDto,
   transformToDto,
+  transformToDtoArray,
 } from '../../common/utils/transform.util';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
@@ -94,6 +96,39 @@ export class CoursesService {
       throw new NotFoundException('Призначення курсу не знайдено');
     }
     return transformToDto(CourseAssignmentDto, ca);
+  }
+
+  async findStudentsByCourseAssignment(
+    courseAssignmentId: string,
+    userId: string,
+    role: Role,
+  ): Promise<UserDto[]> {
+    const ca = await this.validateOwnership(courseAssignmentId, userId, role);
+    const filter: Record<string, unknown> = {
+      role: Role.STUDENT,
+      status: 'active',
+      'studentProfile.group': ca.group,
+    };
+
+    if (
+      ca.source === CourseAssignmentSource.ELECTIVE &&
+      ca.enrolledStudents.length > 0
+    ) {
+      filter._id = {
+        $in: ca.enrolledStudents
+          .map((student) => toId(student))
+          .filter((id) => Types.ObjectId.isValid(id))
+          .map((id) => new Types.ObjectId(id)),
+      };
+    }
+
+    const students = await this.userModel
+      .find(filter as never)
+      .sort({ lastName: 1, firstName: 1, middleName: 1 })
+      .lean()
+      .exec();
+
+    return transformToDtoArray(UserDto, students);
   }
 
   async findMy(

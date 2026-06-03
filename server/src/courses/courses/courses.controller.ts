@@ -11,6 +11,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard } from '../../auth/roles.guard';
 import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { CourseAssignmentDto, CourseDto } from './dto';
+import { UserDto } from '../../users/dto/user.dto';
 import { RequestWithUser } from '../../common/types/request-with-user.interface';
 import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -41,10 +42,14 @@ export class CoursesController {
     return this.coursesService.findMy(sub, role, paginationDto);
   }
 
-  @Get(':id')
-  @ApiResponse({ type: CourseDto })
-  async findOne(@Param('id') id: string): Promise<CourseDto> {
-    return this.coursesService.findCourseById(id);
+  @Get('course-assignments/:id/students')
+  @ApiResponse({ type: [UserDto] })
+  async findAssignmentStudents(
+    @Param('id') id: string,
+    @Request() req: RequestWithUser,
+  ): Promise<UserDto[]> {
+    const { sub, role } = req.user;
+    return this.coursesService.findStudentsByCourseAssignment(id, sub, role);
   }
 
   @Get('course-assignments/:id')
@@ -53,5 +58,11 @@ export class CoursesController {
     @Param('id') id: string,
   ): Promise<CourseAssignmentDto> {
     return this.coursesService.findCourseAssignmentById(id);
+  }
+
+  @Get(':id')
+  @ApiResponse({ type: CourseDto })
+  async findOne(@Param('id') id: string): Promise<CourseDto> {
+    return this.coursesService.findCourseById(id);
   }
 }

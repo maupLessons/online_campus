@@ -7,6 +7,20 @@ import { Group } from '../../references/schemas';
 
 export type AssignmentDocument = Assignment & Document;
 
+const ResourceLinkSchema = new MongooseSchema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 120 },
+    url: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 500,
+      match: /^https:\/\/[^\s<>"']+$/,
+    },
+  },
+  { _id: false },
+);
+
 @Schema({ timestamps: true })
 export class Assignment {
   _id: MongooseSchema.Types.ObjectId;
@@ -26,6 +40,12 @@ export class Assignment {
 
   @Prop({ required: true })
   description: string;
+
+  @Prop({ trim: true, maxlength: 3000, default: '' })
+  criteria?: string;
+
+  @Prop({ type: [ResourceLinkSchema], default: [] })
+  resourceLinks: Array<{ title: string; url: string }>;
 
   @Prop({
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'File' }],

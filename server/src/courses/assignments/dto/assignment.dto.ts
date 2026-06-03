@@ -4,6 +4,7 @@ import { FileDto } from '../../../files/dto/file.dto';
 import { Assignment } from '../../schemas';
 import { SubmissionDto } from '../../submissions/dto';
 import { toId } from '../../../common/utils/to-id.util';
+import { ResourceLinkDto } from '../../dto/resource-link.dto';
 
 export class AssignmentDto {
   @ApiProperty()
@@ -23,6 +24,14 @@ export class AssignmentDto {
   @ApiProperty()
   @Expose()
   description: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  criteria?: string;
+
+  @ApiProperty({ type: [ResourceLinkDto], required: false })
+  @Expose()
+  resourceLinks?: ResourceLinkDto[];
 
   @ApiProperty({ type: [FileDto] })
   @Expose()

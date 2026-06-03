@@ -113,12 +113,27 @@ export interface FileDto {
   size: number;
 }
 
+export interface ResourceLink {
+  title: string;
+  url: string;
+}
+
+export type MaterialCategory =
+  | 'lecture'
+  | 'presentation'
+  | 'syllabus'
+  | 'work_program'
+  | 'external_resource'
+  | 'other';
+
 export interface Material {
   id: string;
   courseAssignmentId?: string;
   title: string;
   description?: string;
+  category: MaterialCategory;
   files?: FileDto[];
+  resourceLinks?: ResourceLink[];
   fileLink?: string;
   originalName?: string;
   publishDate: string;
@@ -130,6 +145,8 @@ export interface Assignment {
   courseAssignmentId: string;
   title: string;
   description: string;
+  criteria?: string;
+  resourceLinks?: ResourceLink[];
   files: FileDto[];
   dueDate: string;
   maxScore: number;
@@ -160,6 +177,7 @@ export interface Grade {
   id: string;
   studentId: string;
   courseAssignmentId: string;
+  lessonJournalEntryId?: string | null;
   date: string;
   type: string;
   value: number;
@@ -172,6 +190,44 @@ export interface GradeJournalResponse {
   studentId: string;
   studentName: string;
   grades: Grade[];
+}
+
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+
+export interface LessonJournalAttendance {
+  studentId: string;
+  studentName: string;
+  login?: string;
+  status: AttendanceStatus;
+  comment?: string;
+}
+
+export interface LessonJournalGrade {
+  id: string;
+  studentId: string;
+  studentName: string;
+  login?: string;
+  value: number;
+  type: string;
+  date: string;
+  comment?: string;
+}
+
+export interface LessonJournalEntry {
+  id: string;
+  courseAssignmentId: string;
+  scheduleEntryId?: string | null;
+  teacherId: string;
+  date: string;
+  startTime?: string;
+  endTime?: string;
+  type?: string;
+  topic: string;
+  description?: string;
+  attendance: LessonJournalAttendance[];
+  grades: LessonJournalGrade[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Notification {

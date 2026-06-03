@@ -29,6 +29,8 @@ import {
 import { SubmissionDto } from '../submissions/dto';
 import { toId } from '../../common/utils/to-id.util';
 import { FilesService } from '../../files/files.service';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/dto/create-notification.dto';
 
 type SubmissionLookup = {
   assignment: unknown;
@@ -45,6 +47,7 @@ export class AssignmentsService {
     private submissionModel: Model<SubmissionDocument>,
     private coursesService: CoursesService,
     private readonly filesService: FilesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findAssignments(
@@ -176,6 +179,11 @@ export class AssignmentsService {
 
     const saved = await assignment.save();
     const populated = await saved.populate('files');
+    await this.notifyAssignmentCreated(
+      courseAssignmentId,
+      toId(ca.group),
+      saved,
+    );
     return transformToDto(AssignmentDto, populated.toObject());
   }
 
@@ -305,5 +313,36 @@ export class AssignmentsService {
     });
 
     return paginatedDto;
+  }
+
+  private async notifyAssignmentCreated(
+    courseAssignmentId: string,
+    groupId: string,
+    assignment: AssignmentDocument,
+  ): Promise<void> {
+    try {
+      await this.notificationsService.create({
+        title: 'Нове завдання',
+        message: `${assignment.title}: дедлайн ${this.formatDate(
+          assignment.dueDate,
+        )}.`,
+        type: NotificationType.NEW_ASSIGNMENT,
+        targetType: 'group',
+        groupId,
+        actionUrl: `/courses/${courseAssignmentId}`,
+        entityType: 'assignment',
+        entityId: toId(assignment._id),
+        important: true,
+      });
+    } catch {
+      // Notifications are non-critical for assignment creation.
+    }
+  }
+
+  private formatDate(value: Date | string): string {
+    if (value instanceof Date) {
+      return value.toISOString().slice(0, 10);
+    }
+    return value.slice(0, 10);
   }
 }

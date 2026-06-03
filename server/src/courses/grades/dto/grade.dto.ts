@@ -19,6 +19,13 @@ export class GradeResponseDto {
   @Transform(({ obj }: { obj: Grade }) => toId(obj.courseAssignment))
   courseAssignmentId: string;
 
+  @ApiProperty({ required: false, nullable: true })
+  @Expose()
+  @Transform(({ obj }: { obj: Grade }) =>
+    obj.lessonJournalEntry ? toId(obj.lessonJournalEntry) : null,
+  )
+  lessonJournalEntryId?: string | null;
+
   @ApiProperty()
   @Expose()
   @Transform(({ value }: { value: Date | string }) =>

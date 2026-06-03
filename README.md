@@ -239,7 +239,7 @@
 
 **Файли:** `src/courses/`
 
-**Відповідальність:** дисципліни, матеріали, завдання, здачі, оцінки в межах порталу. За потреби курс може мати зовнішнє посилання на Moodle як окрему LMS, але без дублювання Moodle-функціоналу всередині порталу.
+**Відповідальність:** дисципліни, матеріали, завдання, здачі, оцінки та електронний журнал занять у межах порталу. Викладач бачить закріплені дисципліни, студентів групи, веде теми занять, відвідування та поточні оцінки. Матеріали й завдання можуть містити файли, критерії оцінювання та безпечні HTTPS-посилання на Moodle, Google Classroom, силабуси, робочі програми або інші зовнішні навчальні ресурси без дублювання повноцінної LMS усередині порталу.
 
 **Ендпоінти та доступ:**
 
@@ -247,7 +247,8 @@
 | ------ | --------------------------------- | ------------------------------------------------------- |
 | GET    | `/courses`                        | всі авторизовані                                        |
 | GET    | `/courses/my`                     | student (свій семестр), teacher (закріплені дисципліни) |
-| GET    | `/courses/:caId`                  | авторизовані (деталі призначення)                       |
+| GET    | `/courses/course-assignments/:id` | авторизовані (деталі призначення)                       |
+| GET    | `/courses/course-assignments/:id/students` | teacher+ (студенти групи або фіналізованого elective) |
 | GET    | `/courses/:caId/materials`        | авторизовані                                            |
 | POST   | `/courses/:caId/materials`        | teacher+                                                |
 | PUT    | `/courses/:caId/materials/:id`    | teacher+                                                |
@@ -256,6 +257,10 @@
 | POST   | `/courses/:caId/assignments`      | teacher+                                                |
 | PUT    | `/courses/:caId/assignments/:id`  | teacher+                                                |
 | GET    | `/courses/:caId/grades`           | teacher+, department_head+                              |
+| GET    | `/courses/:caId/journal`          | teacher+                                                |
+| POST   | `/courses/:caId/journal`          | teacher+                                                |
+| PATCH  | `/courses/journal/:id`            | teacher+                                                |
+| DELETE | `/courses/journal/:id`            | teacher+                                                |
 | GET    | `/courses/assignments/my`         | student                                                 |
 | GET    | `/courses/grades/my`              | student                                                 |
 | POST   | `/courses/assignments/:id/submit` | student                                                 |
@@ -672,10 +677,12 @@ ScheduleEntry
     status: scheduled|cancelled|rescheduled
 
 Material
-└── id, courseAssignmentId, title, description, fileLink, publishDate
+└── id, courseAssignmentId, title, description, category
+    files[], resourceLinks[], publishDate
 
 Assignment
-└── id, courseAssignmentId, title, description, dueDate, maxScore
+└── id, courseAssignmentId, title, description, criteria
+    files[], resourceLinks[], dueDate, maxScore
 
 Submission
 └── id, assignmentId, studentId, submittedAt, fileLink
@@ -683,7 +690,13 @@ Submission
 
 Grade
 └── id, studentId, courseAssignmentId, date
-    type: current|module|exam|final, value, comment
+    lessonJournalEntryId?, type: current|module|exam|final, value, comment
+
+LessonJournalEntry
+└── id, courseAssignmentId, scheduleEntryId?, teacherId, date
+    startTime?, endTime?, type, topic, description
+    attendance[{ studentId, status: present|absent|late|excused, comment }]
+    grades are stored as Grade records linked by lessonJournalEntryId
 
 Survey
 └── id, title, description, createdByUserId
@@ -761,10 +774,16 @@ AuditLogEntry
 | Метод | Шлях                              | Доступ        |
 | ----- | --------------------------------- | ------------- |
 | GET   | `/courses/my`                     | Авторизований |
+| GET   | `/courses/course-assignments/:id` | Авторизований |
+| GET   | `/courses/course-assignments/:id/students` | teacher+ |
 | GET   | `/courses/:caId/materials`        | Авторизований |
 | POST  | `/courses/:caId/materials`        | teacher+      |
 | GET   | `/courses/:caId/assignments`      | Авторизований |
 | POST  | `/courses/:caId/assignments`      | teacher+      |
+| GET   | `/courses/:caId/journal`          | teacher+      |
+| POST  | `/courses/:caId/journal`          | teacher+      |
+| PATCH | `/courses/journal/:id`            | teacher+      |
+| DELETE | `/courses/journal/:id`           | teacher+      |
 | GET   | `/courses/assignments/my`         | student       |
 | POST  | `/courses/assignments/:id/submit` | student       |
 | GET   | `/courses/grades/my`              | student       |
@@ -1047,6 +1066,10 @@ online_campus/
 │       │   │   ├── dto/
 │       │   │   ├── grades.controller.ts
 │       │   │   └── grades.service.ts
+│       │   ├── journal/
+│       │   │   ├── dto/
+│       │   │   ├── lesson-journal.controller.ts
+│       │   │   └── lesson-journal.service.ts
 │       │   └── schemas/
 │       │
 │       ├── surveys/           # survey lifecycle, responses, completions, results

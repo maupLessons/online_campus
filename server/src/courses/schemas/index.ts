@@ -4,3 +4,4 @@ export * from './material.schema';
 export * from './assignment.schema';
 export * from './submission.schema';
 export * from './grade.schema';
+export * from './lesson-journal-entry.schema';

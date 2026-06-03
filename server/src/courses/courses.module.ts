@@ -10,7 +10,11 @@ import { SubmissionsController } from './submissions/submissions.controller';
 import { SubmissionsService } from './submissions/submissions.service';
 import { GradesController } from './grades/grades.controller';
 import { GradesService } from './grades/grades.service';
+import { LessonJournalController } from './journal/lesson-journal.controller';
+import { LessonJournalService } from './journal/lesson-journal.service';
 import { FilesModule } from '../files/files.module';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { ScheduleEntry, ScheduleEntrySchema } from '../schedule/schemas';
 import { User, UserSchema } from '../users/schemas';
 import {
   Course,
@@ -25,11 +29,14 @@ import {
   SubmissionSchema,
   Grade,
   GradeSchema,
+  LessonJournalEntry,
+  LessonJournalEntrySchema,
 } from './schemas';
 
 @Module({
   imports: [
     FilesModule,
+    NotificationsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Course.name, schema: CourseSchema },
@@ -38,6 +45,8 @@ import {
       { name: Assignment.name, schema: AssignmentSchema },
       { name: Submission.name, schema: SubmissionSchema },
       { name: Grade.name, schema: GradeSchema },
+      { name: LessonJournalEntry.name, schema: LessonJournalEntrySchema },
+      { name: ScheduleEntry.name, schema: ScheduleEntrySchema },
     ]),
   ],
   controllers: [
@@ -46,6 +55,7 @@ import {
     AssignmentsController,
     SubmissionsController,
     GradesController,
+    LessonJournalController,
   ],
   providers: [
     CoursesService,
@@ -53,6 +63,7 @@ import {
     AssignmentsService,
     SubmissionsService,
     GradesService,
+    LessonJournalService,
   ],
   exports: [
     CoursesService,
@@ -60,6 +71,7 @@ import {
     AssignmentsService,
     SubmissionsService,
     GradesService,
+    LessonJournalService,
   ],
 })
 export class CoursesModule {}

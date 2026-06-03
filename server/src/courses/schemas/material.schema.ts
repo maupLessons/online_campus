@@ -6,6 +6,29 @@ import { File } from '../../files/file.schema';
 
 export type MaterialDocument = Material & Document;
 
+export enum MaterialCategory {
+  LECTURE = 'lecture',
+  PRESENTATION = 'presentation',
+  SYLLABUS = 'syllabus',
+  WORK_PROGRAM = 'work_program',
+  EXTERNAL_RESOURCE = 'external_resource',
+  OTHER = 'other',
+}
+
+const ResourceLinkSchema = new MongooseSchema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 120 },
+    url: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 500,
+      match: /^https:\/\/[^\s<>"']+$/,
+    },
+  },
+  { _id: false },
+);
+
 @Schema({ timestamps: true })
 export class Material {
   _id: MongooseSchema.Types.ObjectId;
@@ -24,10 +47,21 @@ export class Material {
   description: string;
 
   @Prop({
+    type: String,
+    enum: Object.values(MaterialCategory),
+    default: MaterialCategory.LECTURE,
+    required: true,
+  })
+  category: MaterialCategory;
+
+  @Prop({
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'File' }],
     default: [],
   })
   files: File[];
+
+  @Prop({ type: [ResourceLinkSchema], default: [] })
+  resourceLinks: Array<{ title: string; url: string }>;
 
   @Prop({ required: true, default: Date.now })
   publishDate: Date;

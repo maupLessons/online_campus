@@ -31,6 +31,8 @@ import { toId } from '../../common/utils/to-id.util';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
 import { User, UserDocument } from '../../users/schemas';
+import { NotificationsService } from '../../notifications/notifications.service';
+import { NotificationType } from '../../notifications/dto/create-notification.dto';
 
 @Injectable()
 export class GradesService {
@@ -44,6 +46,7 @@ export class GradesService {
     @InjectModel(Assignment.name)
     private assignmentModel: Model<AssignmentDocument>,
     private coursesService: CoursesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async gradeSubmission(
@@ -103,6 +106,7 @@ export class GradesService {
       populate: { path: 'course' },
     });
 
+    await this.notifyGradeCreated(populated.toObject() as GradeDocument);
     return transformToDto(GradeResponseDto, populated.toObject());
   }
 
@@ -289,5 +293,38 @@ export class GradesService {
       nextPage: studentResult.nextPage || undefined,
       prevPage: studentResult.prevPage || undefined,
     };
+  }
+
+  private async notifyGradeCreated(grade: GradeDocument): Promise<void> {
+    try {
+      const courseName = this.getGradeCourseName(grade);
+      await this.notificationsService.create({
+        userId: toId(grade.student),
+        title: 'Нова оцінка',
+        message: `${courseName}: ${grade.value}`,
+        type: NotificationType.GRADE,
+        actionUrl: '/grades',
+        entityType: 'grade',
+        entityId: toId(grade._id),
+        important: false,
+      });
+    } catch {
+      // Notifications are non-critical for grade creation.
+    }
+  }
+
+  private getGradeCourseName(grade: GradeDocument): string {
+    const courseAssignment = grade.courseAssignment as unknown;
+    if (!courseAssignment || typeof courseAssignment !== 'object') {
+      return 'Дисципліна';
+    }
+
+    const course = (courseAssignment as { course?: unknown }).course;
+    if (!course || typeof course !== 'object') {
+      return 'Дисципліна';
+    }
+
+    const name = (course as { name?: unknown }).name;
+    return typeof name === 'string' && name.trim() ? name : 'Дисципліна';
   }
 }

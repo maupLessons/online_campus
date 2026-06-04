@@ -4,6 +4,25 @@ import { FileDto } from '../../../files/dto/file.dto';
 import { Submission } from '../../schemas';
 import { toId } from '../../../common/utils/to-id.util';
 
+type PopulatedStudent = {
+  login?: string;
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+};
+
+const getStudent = (value: unknown): PopulatedStudent | null =>
+  value && typeof value === 'object' ? value : null;
+
+const formatStudentName = (value: unknown): string | undefined => {
+  const student = getStudent(value);
+  if (!student) return undefined;
+
+  return [student.lastName, student.firstName, student.middleName]
+    .filter(Boolean)
+    .join(' ');
+};
+
 export class SubmissionDto {
   @ApiProperty()
   @Expose()
@@ -19,6 +38,16 @@ export class SubmissionDto {
   @Expose()
   @Transform(({ obj }: { obj: Submission }) => toId(obj.student))
   studentId: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  @Transform(({ obj }: { obj: Submission }) => formatStudentName(obj.student))
+  studentName?: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  @Transform(({ obj }: { obj: Submission }) => getStudent(obj.student)?.login)
+  studentLogin?: string;
 
   @ApiProperty({ type: [FileDto] })
   @Expose()

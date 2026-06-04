@@ -8,6 +8,11 @@ import {
   MaxLength,
   ValidateNested,
   ArrayMaxSize,
+  IsArray,
+  ArrayUnique,
+  IsMongoId,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ResourceLinkDto } from '../../dto/resource-link.dto';
@@ -39,7 +44,10 @@ export class CreateAssignmentDto {
 
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
-  @IsString({ each: true })
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ArrayUnique()
+  @IsMongoId({ each: true })
   fileIds?: string[];
 
   @ApiProperty()
@@ -48,5 +56,7 @@ export class CreateAssignmentDto {
 
   @ApiProperty()
   @IsNumber()
+  @Min(1)
+  @Max(100)
   maxScore: number;
 }

@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, PaginateModel } from 'mongoose';
+import { Model, Types, PaginateModel, PopulateOptions } from 'mongoose';
 import {
   Grade,
   GradeDocument,
@@ -71,11 +75,20 @@ export class GradesService {
       role,
     );
 
+    if (dto.score < 0 || dto.score > assignment.maxScore) {
+      throw new BadRequestException(
+        `Оцінка має бути в межах 0-${assignment.maxScore}`,
+      );
+    }
+
     submission.score = dto.score;
     submission.comment = dto.comment ?? '';
     submission.status = 'graded';
 
     const saved = await submission.save();
+    const grade = await this.upsertSubmissionGrade(saved, assignment, dto);
+    await this.notifySubmissionGraded(grade, assignment, dto.score);
+
     const populated = await saved.populate('files');
     return transformToDto(SubmissionDto, populated.toObject());
   }
@@ -205,10 +218,13 @@ export class GradesService {
       page,
       limit,
       sort: { date: -1 },
-      populate: {
-        path: 'courseAssignment',
-        populate: { path: 'course' },
-      },
+      populate: [
+        {
+          path: 'courseAssignment',
+          populate: { path: 'course' },
+        },
+        { path: 'assignment' },
+      ] as PopulateOptions[],
       lean: true,
     };
 
@@ -268,6 +284,7 @@ export class GradesService {
         path: 'courseAssignment',
         populate: { path: 'course' },
       })
+      .populate('assignment')
       .lean()
       .exec();
 
@@ -310,6 +327,83 @@ export class GradesService {
       });
     } catch {
       // Notifications are non-critical for grade creation.
+    }
+  }
+
+  private async upsertSubmissionGrade(
+    submission: SubmissionDocument,
+    assignment: AssignmentDocument,
+    dto: GradeSubmissionDto,
+  ): Promise<GradeDocument> {
+    const grade = await this.gradeModel
+      .findOneAndUpdate(
+        { submission: submission._id },
+        {
+          $set: {
+            student: submission.student,
+            courseAssignment: assignment.courseAssignment,
+            assignment: assignment._id,
+            submission: submission._id,
+            date: new Date(),
+            type: 'current',
+            value: dto.score,
+            comment: this.buildSubmissionGradeComment(assignment, dto.comment),
+          },
+        },
+        {
+          returnDocument: 'after',
+          upsert: true,
+          runValidators: true,
+          setDefaultsOnInsert: true,
+        },
+      )
+      .populate([
+        {
+          path: 'courseAssignment',
+          populate: { path: 'course' },
+        },
+        { path: 'assignment' },
+      ])
+      .exec();
+
+    if (!grade) {
+      throw new BadRequestException('Не вдалося зберегти оцінку за завдання');
+    }
+
+    return grade;
+  }
+
+  private buildSubmissionGradeComment(
+    assignment: AssignmentDocument,
+    comment?: string,
+  ): string {
+    const trimmedComment = comment?.trim();
+    const assignmentTitle = assignment.title?.trim() || 'Завдання';
+
+    return trimmedComment
+      ? `Завдання «${assignmentTitle}»: ${trimmedComment}`
+      : `Завдання «${assignmentTitle}»`;
+  }
+
+  private async notifySubmissionGraded(
+    grade: GradeDocument,
+    assignment: AssignmentDocument,
+    score: number,
+  ): Promise<void> {
+    try {
+      const courseName = this.getGradeCourseName(grade);
+      await this.notificationsService.create({
+        userId: toId(grade.student),
+        title: 'Оцінка за завдання',
+        message: `${courseName}: «${assignment.title}» оцінено на ${score}/${assignment.maxScore}. Оцінка доступна у завданнях та заліковій книжці.`,
+        type: NotificationType.GRADE,
+        actionUrl: '/assignments',
+        entityType: 'grade',
+        entityId: toId(grade._id),
+        important: true,
+      });
+    } catch {
+      // Notifications are non-critical for grading submitted work.
     }
   }
 

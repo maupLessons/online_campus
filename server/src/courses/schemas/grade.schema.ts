@@ -4,6 +4,8 @@ import * as paginate from 'mongoose-paginate-v2';
 import { User } from '../../users/schemas';
 import { CourseAssignment } from './course-assignment.schema';
 import { LessonJournalEntry } from './lesson-journal-entry.schema';
+import { Assignment } from './assignment.schema';
+import { Submission } from './submission.schema';
 
 export type GradeDocument = Grade & Document;
 
@@ -31,6 +33,12 @@ export class Grade {
     | MongooseSchema.Types.ObjectId
     | null;
 
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: Assignment.name })
+  assignment?: Assignment | MongooseSchema.Types.ObjectId;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: Submission.name })
+  submission?: Submission | MongooseSchema.Types.ObjectId;
+
   @Prop({ required: true, default: Date.now })
   date: Date;
 
@@ -52,3 +60,5 @@ GradeSchema.plugin(paginate);
 GradeSchema.index({ student: 1, courseAssignment: 1, date: -1 });
 GradeSchema.index({ courseAssignment: 1, type: 1, date: -1 });
 GradeSchema.index({ lessonJournalEntry: 1, student: 1, type: 1 });
+GradeSchema.index({ assignment: 1, student: 1 });
+GradeSchema.index({ submission: 1 }, { unique: true, sparse: true });

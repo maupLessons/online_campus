@@ -513,7 +513,7 @@ export class ElectiveDisciplinesService {
             },
           },
           {
-            new: true,
+            returnDocument: 'after',
             runValidators: true,
             setDefaultsOnInsert: true,
             upsert: true,

@@ -1,21 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsString,
-  IsNotEmpty,
   IsEnum,
   IsNumber,
   IsOptional,
+  IsMongoId,
+  Max,
+  MaxLength,
+  Min,
 } from 'class-validator';
 
 export class CreateGradeDto {
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @IsMongoId()
   studentId: string;
 
   @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
+  @IsMongoId()
   courseAssignmentId: string;
 
   @ApiProperty({ enum: ['current', 'module', 'exam', 'final'] })
@@ -24,10 +25,13 @@ export class CreateGradeDto {
 
   @ApiProperty()
   @IsNumber()
+  @Min(0)
+  @Max(100)
   value: number;
 
   @ApiProperty({ required: false })
   @IsString()
   @IsOptional()
+  @MaxLength(1000)
   comment?: string;
 }

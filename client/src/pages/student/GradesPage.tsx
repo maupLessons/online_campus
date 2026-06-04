@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
 import type { Grade, StudentCourse, PaginatedResponse } from '../../types';
 import { useTranslation } from 'react-i18next';
-import type {TFunction} from 'i18next';
+import type { TFunction } from 'i18next';
 
 const TYPE_LABEL_KEYS: Record<string, string> = {
   current: 'grades.types.current',
@@ -20,7 +20,9 @@ export default function GradesPage() {
   const { data: courses = [], isLoading: isLoadingCourses } = useQuery({
     queryKey: ['grades', 'courses'],
     queryFn: async () => {
-      const { data } = await api.get<PaginatedResponse<StudentCourse>>('/courses/grades/my/courses');
+      const { data } = await api.get<PaginatedResponse<StudentCourse>>(
+        '/courses/grades/my/courses',
+      );
       return data.docs;
     },
   });
@@ -44,7 +46,13 @@ export default function GradesPage() {
               key={course.courseAssignmentId}
               course={course}
               isExpanded={expandedId === course.courseAssignmentId}
-              onToggle={() => setExpandedId(expandedId === course.courseAssignmentId ? null : course.courseAssignmentId)}
+              onToggle={() =>
+                setExpandedId(
+                  expandedId === course.courseAssignmentId
+                    ? null
+                    : course.courseAssignmentId,
+                )
+              }
               locale={locale}
               t={t}
             />
@@ -80,43 +88,45 @@ function GradeAccordionItem({
   });
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
       <button
         onClick={onToggle}
-        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+        className="flex w-full items-center justify-between px-6 py-4 transition-colors hover:bg-gray-50">
         <div className="text-left">
           <h2 className="text-lg font-semibold text-gray-800">
             {course.courseName}
           </h2>
           <p className="text-sm text-gray-500">
-            {course.courseCode} | {course.academicYear}, {t('courses.semester')} {course.semester}
+            {course.courseCode} | {course.academicYear},{' '}
+            {t('courses.semester')} {course.semester}
           </p>
         </div>
-        <span className="text-gray-400">
-          {isExpanded ? '▲' : '▼'}
-        </span>
+        <span className="text-gray-400">{isExpanded ? '▲' : '▼'}</span>
       </button>
 
       {isExpanded && (
-        <div className="px-6 pb-6 border-t border-gray-100 mt-4">
+        <div className="mt-4 border-t border-gray-100 px-6 pb-6">
           {isLoadingGrades ? (
-            <div className="py-4 text-center text-gray-400 text-sm">
+            <div className="py-4 text-center text-sm text-gray-400">
               {t('auth.loading')}
             </div>
           ) : grades.length === 0 ? (
-            <div className="py-4 text-center text-gray-400 text-sm">
+            <div className="py-4 text-center text-sm text-gray-400">
               {t('grades.empty')}
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white mt-2">
+            <div className="mt-2 overflow-x-auto rounded-xl border border-gray-200 bg-white">
               <table className="min-w-full">
                 <thead>
-                  <tr className="text-left text-gray-500 border-b bg-gray-50">
+                  <tr className="border-b bg-gray-50 text-left text-gray-500">
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">
                       {t('grades.date')}
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">
                       {t('grades.type')}
+                    </th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">
+                      {t('grades.source')}
                     </th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider">
                       {t('grades.grade')}
@@ -136,6 +146,9 @@ function GradeAccordionItem({
                         {TYPE_LABEL_KEYS[g.type]
                           ? t(TYPE_LABEL_KEYS[g.type])
                           : g.type}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {getGradeSourceLabel(g, t)}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <span
@@ -164,4 +177,16 @@ function GradeAccordionItem({
       )}
     </div>
   );
+}
+
+function getGradeSourceLabel(grade: Grade, t: TFunction): string {
+  if (grade.assignmentTitle) {
+    return t('grades.assignmentSource', { title: grade.assignmentTitle });
+  }
+
+  if (grade.lessonJournalEntryId) {
+    return t('grades.journalSource');
+  }
+
+  return t('grades.manualSource');
 }

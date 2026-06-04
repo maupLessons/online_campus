@@ -1,29 +1,47 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import api from '../../services/api';
-import type { Assignment, PaginatedResponse } from '../../types';
+import { Download, Trash2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FileUploader } from '../../components/FileUploader';
-import { filesApi } from '../../services/api';
+import api, { filesApi } from '../../services/api';
+import type { Assignment, PaginatedResponse } from '../../types';
 
 export default function AssignmentsPage() {
   const { t, i18n } = useTranslation();
   const locale = i18n.language === 'en' ? 'en-US' : 'uk-UA';
+  const [statusMessage, setStatusMessage] = useState('');
 
-  const { data: assignments = [], isLoading, refetch } = useQuery({
+  const {
+    data: assignments = [],
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: ['assignments', 'my'],
     queryFn: async () => {
-      const { data } = await api.get<PaginatedResponse<Assignment>>('/courses/assignments/my');
+      const { data } = await api.get<PaginatedResponse<Assignment>>(
+        '/courses/assignments/my',
+      );
       return data.docs;
     },
   });
+
+  const showStatus = (message: string) => {
+    setStatusMessage(message);
+    window.setTimeout(() => {
+      setStatusMessage((current) => (current === message ? '' : current));
+    }, 5000);
+  };
 
   const getStatusBadge = (assignment: Assignment) => {
     if (!assignment.submission) {
       const isOverdue = new Date(assignment.dueDate) < new Date();
       return isOverdue
         ? { label: t('assignments.statusOverdue'), color: 'bg-red-100 text-red-700' }
-        : { label: t('assignments.statusNotSubmitted'), color: 'bg-yellow-100 text-yellow-700' };
+        : {
+            label: t('assignments.statusNotSubmitted'),
+            color: 'bg-yellow-100 text-yellow-700',
+          };
     }
 
     if (assignment.submission.status === 'graded') {
@@ -36,150 +54,217 @@ export default function AssignmentsPage() {
       };
     }
 
-    return { label: t('assignments.statusPending'), color: 'bg-blue-100 text-blue-700' };
+    return {
+      label: t('assignments.statusPending'),
+      color: 'bg-blue-100 text-blue-700',
+    };
   };
+
   const handleDownload = async (fileId: string, originalName: string) => {
     try {
-
       const response = await api.get(`/files/download/${fileId}`, {
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', originalName); 
+      link.setAttribute('download', originalName);
       document.body.appendChild(link);
       link.click();
       link.parentNode?.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Помилка завантаження файлу:', error);
-      alert('Не вдалося завантажити файл. Можливо, його було видалено.');
+    } catch {
+      showStatus(t('assignments.downloadError'));
     }
   };
-const handleDelete = async (fileId: string | undefined, assignmentId: string) => {
-    if (!window.confirm('Ви впевнені, що хочете видалити цю роботу?')) return;
-    
+
+  const handleDelete = async (
+    fileId: string | undefined,
+    assignmentId: string,
+  ) => {
+    if (!window.confirm(t('assignments.confirmDelete'))) return;
+
     try {
       if (fileId) {
         try {
           await api.delete(`/files/${fileId}`);
         } catch {
-          console.warn('Файл вже видалено, продовжуємо очищення бази...');
+          // The submission record is the source of truth for the UI cleanup.
         }
       }
 
       await api.delete(`/courses/assignments/${assignmentId}/submit`);
-      
       await refetch();
-      alert('Роботу успішно видалено!');
-    } catch (error) {
-      console.error('Помилка видалення роботи:', error);
-      alert('Не вдалося видалити роботу з бази.');
+      showStatus(t('assignments.deleteSuccess'));
+    } catch {
+      showStatus(t('assignments.deleteError'));
     }
   };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">
-        {t('assignments.title')}
-      </h1>
+    <div className="mx-auto max-w-4xl">
+      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">
+          {t('assignments.title')}
+        </h1>
+      </div>
+
+      {statusMessage && (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <span>{statusMessage}</span>
+          <button
+            type="button"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full text-blue-700 transition hover:bg-blue-100"
+            onClick={() => setStatusMessage('')}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {assignments.length === 0 ? (
-        <p className="text-gray-400 text-sm">{t('assignments.empty')}</p>
+        <p className="text-sm text-gray-400">{t('assignments.empty')}</p>
       ) : (
         <div className="space-y-4">
-          {assignments.map((a) => {
-            const status = getStatusBadge(a);
-            //const isOverdue = new Date(a.dueDate) < new Date(); // блокує завантаження файлу після дедлайну
-            const isOverdue = false; // залишає можливість завантажувати файл після дедлайну
-            const file = a.submission?.files?.[0] ?? null;
-            const fileId = file ? (file.id || file._id) : undefined;
-            const fileName = file ? file.originalName : 'Завантажений файл';
+          {assignments.map((assignment) => {
+            const status = getStatusBadge(assignment);
+            const isOverdue = false;
+            const file = assignment.submission?.files?.[0] ?? null;
+            const fileId = file ? file.id || file._id : undefined;
+            const fileName =
+              file?.originalName ??
+              assignment.submission?.originalName ??
+              t('assignments.uploadedFile');
+
             return (
-              <div key={a.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <article
+                key={assignment.id}
+                className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{a.title}</h3>
-                    <p className="text-sm text-gray-500 mt-0.5">{a.courseName}</p>
-                    <p className="text-sm text-gray-600 mt-2">{a.description}</p>
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-gray-900">
+                      {assignment.title}
+                    </h3>
+                    <p className="mt-0.5 text-sm text-gray-500">
+                      {assignment.courseName}
+                    </p>
+                    <p className="mt-2 text-sm text-gray-600">
+                      {assignment.description}
+                    </p>
                   </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap ${status.color}`}>
+                  <span
+                    className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${status.color}`}>
                     {status.label}
                   </span>
                 </div>
-                  {a.submission ? (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-sm text-gray-500 mb-3">Ваша завантажена робота:</p>
-                    <div className="flex items-center gap-4">
+
+                {assignment.submission ? (
+                  <div className="mt-4 border-t border-gray-100 pt-4">
+                    <p className="mb-3 text-sm text-gray-500">
+                      {t('assignments.uploadedWork')}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
                       <button
-                        onClick={() => fileId && handleDownload(fileId, fileName)}
-                        className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 hover:bg-blue-100 px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        {a.submission!.originalName || 'Завантажений файл'}
+                        type="button"
+                        onClick={() =>
+                          fileId && void handleDownload(fileId, fileName)
+                        }
+                        disabled={!fileId}
+                        className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-blue-50 px-3 text-sm font-medium text-blue-700 transition hover:bg-blue-100 disabled:bg-gray-100 disabled:text-gray-400">
+                        <Download className="h-4 w-4" />
+                        {fileName}
                       </button>
                       <button
-                        onClick={() => handleDelete(fileId, a.id)}
-                        className="inline-flex items-center gap-2 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"
-                      >
-                        🗑️
+                        type="button"
+                        onClick={() => void handleDelete(fileId, assignment.id)}
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-600 transition hover:bg-red-100"
+                        title={t('teacherCourse.common.delete')}>
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
                 ) : isOverdue ? (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="mt-4 border-t border-gray-100 pt-4">
                     <p className="text-sm font-medium text-red-500">
-                      Термін здачі цієї роботи минув. Завантаження файлів недоступне.
+                      {t('assignments.overdueUploadBlocked')}
                     </p>
                   </div>
                 ) : (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <p className="text-sm font-medium text-gray-700 mb-3">
-                      Прикріпити файл роботи
+                  <div className="mt-4 border-t border-gray-100 pt-4">
+                    <p className="mb-3 text-sm font-medium text-gray-700">
+                      {t('assignments.attachFile')}
                     </p>
-                    <FileUploader 
-                      allowedTypes={['.pdf', '.doc', '.docx', '.zip']} 
-                      onUpload={async (file) => {
+                    <FileUploader
+                      allowedTypes={['.pdf', '.doc', '.docx', '.zip']}
+                      onUpload={async (fileToUpload) => {
                         try {
-                          await filesApi.submitAssignment(a.id, file);
+                          await filesApi.submitAssignment(
+                            assignment.id,
+                            fileToUpload,
+                          );
                           await refetch();
                         } catch (error: unknown) {
                           const responseMessage = axios.isAxiosError(error)
                             ? error.response?.data?.message
                             : undefined;
-                          const errorMsg =
+                          const message =
                             typeof responseMessage === 'string'
                               ? responseMessage
-                              : 'Помилка при завантаженні';
-                          alert(`Увага: ${errorMsg}`);
+                              : t('assignments.uploadError');
+
+                          showStatus(
+                            t('assignments.uploadWarning', { message }),
+                          );
                           throw error;
                         }
-                      }} 
+                      }}
                     />
                   </div>
                 )}
-                <div className="mt-4 pt-3 border-t border-gray-50 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-gray-400">
+
+                <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-gray-50 pt-3 text-xs text-gray-400">
                   <span>
-                    {t('assignments.deadline')}: {new Date(a.dueDate).toLocaleDateString(locale)}
+                    {t('assignments.deadline')}:{' '}
+                    {new Date(assignment.dueDate).toLocaleDateString(locale)}
                   </span>
                   <span>
-                    {t('assignments.maxScore')}: {a.maxScore}
+                    {t('assignments.maxScore')}: {assignment.maxScore}
                   </span>
-                  
-                  {a.submission?.comment && (
-                      <div className="w-full mt-1 text-gray-600 italic">
-                        <span className="font-medium text-gray-500">{t('assignments.comment')}:</span> {a.submission.comment}
-                      </div>
+                  {assignment.submission?.submittedAt && (
+                    <span>
+                      {t('assignments.submittedAt')}:{' '}
+                      {new Date(
+                        assignment.submission.submittedAt,
+                      ).toLocaleString(locale)}
+                    </span>
+                  )}
+                  {assignment.submission?.status === 'graded' &&
+                    assignment.submission.score !== undefined && (
+                      <span className="font-semibold text-green-700">
+                        {t('assignments.gradeResult', {
+                          score: assignment.submission.score,
+                          maxScore: assignment.maxScore,
+                        })}
+                      </span>
                     )}
+
+                  {assignment.submission?.comment && (
+                    <div className="mt-1 w-full text-gray-600 italic">
+                      <span className="font-medium text-gray-500">
+                        {t('assignments.comment')}:
+                      </span>{' '}
+                      {assignment.submission.comment}
+                    </div>
+                  )}
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>

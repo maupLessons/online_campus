@@ -60,6 +60,9 @@ describe('Assignments (e2e)', () => {
       await connection.collection('courseassignments').deleteMany({});
       await connection.collection('assignments').deleteMany({});
       await connection.collection('submissions').deleteMany({});
+      await connection.collection('grades').deleteMany({});
+      await connection.collection('notifications').deleteMany({});
+      await connection.collection('files').deleteMany({});
       await connection.collection('faculties').deleteMany({});
       await connection.collection('departments').deleteMany({});
       await connection.collection('groups').deleteMany({});
@@ -82,6 +85,8 @@ describe('Assignments (e2e)', () => {
     const teacherId = new Types.ObjectId();
     const studentId = new Types.ObjectId();
     const groupId = new Types.ObjectId();
+    const departmentId = new Types.ObjectId();
+    const courseId = new Types.ObjectId();
     const courseAssignmentId = new Types.ObjectId();
 
     const teacherToken = jwtService.sign({
@@ -128,10 +133,21 @@ describe('Assignments (e2e)', () => {
       updatedAt: new Date(),
     });
 
+    await connection.collection('courses').insertOne({
+      _id: courseId,
+      name: 'Enterprise Testing',
+      code: `ET-${courseAssignmentId.toHexString().slice(-6)}`,
+      department: departmentId,
+      semester: 1,
+      credits: 3,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
     await connection.collection('courseassignments').insertOne({
       _id: courseAssignmentId,
       teacher: teacherId,
-      course: new Types.ObjectId(),
+      course: courseId,
       group: groupId,
       academicYear: '2023-2024',
       semester: 1,
@@ -143,10 +159,26 @@ describe('Assignments (e2e)', () => {
       teacherId,
       studentId,
       groupId,
+      courseId,
       courseAssignmentId,
       teacherToken,
       studentToken,
     };
+  };
+
+  const createUploadedFile = async (uploadedBy: Types.ObjectId) => {
+    const fileId = new Types.ObjectId();
+    await connection.collection('files').insertOne({
+      _id: fileId,
+      originalName: 'submission.pdf',
+      storagePath: `${fileId.toHexString()}.pdf`,
+      mimetype: 'application/pdf',
+      size: 1024,
+      uploadedBy,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return fileId;
   };
 
   describe('GET /courses/:courseAssignmentId/assignments', () => {
@@ -344,9 +376,15 @@ describe('Assignments (e2e)', () => {
 
   describe('POST /courses/assignments/:id/submit', () => {
     it('should submit an assignment (201)', async () => {
-      const { courseAssignmentId, studentToken, groupId } =
-        await setupAssignments();
+      const {
+        courseAssignmentId,
+        teacherId,
+        studentId,
+        studentToken,
+        groupId,
+      } = await setupAssignments();
       const assignmentId = new Types.ObjectId();
+      const fileId = await createUploadedFile(studentId);
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
         courseAssignment: courseAssignmentId,
@@ -364,18 +402,33 @@ describe('Assignments (e2e)', () => {
         .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({
-          fileIds: [],
+          fileIds: [fileId.toHexString()],
         })
         .expect(201);
 
       const body = response.body as SubmissionDto;
       expect(body.status).toBe('submitted');
+
+      const notification = await connection
+        .collection('notifications')
+        .findOne({
+          userId: teacherId,
+          type: 'assignment_submitted',
+          entityType: 'submission',
+          entityId: body.id,
+        });
+
+      expect(notification).toBeTruthy();
+      expect(notification?.actionUrl).toBe(
+        `/courses/${courseAssignmentId.toHexString()}`,
+      );
     });
 
     it('should fail if submitting twice (409)', async () => {
-      const { courseAssignmentId, studentToken, groupId } =
+      const { courseAssignmentId, studentId, studentToken, groupId } =
         await setupAssignments();
       const assignmentId = new Types.ObjectId();
+      const fileId = await createUploadedFile(studentId);
       await connection.collection('assignments').insertOne({
         _id: assignmentId,
         courseAssignment: courseAssignmentId,
@@ -394,7 +447,7 @@ describe('Assignments (e2e)', () => {
         .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({
-          fileIds: [],
+          fileIds: [fileId.toHexString()],
         })
         .expect(201);
 
@@ -403,7 +456,7 @@ describe('Assignments (e2e)', () => {
         .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${studentToken}`)
         .send({
-          fileIds: [],
+          fileIds: [fileId.toHexString()],
         })
         .expect(409);
     });
@@ -451,7 +504,7 @@ describe('Assignments (e2e)', () => {
         .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
         .set('Authorization', `Bearer ${otherStudentToken}`)
         .send({
-          fileIds: [],
+          fileIds: [new Types.ObjectId().toHexString()],
         })
         .expect(403);
     });
@@ -459,8 +512,13 @@ describe('Assignments (e2e)', () => {
 
   describe('POST /courses/submissions/:id/grade', () => {
     it('should grade a submission (201)', async () => {
-      const { courseAssignmentId, teacherToken, studentId, groupId } =
-        await setupAssignments();
+      const {
+        courseAssignmentId,
+        teacherToken,
+        studentToken,
+        studentId,
+        groupId,
+      } = await setupAssignments();
       const assignmentId = new Types.ObjectId();
       const submissionId = new Types.ObjectId();
 
@@ -499,6 +557,88 @@ describe('Assignments (e2e)', () => {
       const body = response.body as SubmissionDto;
       expect(body.status).toBe('graded');
       expect(body.score).toBe(95);
+
+      const grade = await connection.collection('grades').findOne({
+        submission: submissionId,
+        assignment: assignmentId,
+        student: studentId,
+        courseAssignment: courseAssignmentId,
+      });
+
+      expect(grade).toBeTruthy();
+      expect(grade?.value).toBe(95);
+      expect(grade?.type).toBe('current');
+
+      const notification = await connection
+        .collection('notifications')
+        .findOne({
+          userId: studentId,
+          type: 'grade',
+          entityType: 'grade',
+          entityId: grade?._id.toHexString(),
+        });
+
+      expect(notification).toBeTruthy();
+      expect(notification?.actionUrl).toBe('/assignments');
+
+      const gradesResponse = await request(app.getHttpServer())
+        .get(
+          `/api/courses/grades/my/courses/${courseAssignmentId.toHexString()}`,
+        )
+        .set('Authorization', `Bearer ${studentToken}`)
+        .expect(200);
+
+      const gradesBody = gradesResponse.body as PaginatedDto<{
+        assignmentTitle?: string;
+        value: number;
+      }>;
+      expect(gradesBody.docs).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assignmentTitle: 'To Grade',
+            value: 95,
+          }),
+        ]),
+      );
+    });
+
+    it('should reject a grade above assignment max score (400)', async () => {
+      const { courseAssignmentId, teacherToken, studentId, groupId } =
+        await setupAssignments();
+      const assignmentId = new Types.ObjectId();
+      const submissionId = new Types.ObjectId();
+
+      await connection.collection('assignments').insertOne({
+        _id: assignmentId,
+        courseAssignment: courseAssignmentId,
+        group: groupId,
+        title: 'Limited Score',
+        description: 'Desc',
+        dueDate: new Date(Date.now() + 86400000),
+        maxScore: 60,
+        files: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await connection.collection('submissions').insertOne({
+        _id: submissionId,
+        assignment: assignmentId,
+        student: studentId,
+        files: [],
+        status: 'submitted',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/courses/submissions/${submissionId.toHexString()}/grade`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({
+          score: 70,
+          comment: 'Too high',
+        })
+        .expect(400);
     });
   });
 });

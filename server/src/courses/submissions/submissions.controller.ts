@@ -33,8 +33,14 @@ export class SubmissionsController {
   async getSubmissions(
     @Param('assignmentId') assignmentId: string,
     @Query() paginationDto: PaginationDto,
+    @Request() req: RequestWithUser,
   ): Promise<PaginatedDto<SubmissionDto>> {
-    return this.submissionsService.findSubmissions(assignmentId, paginationDto);
+    return this.submissionsService.findSubmissions(
+      assignmentId,
+      paginationDto,
+      req.user.sub,
+      req.user.role,
+    );
   }
 
   @Post('assignments/:id/submit')
@@ -53,8 +59,14 @@ export class SubmissionsController {
   async removeSubmission(
     @Param('assignmentId') assignmentId: string,
     @Param('studentId') studentId: string,
+    @Request() req: RequestWithUser,
   ): Promise<{ success: boolean }> {
-    return this.submissionsService.removeSubmission(assignmentId, studentId);
+    return this.submissionsService.removeSubmission(
+      assignmentId,
+      studentId,
+      req.user.sub,
+      req.user.role,
+    );
   }
   @Delete('assignments/:id/submit')
   @Roles(Role.STUDENT)
@@ -62,6 +74,11 @@ export class SubmissionsController {
     @Param('id') id: string,
     @Request() req: RequestWithUser,
   ) {
-    return this.submissionsService.removeSubmission(id, req.user.sub);
+    return this.submissionsService.removeSubmission(
+      id,
+      req.user.sub,
+      req.user.sub,
+      req.user.role,
+    );
   }
 }

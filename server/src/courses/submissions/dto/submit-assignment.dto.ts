@@ -1,9 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsMongoId,
+} from 'class-validator';
 
 export class SubmitAssignmentDto {
   @ApiProperty({ type: [String] })
-  @IsString({ each: true })
-  @IsNotEmpty()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(5)
+  @ArrayUnique()
+  @IsMongoId({ each: true })
   fileIds: string[];
 }

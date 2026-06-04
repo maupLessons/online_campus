@@ -137,6 +137,7 @@ export interface Notification {
   type:
     | 'schedule_change'
     | 'new_assignment'
+    | 'assignment_submitted'
     | 'new_survey'
     | 'grade'
     | 'announcement'

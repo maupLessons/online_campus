@@ -13,6 +13,7 @@ import {
 export enum NotificationType {
   SCHEDULE_CHANGE = 'schedule_change',
   NEW_ASSIGNMENT = 'new_assignment',
+  ASSIGNMENT_SUBMITTED = 'assignment_submitted',
   NEW_SURVEY = 'new_survey',
   GRADE = 'grade',
   ANNOUNCEMENT = 'announcement',
@@ -77,6 +78,7 @@ export class CreateNotificationDto {
       'elective',
       'course',
       'assignment',
+      'submission',
       'grade',
       'schedule',
       'system',
@@ -88,6 +90,7 @@ export class CreateNotificationDto {
     'elective',
     'course',
     'assignment',
+    'submission',
     'grade',
     'schedule',
     'system',

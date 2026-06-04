@@ -178,12 +178,15 @@ export interface Grade {
   studentId: string;
   courseAssignmentId: string;
   lessonJournalEntryId?: string | null;
+  assignmentId?: string | null;
+  submissionId?: string | null;
   date: string;
   type: string;
   value: number;
   comment?: string;
   courseName?: string;
   courseCode?: string;
+  assignmentTitle?: string;
 }
 
 export interface GradeJournalResponse {
@@ -242,7 +245,17 @@ export interface Notification {
   readFlag: boolean;
   important?: boolean;
   actionUrl?: string;
-  entityType?: string | null;
+  entityType?:
+    | 'survey'
+    | 'elective'
+    | 'course'
+    | 'assignment'
+    | 'submission'
+    | 'grade'
+    | 'schedule'
+    | 'system'
+    | string
+    | null;
   entityId?: string | null;
 }
 
@@ -563,9 +576,12 @@ export interface Submission {
   id: string;
   assignmentId: string;
   studentId: string;
+  studentName?: string;
+  studentLogin?: string;
+  files: FileDto[];
   submittedAt: string;
-  fileLink: string;
-  originalName: string;
+  fileLink?: string;
+  originalName?: string;
   score?: number;
   comment?: string;
   status: 'submitted' | 'graded' | 'returned';

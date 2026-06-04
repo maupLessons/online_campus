@@ -1,5 +1,11 @@
 import { useMemo, useState } from 'react';
-import type { ChangeEvent, ReactNode, SyntheticEvent } from 'react';
+import type {
+  ChangeEvent,
+  Dispatch,
+  ReactNode,
+  SetStateAction,
+  SyntheticEvent,
+} from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -8,6 +14,7 @@ import {
   ClipboardList,
   Download,
   Edit3,
+  FileCheck2,
   GraduationCap,
   Link as LinkIcon,
   Plus,
@@ -31,10 +38,17 @@ import {
   type MaterialCategory,
   type PaginatedResponse,
   type ScheduleEntry,
+  type Submission,
   type User,
 } from '../../types';
 
-type TabType = 'materials' | 'assignments' | 'students' | 'journal' | 'grades';
+type TabType =
+  | 'materials'
+  | 'assignments'
+  | 'students'
+  | 'journal'
+  | 'submissions'
+  | 'grades';
 type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
 
 const MATERIAL_CATEGORY_VALUES: MaterialCategory[] = [
@@ -169,6 +183,11 @@ export default function CourseDetailPage() {
   >({});
   const [editingGradeId, setEditingGradeId] = useState<string | null>(null);
   const [gradeEditForm, setGradeEditForm] = useState(emptyGradeEditForm);
+  const [selectedSubmissionAssignmentId, setSelectedSubmissionAssignmentId] =
+    useState('');
+  const [submissionGradeForm, setSubmissionGradeForm] = useState<
+    Record<string, { score: string; comment: string }>
+  >({});
 
   const teacherMode = isTeacherLike(user?.role);
 
@@ -206,8 +225,22 @@ export default function CourseDetailPage() {
       );
       return data;
     },
-    enabled: Boolean(id) && activeTab === 'assignments',
+    enabled:
+      Boolean(id) &&
+      (activeTab === 'assignments' || activeTab === 'submissions'),
   });
+
+  const assignments = assignmentsData?.docs ?? [];
+  const currentSubmissionAssignmentId =
+    selectedSubmissionAssignmentId &&
+    assignments.some(
+      (assignment) => assignment.id === selectedSubmissionAssignmentId,
+    )
+      ? selectedSubmissionAssignmentId
+      : assignments[0]?.id ?? '';
+  const selectedSubmissionAssignment = assignments.find(
+    (assignment) => assignment.id === currentSubmissionAssignmentId,
+  );
 
   const { data: students = [], isLoading: isLoadingStudents } = useQuery({
     queryKey: ['courses', id, 'students'],
@@ -251,6 +284,21 @@ export default function CourseDetailPage() {
     enabled: Boolean(id) && teacherMode && activeTab === 'journal',
   });
 
+  const { data: submissionsData, isLoading: isLoadingSubmissions } = useQuery({
+    queryKey: ['courses', id, 'submissions', currentSubmissionAssignmentId],
+    queryFn: async () => {
+      const { data } = await api.get<PaginatedResponse<Submission>>(
+        `/courses/assignments/${currentSubmissionAssignmentId}/submissions?limit=100`,
+      );
+      return data;
+    },
+    enabled:
+      Boolean(id) &&
+      teacherMode &&
+      activeTab === 'submissions' &&
+      Boolean(currentSubmissionAssignmentId),
+  });
+
   const tabs = useMemo(() => {
     const base: Array<{ id: TabType; label: string; icon: typeof BookOpen }> = [
       { id: 'materials', label: t('courses.tabs.materials'), icon: BookOpen },
@@ -265,6 +313,11 @@ export default function CourseDetailPage() {
       base.push(
         { id: 'students', label: t('courses.tabs.students'), icon: Users },
         { id: 'journal', label: t('courses.tabs.journal'), icon: BookOpen },
+        {
+          id: 'submissions',
+          label: t('courses.tabs.submissions'),
+          icon: FileCheck2,
+        },
         { id: 'grades', label: t('courses.tabs.grades'), icon: GraduationCap },
       );
     }
@@ -286,6 +339,9 @@ export default function CourseDetailPage() {
         queryKey: ['courses', id, 'assignments'],
       }),
       queryClient.invalidateQueries({ queryKey: ['courses', id, 'journal'] }),
+      queryClient.invalidateQueries({
+        queryKey: ['courses', id, 'submissions'],
+      }),
       queryClient.invalidateQueries({ queryKey: ['courses', id, 'grades'] }),
     ]);
   };
@@ -496,6 +552,31 @@ export default function CourseDetailPage() {
       await refreshCourseWork();
     },
     onError: () => showStatus(t('teacherCourse.grades.deleteError')),
+  });
+
+  const gradeSubmissionMutation = useMutation({
+    mutationFn: async (submission: Submission) => {
+      const form = submissionGradeForm[submission.id];
+      const score = form?.score ?? String(submission.score ?? '');
+
+      await api.post(`/courses/submissions/${submission.id}/grade`, {
+        score: Number(score),
+        comment: form?.comment?.trim() || undefined,
+      });
+    },
+    onSuccess: async () => {
+      showStatus(t('teacherCourse.submissions.graded'));
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['courses', id, 'submissions'],
+        }),
+        queryClient.invalidateQueries({ queryKey: ['courses', id, 'grades'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['courses', id, 'assignments'],
+        }),
+      ]);
+    },
+    onError: () => showStatus(t('teacherCourse.submissions.gradeError')),
   });
 
   const resetMaterialForm = () => {
@@ -788,6 +869,31 @@ export default function CourseDetailPage() {
               onDelete={(journalId) => deleteJournalMutation.mutate(journalId)}
               onCancelEdit={resetJournalForm}
               editingId={editingJournalId}
+            />
+          )}
+
+          {activeTab === 'submissions' && (
+            <SubmissionsTab
+              assignments={assignments}
+              selectedAssignmentId={currentSubmissionAssignmentId}
+              selectedAssignment={selectedSubmissionAssignment}
+              onAssignmentChange={setSelectedSubmissionAssignmentId}
+              submissions={submissionsData?.docs ?? []}
+              students={students}
+              loadingAssignments={isLoadingAssignments}
+              loadingSubmissions={isLoadingSubmissions}
+              dateLabel={dateLabel}
+              gradeForm={submissionGradeForm}
+              setGradeForm={setSubmissionGradeForm}
+              onGrade={(submission) =>
+                void gradeSubmissionMutation.mutateAsync(submission)
+              }
+              gradingSubmissionId={
+                gradeSubmissionMutation.isPending
+                  ? gradeSubmissionMutation.variables?.id
+                  : null
+              }
+              onDownload={handleDownload}
             />
           )}
 
@@ -1594,6 +1700,201 @@ function JournalTab({
               </div>
             </article>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubmissionsTab({
+  assignments,
+  selectedAssignmentId,
+  selectedAssignment,
+  onAssignmentChange,
+  submissions,
+  students,
+  loadingAssignments,
+  loadingSubmissions,
+  dateLabel,
+  gradeForm,
+  setGradeForm,
+  onGrade,
+  gradingSubmissionId,
+  onDownload,
+}: {
+  assignments: Assignment[];
+  selectedAssignmentId: string;
+  selectedAssignment?: Assignment;
+  onAssignmentChange: (assignmentId: string) => void;
+  submissions: Submission[];
+  students: User[];
+  loadingAssignments: boolean;
+  loadingSubmissions: boolean;
+  dateLabel: (value?: string) => string;
+  gradeForm: Record<string, { score: string; comment: string }>;
+  setGradeForm: Dispatch<
+    SetStateAction<Record<string, { score: string; comment: string }>>
+  >;
+  onGrade: (submission: Submission) => void;
+  gradingSubmissionId: string | null;
+  onDownload: (fileId: string, originalName: string) => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const studentsById = useMemo(
+    () => new Map(students.map((student) => [student.id, student])),
+    [students],
+  );
+  const maxScore = selectedAssignment?.maxScore ?? 100;
+
+  if (loadingAssignments) {
+    return <EmptyState text={t('teacherCourse.assignments.loading')} />;
+  }
+
+  if (assignments.length === 0) {
+    return <EmptyState text={t('teacherCourse.assignments.empty')} />;
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
+        <label className="grid gap-1 text-sm font-medium text-slate-700">
+          {t('teacherCourse.submissions.assignment')}
+          <select
+            value={selectedAssignmentId}
+            onChange={(event) => onAssignmentChange(event.target.value)}
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500">
+            {assignments.map((assignment) => (
+              <option key={assignment.id} value={assignment.id}>
+                {assignment.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="rounded-lg bg-white px-3 py-2 text-sm text-slate-600">
+          <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            {t('teacherCourse.assignments.points', { count: maxScore })}
+          </div>
+          <div className="mt-1 font-semibold text-slate-900">
+            {selectedAssignment
+              ? dateLabel(selectedAssignment.dueDate)
+              : t('teacherCourse.common.noData')}
+          </div>
+        </div>
+      </div>
+
+      {loadingSubmissions ? (
+        <EmptyState text={t('teacherCourse.submissions.loading')} />
+      ) : submissions.length === 0 ? (
+        <EmptyState text={t('teacherCourse.submissions.empty')} />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+              <tr>
+                <TableHead>{t('teacherCourse.grades.student')}</TableHead>
+                <TableHead>{t('teacherCourse.submissions.submittedAt')}</TableHead>
+                <TableHead>{t('teacherCourse.submissions.files')}</TableHead>
+                <TableHead>{t('grades.grade')}</TableHead>
+                <TableHead>{t('grades.comment')}</TableHead>
+                <TableHead>{t('teacherCourse.common.actions')}</TableHead>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 bg-white">
+              {submissions.map((submission) => {
+                const student = studentsById.get(submission.studentId);
+                const studentName =
+                  student !== undefined
+                    ? formatUserName(student)
+                    : submission.studentName ?? submission.studentId;
+                const scoreValue =
+                  gradeForm[submission.id]?.score ??
+                  (submission.score !== undefined ? String(submission.score) : '');
+                const commentValue =
+                  gradeForm[submission.id]?.comment ??
+                  submission.comment ??
+                  '';
+                const scoreNumber = Number(scoreValue);
+                const invalidScore =
+                  !scoreValue ||
+                  Number.isNaN(scoreNumber) ||
+                  scoreNumber < 0 ||
+                  scoreNumber > maxScore;
+                const isSaving = gradingSubmissionId === submission.id;
+
+                return (
+                  <tr key={submission.id}>
+                    <TableCell strong>
+                      <div>{studentName}</div>
+                      <div className="mt-1 text-xs font-normal text-slate-400">
+                        {submission.status === 'graded'
+                          ? t('teacherCourse.submissions.statusGraded')
+                          : t('teacherCourse.submissions.statusSubmitted')}
+                      </div>
+                    </TableCell>
+                    <TableCell>{dateLabel(submission.submittedAt)}</TableCell>
+                    <TableCell>
+                      {submission.files?.length ? (
+                        <ResourceList
+                          files={submission.files}
+                          resourceLinks={[]}
+                          onDownload={onDownload}
+                        />
+                      ) : (
+                        <span className="text-slate-400">
+                          {t('teacherCourse.submissions.noFiles')}
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="number"
+                        min={0}
+                        max={maxScore}
+                        value={scoreValue}
+                        onChange={(event) =>
+                          setGradeForm((current) => ({
+                            ...current,
+                            [submission.id]: {
+                              score: event.target.value,
+                              comment: commentValue,
+                            },
+                          }))
+                        }
+                        className="min-h-10 w-24 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-blue-500"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="text"
+                        maxLength={500}
+                        value={commentValue}
+                        onChange={(event) =>
+                          setGradeForm((current) => ({
+                            ...current,
+                            [submission.id]: {
+                              score: scoreValue,
+                              comment: event.target.value,
+                            },
+                          }))
+                        }
+                        className="min-h-10 w-full min-w-52 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-blue-500"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        type="button"
+                        disabled={invalidScore || isSaving}
+                        onClick={() => onGrade(submission)}
+                        className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-slate-300">
+                        <Save className="h-4 w-4" />
+                        {t('teacherCourse.submissions.grade')}
+                      </button>
+                    </TableCell>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

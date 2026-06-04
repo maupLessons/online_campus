@@ -262,9 +262,10 @@
 | PATCH  | `/courses/journal/:id`            | teacher+                                                |
 | DELETE | `/courses/journal/:id`            | teacher+                                                |
 | GET    | `/courses/assignments/my`         | student                                                 |
+| GET    | `/courses/assignments/:id/submissions` | teacher+                                           |
 | GET    | `/courses/grades/my`              | student                                                 |
 | POST   | `/courses/assignments/:id/submit` | student                                                 |
-| POST   | `/courses/assignments/:id/grade`  | teacher                                                 |
+| POST   | `/courses/submissions/:id/grade`  | teacher                                                 |
 
 ---
 
@@ -785,9 +786,10 @@ AuditLogEntry
 | PATCH | `/courses/journal/:id`            | teacher+      |
 | DELETE | `/courses/journal/:id`           | teacher+      |
 | GET   | `/courses/assignments/my`         | student       |
+| GET   | `/courses/assignments/:id/submissions` | teacher+ |
 | POST  | `/courses/assignments/:id/submit` | student       |
 | GET   | `/courses/grades/my`              | student       |
-| POST  | `/courses/assignments/:id/grade`  | teacher       |
+| POST  | `/courses/submissions/:id/grade`  | teacher       |
 
 ### Опитування `/api/surveys`
 

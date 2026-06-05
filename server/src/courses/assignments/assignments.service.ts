@@ -329,7 +329,9 @@ export class AssignmentsService {
         type: NotificationType.NEW_ASSIGNMENT,
         targetType: 'group',
         groupId,
-        actionUrl: `/courses/${courseAssignmentId}`,
+        actionUrl: `/courses/${courseAssignmentId}?tab=assignments&assignmentId=${toId(
+          assignment._id,
+        )}`,
         entityType: 'assignment',
         entityId: toId(assignment._id),
         important: true,

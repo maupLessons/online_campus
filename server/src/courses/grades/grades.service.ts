@@ -75,11 +75,20 @@ export class GradesService {
       role,
     );
 
+    if (submission.status === 'graded') {
+      this.assertGradeEditableBeforeDeadline(assignment);
+    }
+
     if (dto.score < 0 || dto.score > assignment.maxScore) {
       throw new BadRequestException(
         `Оцінка має бути в межах 0-${assignment.maxScore}`,
       );
     }
+
+    const previousGrade = await this.gradeModel
+      .findOne({ submission: submission._id })
+      .lean()
+      .exec();
 
     submission.score = dto.score;
     submission.comment = dto.comment ?? '';
@@ -87,7 +96,9 @@ export class GradesService {
 
     const saved = await submission.save();
     const grade = await this.upsertSubmissionGrade(saved, assignment, dto);
-    await this.notifySubmissionGraded(grade, assignment, dto.score);
+    if (this.shouldNotifySubmissionGrade(previousGrade, grade)) {
+      await this.notifySubmissionGraded(grade, assignment, dto.score);
+    }
 
     const populated = await saved.populate('files');
     return transformToDto(SubmissionDto, populated.toObject());
@@ -139,16 +150,44 @@ export class GradesService {
       userId,
       role,
     );
+    const linkedAssignment = await this.findLinkedAssignment(grade);
+    if (linkedAssignment) {
+      this.assertGradeEditableBeforeDeadline(linkedAssignment);
+      this.assertGradeFitsAssignmentMaxScore(dto.value, linkedAssignment);
+    }
+
+    const previousGradeSnapshot = {
+      value: grade.value,
+      comment: grade.comment,
+    };
 
     if (dto.type) grade.type = dto.type;
     if (dto.value !== undefined) grade.value = dto.value;
     if (dto.comment !== undefined) grade.comment = dto.comment;
 
     const saved = await grade.save();
-    const populated = await saved.populate({
-      path: 'courseAssignment',
-      populate: { path: 'course' },
-    });
+    if (linkedAssignment) {
+      await this.syncSubmissionFromGrade(saved, linkedAssignment);
+    }
+
+    const populated = await saved.populate([
+      {
+        path: 'courseAssignment',
+        populate: { path: 'course' },
+      },
+      { path: 'assignment' },
+    ]);
+
+    if (
+      linkedAssignment &&
+      this.shouldNotifySubmissionGrade(previousGradeSnapshot, populated)
+    ) {
+      await this.notifySubmissionGraded(
+        populated,
+        linkedAssignment,
+        populated.value,
+      );
+    }
 
     return transformToDto(GradeResponseDto, populated.toObject());
   }
@@ -168,6 +207,11 @@ export class GradesService {
       userId,
       role,
     );
+    const linkedAssignment = await this.findLinkedAssignment(grade);
+    if (linkedAssignment) {
+      this.assertGradeEditableBeforeDeadline(linkedAssignment);
+      await this.resetSubmissionGrade(grade);
+    }
 
     await this.gradeModel.findByIdAndDelete(id).exec();
     return { id };
@@ -383,6 +427,122 @@ export class GradesService {
     return trimmedComment
       ? `Завдання «${assignmentTitle}»: ${trimmedComment}`
       : `Завдання «${assignmentTitle}»`;
+  }
+
+  private shouldNotifySubmissionGrade(
+    previousGrade: { value?: unknown; comment?: unknown } | null,
+    nextGrade: GradeDocument,
+  ): boolean {
+    if (!previousGrade) {
+      return true;
+    }
+
+    const previousComment =
+      typeof previousGrade.comment === 'string' ? previousGrade.comment : '';
+    const nextComment =
+      typeof nextGrade.comment === 'string' ? nextGrade.comment : '';
+
+    return (
+      Number(previousGrade.value) !== nextGrade.value ||
+      previousComment !== nextComment
+    );
+  }
+
+  private async findLinkedAssignment(
+    grade: GradeDocument,
+  ): Promise<AssignmentDocument | null> {
+    if (!grade.assignment) {
+      return null;
+    }
+
+    const assignmentId = toId(grade.assignment);
+    const assignment = await this.assignmentModel.findById(assignmentId).exec();
+    if (!assignment) {
+      return null;
+    }
+
+    return assignment;
+  }
+
+  private assertGradeEditableBeforeDeadline(
+    assignment: AssignmentDocument,
+  ): void {
+    if (new Date() > new Date(assignment.dueDate)) {
+      throw new BadRequestException(
+        'Оцінку за завдання не можна змінювати після дедлайну',
+      );
+    }
+  }
+
+  private assertGradeFitsAssignmentMaxScore(
+    value: number | undefined,
+    assignment: AssignmentDocument,
+  ): void {
+    if (value === undefined) {
+      return;
+    }
+
+    if (value > assignment.maxScore) {
+      throw new BadRequestException(
+        `Оцінка має бути в межах 0-${assignment.maxScore}`,
+      );
+    }
+  }
+
+  private async syncSubmissionFromGrade(
+    grade: GradeDocument,
+    assignment: AssignmentDocument,
+  ): Promise<void> {
+    if (!grade.submission) {
+      return;
+    }
+
+    await this.submissionModel
+      .findByIdAndUpdate(
+        toId(grade.submission),
+        {
+          $set: {
+            score: grade.value,
+            comment: this.extractSubmissionComment(grade.comment, assignment),
+            status: 'graded',
+          },
+        },
+        { runValidators: true },
+      )
+      .exec();
+  }
+
+  private async resetSubmissionGrade(grade: GradeDocument): Promise<void> {
+    if (!grade.submission) {
+      return;
+    }
+
+    await this.submissionModel
+      .findByIdAndUpdate(
+        toId(grade.submission),
+        {
+          $set: { status: 'submitted' },
+          $unset: { score: '', comment: '' },
+        },
+        { runValidators: true },
+      )
+      .exec();
+  }
+
+  private extractSubmissionComment(
+    comment: string | undefined,
+    assignment: AssignmentDocument,
+  ): string {
+    const normalizedComment = comment?.trim() ?? '';
+    const assignmentTitle = assignment.title?.trim() || 'Завдання';
+    const prefixedComment = `Завдання «${assignmentTitle}»:`;
+    const titleOnlyComment = `Завдання «${assignmentTitle}»`;
+
+    if (normalizedComment.startsWith(prefixedComment)) {
+      return normalizedComment.slice(prefixedComment.length).trim();
+    }
+
+    return normalizedComment === titleOnlyComment ? '' : normalizedComment;
   }
 
   private async notifySubmissionGraded(

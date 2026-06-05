@@ -420,8 +420,36 @@ describe('Assignments (e2e)', () => {
 
       expect(notification).toBeTruthy();
       expect(notification?.actionUrl).toBe(
-        `/courses/${courseAssignmentId.toHexString()}`,
+        `/courses/${courseAssignmentId.toHexString()}?tab=submissions&assignmentId=${assignmentId.toHexString()}`,
       );
+    });
+
+    it('should reject student submissions after deadline (400)', async () => {
+      const { courseAssignmentId, studentId, studentToken, groupId } =
+        await setupAssignments();
+      const assignmentId = new Types.ObjectId();
+      const fileId = await createUploadedFile(studentId);
+
+      await connection.collection('assignments').insertOne({
+        _id: assignmentId,
+        courseAssignment: courseAssignmentId,
+        group: groupId,
+        title: 'Expired Submit',
+        description: 'Desc',
+        dueDate: new Date(Date.now() - 3600000),
+        maxScore: 100,
+        files: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({
+          fileIds: [fileId.toHexString()],
+        })
+        .expect(400);
     });
 
     it('should fail if submitting twice (409)', async () => {
@@ -558,6 +586,15 @@ describe('Assignments (e2e)', () => {
       expect(body.status).toBe('graded');
       expect(body.score).toBe(95);
 
+      const pendingResponse = await request(app.getHttpServer())
+        .get(
+          `/api/courses/assignments/${assignmentId.toHexString()}/submissions`,
+        )
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(200);
+      const pendingBody = pendingResponse.body as PaginatedDto<SubmissionDto>;
+      expect(pendingBody.docs).toHaveLength(0);
+
       const grade = await connection.collection('grades').findOne({
         submission: submissionId,
         assignment: assignmentId,
@@ -568,6 +605,10 @@ describe('Assignments (e2e)', () => {
       expect(grade).toBeTruthy();
       expect(grade?.value).toBe(95);
       expect(grade?.type).toBe('current');
+      if (!grade?._id) {
+        throw new Error('Expected assignment grade to be created');
+      }
+      const gradeId = grade._id.toHexString();
 
       const notification = await connection
         .collection('notifications')
@@ -575,11 +616,73 @@ describe('Assignments (e2e)', () => {
           userId: studentId,
           type: 'grade',
           entityType: 'grade',
-          entityId: grade?._id.toHexString(),
+          entityId: gradeId,
         });
 
       expect(notification).toBeTruthy();
       expect(notification?.actionUrl).toBe('/assignments');
+
+      await request(app.getHttpServer())
+        .post(`/api/courses/submissions/${submissionId.toHexString()}/grade`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({
+          score: 95,
+          comment: 'Good job',
+        })
+        .expect(201);
+
+      const gradeNotifications = await connection
+        .collection('notifications')
+        .countDocuments({
+          userId: studentId,
+          type: 'grade',
+          entityType: 'grade',
+          entityId: gradeId,
+        });
+      expect(gradeNotifications).toBe(1);
+
+      await request(app.getHttpServer())
+        .patch(`/api/courses/grades/${gradeId}`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({
+          type: 'current',
+          value: 88,
+          comment: 'Updated after review',
+        })
+        .expect(200);
+
+      const updatedSubmission = await connection
+        .collection('submissions')
+        .findOne({ _id: submissionId });
+      expect(updatedSubmission?.status).toBe('graded');
+      expect(updatedSubmission?.score).toBe(88);
+      expect(updatedSubmission?.comment).toBe('Updated after review');
+
+      const studentAssignmentsResponse = await request(app.getHttpServer())
+        .get('/api/courses/assignments/my')
+        .set('Authorization', `Bearer ${studentToken}`)
+        .expect(200);
+
+      const studentAssignmentsBody =
+        studentAssignmentsResponse.body as PaginatedDto<AssignmentDto>;
+      const studentAssignment = studentAssignmentsBody.docs.find(
+        (assignment) => assignment.id === assignmentId.toHexString(),
+      );
+      expect(studentAssignment?.submission?.status).toBe('graded');
+      expect(studentAssignment?.submission?.score).toBe(88);
+      expect(studentAssignment?.submission?.comment).toBe(
+        'Updated after review',
+      );
+
+      const updatedGradeNotifications = await connection
+        .collection('notifications')
+        .countDocuments({
+          userId: studentId,
+          type: 'grade',
+          entityType: 'grade',
+          entityId: gradeId,
+        });
+      expect(updatedGradeNotifications).toBe(2);
 
       const gradesResponse = await request(app.getHttpServer())
         .get(
@@ -596,7 +699,7 @@ describe('Assignments (e2e)', () => {
         expect.arrayContaining([
           expect.objectContaining({
             assignmentTitle: 'To Grade',
-            value: 95,
+            value: 88,
           }),
         ]),
       );
@@ -637,6 +740,72 @@ describe('Assignments (e2e)', () => {
         .send({
           score: 70,
           comment: 'Too high',
+        })
+        .expect(400);
+    });
+
+    it('should reject editing an already graded submission after deadline (400)', async () => {
+      const { courseAssignmentId, teacherToken, studentId, groupId } =
+        await setupAssignments();
+      const assignmentId = new Types.ObjectId();
+      const submissionId = new Types.ObjectId();
+
+      await connection.collection('assignments').insertOne({
+        _id: assignmentId,
+        courseAssignment: courseAssignmentId,
+        group: groupId,
+        title: 'Locked Grade',
+        description: 'Desc',
+        dueDate: new Date(Date.now() - 86400000),
+        maxScore: 100,
+        files: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await connection.collection('submissions').insertOne({
+        _id: submissionId,
+        assignment: assignmentId,
+        student: studentId,
+        files: [],
+        status: 'graded',
+        score: 80,
+        comment: 'Initial grade',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const gradeId = new Types.ObjectId();
+      await connection.collection('grades').insertOne({
+        _id: gradeId,
+        student: studentId,
+        courseAssignment: courseAssignmentId,
+        assignment: assignmentId,
+        submission: submissionId,
+        type: 'current',
+        value: 80,
+        comment: 'Initial grade',
+        date: new Date(Date.now() - 3600000),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await request(app.getHttpServer())
+        .post(`/api/courses/submissions/${submissionId.toHexString()}/grade`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({
+          score: 90,
+          comment: 'Late edit',
+        })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .patch(`/api/courses/grades/${gradeId.toHexString()}`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({
+          type: 'current',
+          value: 90,
+          comment: 'Late journal edit',
         })
         .expect(400);
     });

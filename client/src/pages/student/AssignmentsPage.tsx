@@ -245,16 +245,6 @@ export default function AssignmentsPage() {
                       ).toLocaleString(locale)}
                     </span>
                   )}
-                  {assignment.submission?.status === 'graded' &&
-                    assignment.submission.score !== undefined && (
-                      <span className="font-semibold text-green-700">
-                        {t('assignments.gradeResult', {
-                          score: assignment.submission.score,
-                          maxScore: assignment.maxScore,
-                        })}
-                      </span>
-                    )}
-
                   {assignment.submission?.comment && (
                     <div className="mt-1 w-full text-gray-600 italic">
                       <span className="font-medium text-gray-500">

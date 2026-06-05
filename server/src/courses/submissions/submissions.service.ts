@@ -67,7 +67,7 @@ export class SubmissionsService {
     };
 
     const result = await this.submissionModel.paginate(
-      { assignment: assignment._id },
+      { assignment: assignment._id, status: 'submitted' },
       options,
     );
 
@@ -84,11 +84,7 @@ export class SubmissionsService {
       studentId,
       Role.STUDENT,
     );
-    // блокує завантаження після дедлайну, розкоментувати за потребою.
-    // import { BadRequestException } from '@nestjs/common';
-    // if (new Date() > assignment.dueDate) {
-    //   throw new BadRequestException('Термін здачі завдання минув');
-    // }
+    this.assertBeforeDeadline(assignment);
 
     const existingFilter: Record<string, unknown> = {
       assignment: assignment._id,
@@ -134,7 +130,11 @@ export class SubmissionsService {
       throw new BadRequestException('Некоректний ID студента');
     }
 
-    await this.getOwnedAssignment(assignmentId, userId, role);
+    const assignment = await this.getOwnedAssignment(
+      assignmentId,
+      userId,
+      role,
+    );
 
     const filter: Record<string, unknown> = {
       assignment: new Types.ObjectId(assignmentId),
@@ -144,6 +144,16 @@ export class SubmissionsService {
     const existing = await this.submissionModel.findOne(filter).exec();
     if (!existing) {
       throw new NotFoundException('Здану роботу не знайдено');
+    }
+
+    if (role === Role.STUDENT) {
+      this.assertBeforeDeadline(assignment);
+
+      if (existing.status === 'graded') {
+        throw new BadRequestException(
+          'Оцінену роботу не можна видалити для повторної здачі',
+        );
+      }
     }
 
     await this.submissionModel.deleteOne(filter).exec();
@@ -223,7 +233,9 @@ export class SubmissionsService {
           assignment.title
         }»${courseAssignment.courseName ? ` з дисципліни ${courseAssignment.courseName}` : ''}.`,
         type: NotificationType.ASSIGNMENT_SUBMITTED,
-        actionUrl: `/courses/${courseAssignmentId}`,
+        actionUrl: `/courses/${courseAssignmentId}?tab=submissions&assignmentId=${toId(
+          assignment._id,
+        )}`,
         entityType: 'submission',
         entityId: toId(submission._id),
         important: true,
@@ -251,5 +263,11 @@ export class SubmissionsService {
       .trim();
 
     return fullName || user.login || 'Студент';
+  }
+
+  private assertBeforeDeadline(assignment: AssignmentDocument): void {
+    if (new Date() > new Date(assignment.dueDate)) {
+      throw new BadRequestException('Термін здачі завдання минув');
+    }
   }
 }

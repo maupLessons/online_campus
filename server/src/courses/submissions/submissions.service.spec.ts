@@ -105,11 +105,14 @@ describe('SubmissionsService security checks', () => {
       Role.TEACHER,
     );
     const paginateCall = submissionModel.paginate.mock.calls[0] as [
-      { assignment: Types.ObjectId },
+      { assignment: Types.ObjectId; status: string },
       { populate: unknown },
     ];
 
-    expect(paginateCall[0]).toEqual({ assignment: assignmentId });
+    expect(paginateCall[0]).toEqual({
+      assignment: assignmentId,
+      status: 'submitted',
+    });
     expect(paginateCall[1].populate).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ path: 'student' }),
@@ -140,6 +143,7 @@ describe('SubmissionsService security checks', () => {
       _id: assignmentId,
       group: groupId,
       courseAssignment: objectId(),
+      dueDate: new Date(Date.now() + 60_000),
     };
     const submission = { _id: objectId() };
 
@@ -205,6 +209,68 @@ describe('SubmissionsService security checks', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(assignmentModel.findById).not.toHaveBeenCalled();
+    expect(submissionModel.deleteOne).not.toHaveBeenCalled();
+  });
+
+  it('blocks submissions after the assignment deadline', async () => {
+    const studentId = objectId();
+    const groupId = objectId();
+    const assignment = {
+      _id: objectId(),
+      group: groupId,
+      courseAssignment: objectId(),
+      dueDate: new Date(Date.now() - 60_000),
+    };
+
+    assignmentModel.findById.mockReturnValue(query(assignment));
+    userModel.findById.mockReturnValue(
+      query({
+        studentProfile: { group: groupId },
+      }),
+    );
+
+    await expect(
+      service.submitAssignment(
+        assignment._id.toHexString(),
+        { fileIds: [objectId().toHexString()] },
+        studentId.toHexString(),
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(filesService.assertFilesCanBeAttached).not.toHaveBeenCalled();
+    expect(notificationsService.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks deleting graded submissions for resubmission', async () => {
+    const assignmentId = objectId();
+    const studentId = objectId();
+    const groupId = objectId();
+    const assignment = {
+      _id: assignmentId,
+      group: groupId,
+      courseAssignment: objectId(),
+      dueDate: new Date(Date.now() + 60_000),
+    };
+
+    assignmentModel.findById.mockReturnValue(query(assignment));
+    userModel.findById.mockReturnValue(
+      query({
+        studentProfile: { group: groupId },
+      }),
+    );
+    submissionModel.findOne.mockReturnValue(
+      query({ _id: objectId(), status: 'graded' }),
+    );
+
+    await expect(
+      service.removeSubmission(
+        assignmentId.toHexString(),
+        studentId.toHexString(),
+        studentId.toHexString(),
+        Role.STUDENT,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
     expect(submissionModel.deleteOne).not.toHaveBeenCalled();
   });
 });

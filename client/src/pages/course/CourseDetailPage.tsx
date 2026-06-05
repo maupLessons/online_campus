@@ -6,7 +6,7 @@ import type {
   SetStateAction,
   SyntheticEvent,
 } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -50,6 +50,20 @@ type TabType =
   | 'submissions'
   | 'grades';
 type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+
+const COURSE_DETAIL_TABS: TabType[] = [
+  'materials',
+  'assignments',
+  'students',
+  'journal',
+  'submissions',
+  'grades',
+];
+
+const getInitialTab = (value: string | null): TabType =>
+  COURSE_DETAIL_TABS.includes(value as TabType)
+    ? (value as TabType)
+    : 'materials';
 
 const MATERIAL_CATEGORY_VALUES: MaterialCategory[] = [
   'lecture',
@@ -157,11 +171,14 @@ async function uploadFile(file: File) {
 
 export default function CourseDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const locale = i18n.language === 'en' ? 'en-US' : 'uk-UA';
-  const [activeTab, setActiveTab] = useState<TabType>('materials');
+  const initialTab = getInitialTab(searchParams.get('tab'));
+  const initialAssignmentId = searchParams.get('assignmentId') ?? '';
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [statusMessage, setStatusMessage] = useState('');
   const [materialForm, setMaterialForm] = useState(emptyMaterialForm);
   const [materialFile, setMaterialFile] = useState<File | null>(null);
@@ -184,7 +201,7 @@ export default function CourseDetailPage() {
   const [editingGradeId, setEditingGradeId] = useState<string | null>(null);
   const [gradeEditForm, setGradeEditForm] = useState(emptyGradeEditForm);
   const [selectedSubmissionAssignmentId, setSelectedSubmissionAssignmentId] =
-    useState('');
+    useState(initialAssignmentId);
   const [submissionGradeForm, setSubmissionGradeForm] = useState<
     Record<string, { score: string; comment: string }>
   >({});

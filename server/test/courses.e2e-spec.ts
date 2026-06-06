@@ -113,7 +113,13 @@ describe('Courses (e2e)', () => {
       semester: 1,
     });
 
-    return { studentId, courseId, courseAssignmentId, accessToken };
+    return {
+      studentId,
+      groupId,
+      courseId,
+      courseAssignmentId,
+      accessToken,
+    };
   };
 
   describe('GET /courses', () => {
@@ -186,6 +192,50 @@ describe('Courses (e2e)', () => {
       const body = response.body as CourseAssignmentDto;
       expect(body.id).toBe(courseAssignmentId.toHexString());
       expect(body.courseName).toBe('Test Course');
+    });
+
+    it('should reject a course assignment from another group (403)', async () => {
+      const { accessToken, courseId } = await setupData();
+      const foreignCourseAssignmentId = new Types.ObjectId();
+
+      await connection.collection('courseassignments').insertOne({
+        _id: foreignCourseAssignmentId,
+        course: courseId,
+        teacher: new Types.ObjectId(),
+        group: new Types.ObjectId(),
+        academicYear: '2023-2024',
+        semester: 1,
+      });
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/courses/course-assignments/${foreignCourseAssignmentId.toHexString()}`,
+        )
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(403);
+    });
+
+    it('should reject an elective course without enrollment (403)', async () => {
+      const { accessToken, groupId } = await setupData();
+      const electiveCourseAssignmentId = new Types.ObjectId();
+
+      await connection.collection('courseassignments').insertOne({
+        _id: electiveCourseAssignmentId,
+        course: new Types.ObjectId(),
+        teacher: new Types.ObjectId(),
+        group: groupId,
+        academicYear: '2024-2025',
+        semester: 2,
+        source: 'elective',
+        enrolledStudents: [new Types.ObjectId()],
+      });
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/courses/course-assignments/${electiveCourseAssignmentId.toHexString()}`,
+        )
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(403);
     });
   });
 });

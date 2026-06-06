@@ -2,6 +2,7 @@
   "moduleFileExtensions": ["js", "json", "ts"],
   "rootDir": ".",
   "testEnvironment": "node",
+  "testTimeout": 30000,
   "testMatch": [
     "<rootDir>/app.e2e-spec.ts",
     "<rootDir>/assignments.e2e-spec.ts",

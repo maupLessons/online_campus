@@ -135,7 +135,7 @@ export default function AssignmentsPage() {
         <div className="space-y-4">
           {assignments.map((assignment) => {
             const status = getStatusBadge(assignment);
-            const isOverdue = false;
+            const isOverdue = new Date(assignment.dueDate) < new Date();
             const file = assignment.submission?.files?.[0] ?? null;
             const fileId = file ? file.id || file._id : undefined;
             const fileName =
@@ -181,13 +181,18 @@ export default function AssignmentsPage() {
                         <Download className="h-4 w-4" />
                         {fileName}
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleDelete(fileId, assignment.id)}
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-600 transition hover:bg-red-100"
-                        title={t('teacherCourse.common.delete')}>
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {assignment.submission.status !== 'graded' &&
+                        !isOverdue && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void handleDelete(fileId, assignment.id)
+                            }
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-600 transition hover:bg-red-100"
+                            title={t('teacherCourse.common.delete')}>
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                     </div>
                   </div>
                 ) : isOverdue ? (

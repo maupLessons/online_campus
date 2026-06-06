@@ -240,6 +240,21 @@ const resources = {
       'teacherCourse.submissions.grade': 'Оцінити',
       'teacherCourse.submissions.graded': 'Роботу оцінено.',
       'teacherCourse.submissions.gradeError': 'Не вдалося оцінити роботу.',
+      'teacherCourse.submissions.return': 'На доопрацювання',
+      'teacherCourse.submissions.returned':
+        'Роботу повернено студенту на доопрацювання.',
+      'teacherCourse.submissions.returnError':
+        'Не вдалося повернути роботу на доопрацювання.',
+      'teacherCourse.submissions.returnTitle':
+        'Повернути роботу на доопрацювання',
+      'teacherCourse.submissions.returnDescription':
+        '{{student}} отримає сповіщення щодо завдання «{{assignment}}» та зможе повторно здати виправлену роботу до дедлайну.',
+      'teacherCourse.submissions.returnReason': 'Причина та рекомендації',
+      'teacherCourse.submissions.returnReasonPlaceholder':
+        'Опишіть, що саме потрібно виправити...',
+      'teacherCourse.submissions.attempt': 'Спроба {{count}}',
+      'teacherCourse.submissions.previousReturn':
+        'Попередній коментар: {{comment}}',
       'teacherCourse.submissions.statusSubmitted': 'На перевірці',
       'teacherCourse.submissions.statusGraded': 'Оцінено',
 
@@ -283,9 +298,9 @@ const resources = {
       'teacherCourse.grades.student': 'Студент',
       'teacherCourse.grades.saved': 'Оцінку оновлено.',
       'teacherCourse.grades.saveError': 'Не вдалося оновити оцінку.',
-      'teacherCourse.grades.deleted': 'Оцінку видалено.',
-      'teacherCourse.grades.deleteError': 'Не вдалося видалити оцінку.',
       'teacherCourse.grades.save': 'Зберегти оцінку',
+      'teacherCourse.grades.locked':
+        'Після дедлайну оцінку та статус роботи змінювати не можна.',
 
       'common.back': 'Назад',
       'common.loading': 'Завантаження...',
@@ -307,6 +322,10 @@ const resources = {
       'assignments.statusReturned': 'Повернено на доопрацювання',
       'assignments.awaitingSubmission': 'Очікує виконання',
       'assignments.submissionClosed': 'Здача недоступна',
+      'assignments.revisionReason': 'Коментар викладача',
+      'assignments.resubmit': 'Завантажити виправлену роботу',
+      'assignments.attempt': 'Спроба: {{count}}',
+      'assignments.previousSubmission': 'Попередньо завантажена робота',
       'assignments.deadline': 'Дедлайн',
       'assignments.maxScore': 'Макс. бал',
       'assignments.submittedAt': 'Здано',
@@ -378,6 +397,7 @@ const resources = {
       'notifications.types.schedule_change': 'Розклад',
       'notifications.types.new_assignment': 'Завдання',
       'notifications.types.assignment_submitted': 'Здана робота',
+      'notifications.types.assignment_returned': 'Доопрацювання роботи',
       'notifications.types.new_survey': 'Опитування',
       'notifications.types.grade': 'Оцінка',
       'notifications.types.announcement': 'Оголошення',
@@ -883,6 +903,20 @@ const resources = {
       'teacherCourse.submissions.grade': 'Grade',
       'teacherCourse.submissions.graded': 'Submitted work graded.',
       'teacherCourse.submissions.gradeError': 'Could not grade submitted work.',
+      'teacherCourse.submissions.return': 'Return for revision',
+      'teacherCourse.submissions.returned':
+        'The work was returned to the student for revision.',
+      'teacherCourse.submissions.returnError':
+        'Could not return the work for revision.',
+      'teacherCourse.submissions.returnTitle': 'Return work for revision',
+      'teacherCourse.submissions.returnDescription':
+        '{{student}} will be notified about “{{assignment}}” and may resubmit corrected work before the deadline.',
+      'teacherCourse.submissions.returnReason': 'Reason and recommendations',
+      'teacherCourse.submissions.returnReasonPlaceholder':
+        'Describe what the student needs to correct...',
+      'teacherCourse.submissions.attempt': 'Attempt {{count}}',
+      'teacherCourse.submissions.previousReturn':
+        'Previous feedback: {{comment}}',
       'teacherCourse.submissions.statusSubmitted': 'Pending review',
       'teacherCourse.submissions.statusGraded': 'Graded',
 
@@ -928,9 +962,9 @@ const resources = {
       'teacherCourse.grades.student': 'Student',
       'teacherCourse.grades.saved': 'Grade updated.',
       'teacherCourse.grades.saveError': 'Could not update grade.',
-      'teacherCourse.grades.deleted': 'Grade deleted.',
-      'teacherCourse.grades.deleteError': 'Could not delete grade.',
       'teacherCourse.grades.save': 'Save grade',
+      'teacherCourse.grades.locked':
+        'The grade and submission status cannot be changed after the deadline.',
 
       'common.back': 'Back',
       'common.loading': 'Loading...',
@@ -951,6 +985,10 @@ const resources = {
       'assignments.statusReturned': 'Returned for revision',
       'assignments.awaitingSubmission': 'Awaiting submission',
       'assignments.submissionClosed': 'Submission closed',
+      'assignments.revisionReason': 'Teacher feedback',
+      'assignments.resubmit': 'Upload corrected work',
+      'assignments.attempt': 'Attempt: {{count}}',
+      'assignments.previousSubmission': 'Previously uploaded work',
       'assignments.deadline': 'Deadline',
       'assignments.maxScore': 'Max score',
       'assignments.submittedAt': 'Submitted',
@@ -1022,6 +1060,7 @@ const resources = {
       'notifications.types.schedule_change': 'Schedule',
       'notifications.types.new_assignment': 'Assignment',
       'notifications.types.assignment_submitted': 'Submitted work',
+      'notifications.types.assignment_returned': 'Work revision',
       'notifications.types.new_survey': 'Survey',
       'notifications.types.grade': 'Grade',
       'notifications.types.announcement': 'Announcement',

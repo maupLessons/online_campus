@@ -18,6 +18,7 @@ import {
   GraduationCap,
   Link as LinkIcon,
   Plus,
+  RotateCcw,
   Save,
   Trash2,
   Upload,
@@ -125,6 +126,12 @@ const emptyGradeEditForm = {
   comment: '',
 };
 
+type RevisionTarget = {
+  submissionId: string;
+  studentName: string;
+  assignmentTitle: string;
+};
+
 const isTeacherLike = (role?: Role) =>
   Boolean(
     role &&
@@ -205,6 +212,10 @@ export default function CourseDetailPage() {
   const [submissionGradeForm, setSubmissionGradeForm] = useState<
     Record<string, { score: string; comment: string }>
   >({});
+  const [revisionTarget, setRevisionTarget] = useState<RevisionTarget | null>(
+    null,
+  );
+  const [revisionComment, setRevisionComment] = useState('');
 
   const {
     data: course,
@@ -559,19 +570,6 @@ export default function CourseDetailPage() {
     onError: () => showStatus(t('teacherCourse.grades.saveError')),
   });
 
-  const deleteGradeMutation = useMutation({
-    mutationFn: async (gradeId: string) => {
-      await api.delete(`/courses/grades/${gradeId}`);
-    },
-    onSuccess: async () => {
-      setEditingGradeId(null);
-      setGradeEditForm(emptyGradeEditForm);
-      showStatus(t('teacherCourse.grades.deleted'));
-      await refreshCourseWork();
-    },
-    onError: () => showStatus(t('teacherCourse.grades.deleteError')),
-  });
-
   const gradeSubmissionMutation = useMutation({
     mutationFn: async (submission: Submission) => {
       const form = submissionGradeForm[submission.id];
@@ -595,6 +593,29 @@ export default function CourseDetailPage() {
       ]);
     },
     onError: () => showStatus(t('teacherCourse.submissions.gradeError')),
+  });
+
+  const returnSubmissionMutation = useMutation({
+    mutationFn: async ({
+      submissionId,
+      comment,
+    }: {
+      submissionId: string;
+      comment: string;
+    }) => {
+      await api.patch(`/courses/submissions/${submissionId}/return`, {
+        comment,
+      });
+    },
+    onSuccess: async () => {
+      setRevisionTarget(null);
+      setRevisionComment('');
+      setEditingGradeId(null);
+      setGradeEditForm(emptyGradeEditForm);
+      showStatus(t('teacherCourse.submissions.returned'));
+      await refreshCourseWork();
+    },
+    onError: () => showStatus(t('teacherCourse.submissions.returnError')),
   });
 
   const resetMaterialForm = () => {
@@ -685,6 +706,15 @@ export default function CourseDetailPage() {
       value: String(grade.value),
       comment: grade.comment ?? '',
     });
+  };
+
+  const openRevisionModal = (
+    submissionId: string,
+    studentName: string,
+    assignmentTitle: string,
+  ) => {
+    setRevisionTarget({ submissionId, studentName, assignmentTitle });
+    setRevisionComment('');
   };
 
   const handleMaterialSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
@@ -912,6 +942,18 @@ export default function CourseDetailPage() {
                   ? gradeSubmissionMutation.variables?.id
                   : null
               }
+              onReturn={(submission, studentName) =>
+                openRevisionModal(
+                  submission.id,
+                  studentName,
+                  selectedSubmissionAssignment?.title ?? '',
+                )
+              }
+              returningSubmissionId={
+                returnSubmissionMutation.isPending
+                  ? returnSubmissionMutation.variables?.submissionId
+                  : null
+              }
               onDownload={handleDownload}
             />
           )}
@@ -930,12 +972,134 @@ export default function CourseDetailPage() {
                 setGradeEditForm(emptyGradeEditForm);
               }}
               onSaveGrade={() => void updateGradeMutation.mutateAsync()}
-              onDeleteGrade={(gradeId) => deleteGradeMutation.mutate(gradeId)}
+              onReturnGrade={(grade, studentName) => {
+                if (!grade.submissionId) return;
+                openRevisionModal(
+                  grade.submissionId,
+                  studentName,
+                  grade.assignmentTitle ?? t('courses.tabs.assignments'),
+                );
+              }}
+              returningSubmissionId={
+                returnSubmissionMutation.isPending
+                  ? returnSubmissionMutation.variables?.submissionId
+                  : null
+              }
               saving={updateGradeMutation.isPending}
             />
           )}
         </div>
       </section>
+
+      {revisionTarget && (
+        <RevisionRequestModal
+          target={revisionTarget}
+          comment={revisionComment}
+          setComment={setRevisionComment}
+          saving={returnSubmissionMutation.isPending}
+          onCancel={() => {
+            setRevisionTarget(null);
+            setRevisionComment('');
+          }}
+          onSubmit={() =>
+            void returnSubmissionMutation.mutateAsync({
+              submissionId: revisionTarget.submissionId,
+              comment: revisionComment.trim(),
+            })
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+function RevisionRequestModal({
+  target,
+  comment,
+  setComment,
+  saving,
+  onCancel,
+  onSubmit,
+}: {
+  target: RevisionTarget;
+  comment: string;
+  setComment: (value: string) => void;
+  saving: boolean;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const { t } = useTranslation();
+  const canSubmit = comment.trim().length >= 3;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !saving) onCancel();
+      }}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="revision-modal-title"
+        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2
+              id="revision-modal-title"
+              className="text-lg font-semibold text-slate-900">
+              {t('teacherCourse.submissions.returnTitle')}
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {t('teacherCourse.submissions.returnDescription', {
+                student: target.studentName,
+                assignment: target.assignmentTitle,
+              })}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 disabled:opacity-50"
+            title={t('teacherCourse.common.close')}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <label className="mt-5 grid gap-2 text-sm font-medium text-slate-700">
+          {t('teacherCourse.submissions.returnReason')}
+          <textarea
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            maxLength={1000}
+            rows={5}
+            autoFocus
+            className="resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+            placeholder={t(
+              'teacherCourse.submissions.returnReasonPlaceholder',
+            )}
+          />
+        </label>
+
+        <div className="mt-5 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
+            {t('teacherCourse.common.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={!canSubmit || saving}
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-amber-600 px-4 text-sm font-medium text-white transition hover:bg-amber-700 disabled:bg-slate-300">
+            <RotateCcw className="h-4 w-4" />
+            {t('teacherCourse.submissions.return')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1341,6 +1505,24 @@ function AssignmentsTab({
                       {assignment.criteria}
                     </p>
                   )}
+                  {!teacherMode &&
+                    assignment.submission?.status === 'returned' && (
+                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                        <div className="font-medium">
+                          {t('assignments.revisionReason')}
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap">
+                          {assignment.submission.returnComment ||
+                            t('teacherCourse.common.noData')}
+                        </p>
+                        <Link
+                          to={`/assignments?assignmentId=${assignment.id}`}
+                          className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-600 px-3 font-medium text-white transition hover:bg-amber-700">
+                          <RotateCcw className="h-4 w-4" />
+                          {t('assignments.resubmit')}
+                        </Link>
+                      </div>
+                    )}
                 </div>
                 <div className="flex flex-col gap-2 md:items-end">
                   {teacherMode && (
@@ -1874,6 +2056,8 @@ function SubmissionsTab({
   setGradeForm,
   onGrade,
   gradingSubmissionId,
+  onReturn,
+  returningSubmissionId,
   onDownload,
 }: {
   assignments: Assignment[];
@@ -1891,6 +2075,8 @@ function SubmissionsTab({
   >;
   onGrade: (submission: Submission) => void;
   gradingSubmissionId: string | null;
+  onReturn: (submission: Submission, studentName: string) => void;
+  returningSubmissionId: string | null;
   onDownload: (fileId: string, originalName: string) => Promise<void>;
 }) {
   const { t } = useTranslation();
@@ -1974,6 +2160,7 @@ function SubmissionsTab({
                   scoreNumber < 0 ||
                   scoreNumber > maxScore;
                 const isSaving = gradingSubmissionId === submission.id;
+                const isReturning = returningSubmissionId === submission.id;
 
                 return (
                   <tr key={submission.id}>
@@ -1984,6 +2171,18 @@ function SubmissionsTab({
                           ? t('teacherCourse.submissions.statusGraded')
                           : t('teacherCourse.submissions.statusSubmitted')}
                       </div>
+                      <div className="mt-1 text-xs font-normal text-slate-500">
+                        {t('teacherCourse.submissions.attempt', {
+                          count: submission.attemptNumber ?? 1,
+                        })}
+                      </div>
+                      {submission.returnComment && (
+                        <div className="mt-2 max-w-72 text-xs font-normal text-amber-700">
+                          {t('teacherCourse.submissions.previousReturn', {
+                            comment: submission.returnComment,
+                          })}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>{dateLabel(submission.submittedAt)}</TableCell>
                     <TableCell>
@@ -2035,14 +2234,24 @@ function SubmissionsTab({
                       />
                     </TableCell>
                     <TableCell>
-                      <button
-                        type="button"
-                        disabled={invalidScore || isSaving}
-                        onClick={() => onGrade(submission)}
-                        className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-slate-300">
-                        <Save className="h-4 w-4" />
-                        {t('teacherCourse.submissions.grade')}
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={isSaving || isReturning}
+                          onClick={() => onReturn(submission, studentName)}
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400">
+                          <RotateCcw className="h-4 w-4" />
+                          {t('teacherCourse.submissions.return')}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={invalidScore || isSaving || isReturning}
+                          onClick={() => onGrade(submission)}
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-slate-300">
+                          <Save className="h-4 w-4" />
+                          {t('teacherCourse.submissions.grade')}
+                        </button>
+                      </div>
                     </TableCell>
                   </tr>
                 );
@@ -2065,7 +2274,8 @@ function GradesTab({
   onEditGrade,
   onCancelEdit,
   onSaveGrade,
-  onDeleteGrade,
+  onReturnGrade,
+  returningSubmissionId,
   saving,
 }: {
   rows: GradeJournalResponse[];
@@ -2077,7 +2287,8 @@ function GradesTab({
   onEditGrade: (grade: Grade) => void;
   onCancelEdit: () => void;
   onSaveGrade: () => void;
-  onDeleteGrade: (gradeId: string) => void;
+  onReturnGrade: (grade: Grade, studentName: string) => void;
+  returningSubmissionId: string | null;
   saving: boolean;
 }) {
   const { t } = useTranslation();
@@ -2105,6 +2316,9 @@ function GradesTab({
             row.grades.length > 0 ? (
               row.grades.map((grade) => {
                 const isEditing = editingGradeId === grade.id;
+                const canModify = grade.canModify !== false;
+                const isReturning =
+                  returningSubmissionId === grade.submissionId;
 
                 return (
                   <tr key={grade.id}>
@@ -2192,17 +2406,31 @@ function GradesTab({
                             <button
                               type="button"
                               onClick={() => onEditGrade(grade)}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
-                              title={t('teacherCourse.common.edit')}>
+                              disabled={!canModify || isReturning}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-300"
+                              title={
+                                canModify
+                                  ? t('teacherCourse.common.edit')
+                                  : t('teacherCourse.grades.locked')
+                              }>
                               <Edit3 className="h-4 w-4" />
                             </button>
-                            <button
-                              type="button"
-                              onClick={() => onDeleteGrade(grade.id)}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 text-red-600 transition hover:bg-red-50"
-                              title={t('teacherCourse.common.delete')}>
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            {grade.submissionId && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onReturnGrade(grade, row.studentName)
+                                }
+                                disabled={!canModify || isReturning}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 transition hover:bg-amber-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-300"
+                                title={
+                                  canModify
+                                    ? t('teacherCourse.submissions.return')
+                                    : t('teacherCourse.grades.locked')
+                                }>
+                                <RotateCcw className="h-4 w-4" />
+                              </button>
+                            )}
                           </>
                         )}
                       </div>

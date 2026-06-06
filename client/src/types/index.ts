@@ -157,11 +157,14 @@ export interface Assignment {
     studentId: string;
     files: FileDto[];
     submittedAt: string;
-    status: string;
+    status: 'submitted' | 'graded' | 'returned';
     score?: number;
     comment?: string;
-    fileLink: string;
-    originalName: string;
+    attemptNumber: number;
+    returnComment?: string | null;
+    returnedAt?: string | null;
+    fileLink?: string;
+    originalName?: string;
   } | null;
 }
 
@@ -187,6 +190,8 @@ export interface Grade {
   courseName?: string;
   courseCode?: string;
   assignmentTitle?: string;
+  assignmentDueDate?: string | null;
+  canModify: boolean;
 }
 
 export interface GradeJournalResponse {
@@ -585,4 +590,7 @@ export interface Submission {
   score?: number;
   comment?: string;
   status: 'submitted' | 'graded' | 'returned';
+  attemptNumber: number;
+  returnComment?: string | null;
+  returnedAt?: string | null;
 }

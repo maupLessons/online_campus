@@ -69,4 +69,16 @@ export class SubmissionDto {
   @ApiProperty({ required: false })
   @Expose()
   comment?: string;
+
+  @ApiProperty()
+  @Expose()
+  attemptNumber: number;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Expose()
+  returnComment?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Expose()
+  returnedAt?: Date | null;
 }

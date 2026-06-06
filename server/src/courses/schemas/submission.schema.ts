@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import * as paginate from 'mongoose-paginate-v2';
 import { Assignment } from './assignment.schema';
 import { User } from '../../users/schemas';
@@ -31,10 +31,10 @@ export class Submission {
   files: File[];
 
   @Prop()
-  score: number;
+  score?: number;
 
   @Prop()
-  comment: string;
+  comment?: string;
 
   @Prop({
     required: true,
@@ -42,6 +42,18 @@ export class Submission {
     default: 'submitted',
   })
   status: string;
+
+  @Prop({ required: true, min: 1, default: 1 })
+  attemptNumber: number;
+
+  @Prop({ type: String, trim: true, maxlength: 1000, default: null })
+  returnComment?: string | null;
+
+  @Prop({ type: Date, default: null })
+  returnedAt?: Date | null;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', default: null })
+  returnedBy?: User | Types.ObjectId | null;
 }
 
 export const SubmissionSchema = SchemaFactory.createForClass(Submission);

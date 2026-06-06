@@ -14,6 +14,7 @@ export enum NotificationType {
   SCHEDULE_CHANGE = 'schedule_change',
   NEW_ASSIGNMENT = 'new_assignment',
   ASSIGNMENT_SUBMITTED = 'assignment_submitted',
+  ASSIGNMENT_RETURNED = 'assignment_returned',
   NEW_SURVEY = 'new_survey',
   GRADE = 'grade',
   ANNOUNCEMENT = 'announcement',

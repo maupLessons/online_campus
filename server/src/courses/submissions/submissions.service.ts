@@ -12,9 +12,11 @@ import {
   SubmissionDocument,
   Assignment,
   AssignmentDocument,
+  Grade,
+  GradeDocument,
 } from '../schemas';
 import { User, UserDocument } from '../../users/schemas';
-import { SubmissionDto, SubmitAssignmentDto } from './dto';
+import { ReturnSubmissionDto, SubmissionDto, SubmitAssignmentDto } from './dto';
 import {
   transformToDto,
   transformToPaginatedDto,
@@ -35,6 +37,8 @@ export class SubmissionsService {
     private submissionModel: PaginateModel<SubmissionDocument>,
     @InjectModel(Assignment.name)
     private assignmentModel: Model<AssignmentDocument>,
+    @InjectModel(Grade.name)
+    private gradeModel: Model<GradeDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly filesService: FilesService,
     private readonly coursesService: CoursesService,
@@ -92,7 +96,7 @@ export class SubmissionsService {
     };
     const existing = await this.submissionModel.findOne(existingFilter).exec();
 
-    if (existing) {
+    if (existing && existing.status !== 'returned') {
       throw new ConflictException('Ви вже здали це завдання');
     }
 
@@ -103,16 +107,126 @@ export class SubmissionsService {
     );
 
     const fileObjectIds = dto.fileIds.map((id) => new Types.ObjectId(id));
+
+    if (existing) {
+      const saved = await this.submissionModel
+        .findOneAndUpdate(
+          { ...existingFilter, status: 'returned' },
+          {
+            $set: {
+              files: fileObjectIds,
+              status: 'submitted',
+              submittedAt: new Date(),
+            },
+            $inc: { attemptNumber: 1 },
+            $unset: { score: '', comment: '' },
+          },
+          { returnDocument: 'after', runValidators: true },
+        )
+        .exec();
+
+      if (!saved) {
+        throw new ConflictException(
+          'Статус роботи вже змінено. Оновіть сторінку.',
+        );
+      }
+
+      const populated = await saved.populate('files');
+      await this.notifySubmissionCreated(assignment, saved, studentId);
+      return transformToDto(SubmissionDto, populated.toObject());
+    }
+
     const submission = new this.submissionModel({
       assignment: assignment._id,
       student: new Types.ObjectId(studentId),
       files: fileObjectIds,
       status: 'submitted',
+      attemptNumber: 1,
     });
     const saved = await submission.save();
 
     const populated = await saved.populate('files');
     await this.notifySubmissionCreated(assignment, saved, studentId);
+    return transformToDto(SubmissionDto, populated.toObject());
+  }
+
+  async returnForRevision(
+    submissionId: string,
+    dto: ReturnSubmissionDto,
+    reviewerId: string,
+    role: Role,
+  ): Promise<SubmissionDto> {
+    if (!Types.ObjectId.isValid(submissionId)) {
+      throw new BadRequestException('Некоректний ID зданої роботи');
+    }
+
+    const submission = await this.submissionModel
+      .findById(submissionId)
+      .populate('assignment')
+      .exec();
+
+    if (!submission) {
+      throw new NotFoundException('Роботу не знайдено');
+    }
+
+    if (submission.status === 'returned') {
+      throw new ConflictException('Роботу вже повернено на доопрацювання');
+    }
+
+    const assignment = submission.assignment as unknown as AssignmentDocument;
+    await this.coursesService.validateOwnership(
+      toId(assignment.courseAssignment),
+      reviewerId,
+      role,
+    );
+    this.assertBeforeDeadline(assignment);
+
+    const returnComment = dto.comment.trim();
+    const returnedAt = new Date();
+
+    const saved = await this.submissionModel
+      .findOneAndUpdate(
+        {
+          _id: submission._id,
+          status: { $in: ['submitted', 'graded'] },
+        },
+        {
+          $set: {
+            status: 'returned',
+            attemptNumber: submission.attemptNumber ?? 1,
+            returnComment,
+            returnedAt,
+            returnedBy: new Types.ObjectId(reviewerId),
+          },
+          $unset: { score: '', comment: '' },
+        },
+        { returnDocument: 'after', runValidators: true },
+      )
+      .exec();
+
+    if (!saved) {
+      throw new ConflictException(
+        'Статус роботи вже змінено. Оновіть сторінку.',
+      );
+    }
+
+    await this.gradeModel
+      .updateOne(
+        { submission: saved._id, status: { $ne: 'withdrawn' } },
+        {
+          $set: {
+            status: 'withdrawn',
+            withdrawnAt: returnedAt,
+            withdrawalReason: returnComment,
+          },
+        },
+        { runValidators: true },
+      )
+      .exec();
+
+    await this.notifySubmissionReturned(assignment, saved, returnComment);
+
+    const populated = await saved.populate('files');
     return transformToDto(SubmissionDto, populated.toObject());
   }
 
@@ -149,9 +263,9 @@ export class SubmissionsService {
     if (role === Role.STUDENT) {
       this.assertBeforeDeadline(assignment);
 
-      if (existing.status === 'graded') {
+      if (existing.status !== 'submitted') {
         throw new BadRequestException(
-          'Оцінену роботу не можна видалити для повторної здачі',
+          'Повернену або оцінену роботу не можна видалити',
         );
       }
     }
@@ -224,6 +338,33 @@ export class SubmissionsService {
       });
     } catch {
       // Notifications are non-critical for assignment submission.
+    }
+  }
+
+  private async notifySubmissionReturned(
+    assignment: AssignmentDocument,
+    submission: SubmissionDocument,
+    comment: string,
+  ): Promise<void> {
+    try {
+      const courseAssignmentId = toId(assignment.courseAssignment);
+      const courseAssignment =
+        await this.coursesService.findCourseAssignmentById(courseAssignmentId);
+
+      await this.notificationsService.create({
+        userId: toId(submission.student),
+        title: 'Роботу повернено на доопрацювання',
+        message: `${courseAssignment.courseName || 'Дисципліна'}: «${
+          assignment.title
+        }». Коментар викладача: ${comment}`,
+        type: NotificationType.ASSIGNMENT_RETURNED,
+        actionUrl: `/assignments?assignmentId=${toId(assignment._id)}`,
+        entityType: 'submission',
+        entityId: toId(submission._id),
+        important: true,
+      });
+    } catch {
+      // Notifications are non-critical for returning submitted work.
     }
   }
 

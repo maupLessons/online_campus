@@ -206,8 +206,6 @@ export default function CourseDetailPage() {
     Record<string, { score: string; comment: string }>
   >({});
 
-  const teacherMode = isTeacherLike(user?.role);
-
   const {
     data: course,
     isLoading: isLoadingCourse,
@@ -222,6 +220,9 @@ export default function CourseDetailPage() {
     },
     enabled: Boolean(id),
   });
+
+  // The backend is the source of truth for course ownership and permissions.
+  const teacherMode = isTeacherLike(user?.role);
 
   const { data: materialsData, isLoading: isLoadingMaterials } = useQuery({
     queryKey: ['courses', id, 'materials'],
@@ -850,6 +851,7 @@ export default function CourseDetailPage() {
               assignments={assignmentsData?.docs ?? []}
               loading={isLoadingAssignments}
               dateLabel={dateLabel}
+              highlightedAssignmentId={initialAssignmentId}
               onSubmit={handleAssignmentSubmit}
               onDownload={handleDownload}
               onEdit={startEditAssignment}
@@ -1188,6 +1190,7 @@ function AssignmentsTab({
   assignments,
   loading,
   dateLabel,
+  highlightedAssignmentId,
   onSubmit,
   onDownload,
   onEdit,
@@ -1204,6 +1207,7 @@ function AssignmentsTab({
   assignments: Assignment[];
   loading: boolean;
   dateLabel: (value?: string) => string;
+  highlightedAssignmentId: string;
   onSubmit: (event: SyntheticEvent<HTMLFormElement>) => void;
   onDownload: (fileId: string, originalName: string) => Promise<void>;
   onEdit: (assignment: Assignment) => void;
@@ -1310,10 +1314,20 @@ function AssignmentsTab({
         <EmptyState text={t('teacherCourse.assignments.empty')} />
       ) : (
         <div className="grid gap-3">
-          {assignments.map((assignment) => (
+          {[...assignments]
+            .sort((left, right) => {
+              if (left.id === highlightedAssignmentId) return -1;
+              if (right.id === highlightedAssignmentId) return 1;
+              return 0;
+            })
+            .map((assignment) => (
             <article
               key={assignment.id}
-              className="rounded-xl border border-slate-200 bg-white p-4">
+              className={`rounded-xl border bg-white p-4 transition ${
+                assignment.id === highlightedAssignmentId
+                  ? 'border-blue-300 ring-2 ring-blue-100'
+                  : 'border-slate-200'
+              }`}>
               <div className="flex flex-col gap-3 md:flex-row md:justify-between">
                 <div className="min-w-0 flex-1">
                   <h3 className="font-semibold text-slate-900">
@@ -1347,18 +1361,18 @@ function AssignmentsTab({
                       </button>
                     </div>
                   )}
-                  <div className="min-w-36 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
-                    <div className="text-xs text-blue-500">
-                      {t('teacherCourse.assignments.deadline')}
-                    </div>
-                    <div className="font-semibold">
-                      {dateLabel(assignment.dueDate)}
-                    </div>
-                    <div className="mt-1 text-xs text-blue-500">
-                      {t('teacherCourse.assignments.points', {
-                        count: assignment.maxScore,
-                      })}
-                    </div>
+                  <div className="grid w-full gap-2 sm:grid-cols-2 md:w-auto">
+                    {!teacherMode && (
+                      <AssignmentSubmissionSummary
+                        assignment={assignment}
+                        dateLabel={dateLabel}
+                      />
+                    )}
+                    <AssignmentDeadlineSummary
+                      assignment={assignment}
+                      dateLabel={dateLabel}
+                      emphasizeOverdue={teacherMode}
+                    />
                   </div>
                 </div>
               </div>
@@ -1371,6 +1385,129 @@ function AssignmentsTab({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function AssignmentDeadlineSummary({
+  assignment,
+  dateLabel,
+  emphasizeOverdue,
+}: {
+  assignment: Assignment;
+  dateLabel: (value?: string) => string;
+  emphasizeOverdue: boolean;
+}) {
+  const { t } = useTranslation();
+  const dueDate = new Date(assignment.dueDate);
+  const overdue =
+    emphasizeOverdue &&
+    !Number.isNaN(dueDate.getTime()) &&
+    dueDate < new Date();
+
+  return (
+    <div
+      className={`min-h-[72px] min-w-36 rounded-lg px-3 py-2 text-sm ${
+        overdue ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'
+      }`}>
+      <div className={`text-xs ${overdue ? 'text-red-500' : 'text-blue-500'}`}>
+        {t('teacherCourse.assignments.deadline')}
+      </div>
+      <div className="font-semibold">{dateLabel(assignment.dueDate)}</div>
+      <div
+        className={`mt-1 text-xs ${
+          overdue ? 'text-red-500' : 'text-blue-500'
+        }`}>
+        {t('teacherCourse.assignments.points', {
+          count: assignment.maxScore,
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AssignmentSubmissionSummary({
+  assignment,
+  dateLabel,
+}: {
+  assignment: Assignment;
+  dateLabel: (value?: string) => string;
+}) {
+  const { t } = useTranslation();
+  const submission = assignment.submission;
+
+  if (!submission) {
+    const overdue = new Date(assignment.dueDate) < new Date();
+
+    return (
+      <div
+        className={`min-h-[72px] min-w-36 rounded-lg px-3 py-2 text-sm ${
+          overdue ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
+        }`}>
+        <div className={`text-xs ${overdue ? 'text-red-500' : 'text-amber-600'}`}>
+          {t('assignments.statusLabel')}
+        </div>
+        <div className="font-semibold">
+          {t(
+            overdue
+              ? 'assignments.statusOverdue'
+              : 'assignments.statusNotSubmitted',
+          )}
+        </div>
+        <div
+          className={`mt-1 text-xs ${
+            overdue ? 'text-red-500' : 'text-amber-600'
+          }`}>
+          {t(
+            overdue
+              ? 'assignments.submissionClosed'
+              : 'assignments.awaitingSubmission',
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const graded = submission.status === 'graded';
+  const returned = submission.status === 'returned';
+
+  return (
+    <div
+      className={`min-h-[72px] min-w-36 rounded-lg px-3 py-2 text-sm ${
+        returned
+          ? 'bg-amber-50 text-amber-800'
+          : graded
+            ? 'bg-emerald-50 text-emerald-800'
+            : 'bg-sky-50 text-sky-800'
+      }`}>
+      <div
+        className={`text-xs ${
+          returned
+            ? 'text-amber-600'
+            : graded
+              ? 'text-emerald-600'
+              : 'text-sky-600'
+        }`}>
+        {t('assignments.submittedAt')}
+      </div>
+      <div className="font-semibold">{dateLabel(submission.submittedAt)}</div>
+      <div
+        className={`mt-1 text-xs ${
+          returned
+            ? 'text-amber-600'
+            : graded
+              ? 'text-emerald-600'
+              : 'text-sky-600'
+        }`}>
+        {returned
+          ? t('assignments.statusReturned')
+          : graded && submission.score !== undefined
+            ? t('assignments.gradeResult', {
+                score: submission.score,
+                maxScore: assignment.maxScore,
+              })
+            : t('assignments.statusPending')}
+      </div>
     </div>
   );
 }

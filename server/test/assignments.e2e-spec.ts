@@ -12,6 +12,7 @@ import { SeedService } from '../src/seed-data/seed.service';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { AssignmentDto } from '../src/courses/assignments/dto';
 import { SubmissionDto } from '../src/courses/submissions/dto';
+import { GradeResponseDto } from '../src/courses/grades/dto';
 import { configureApp } from '../src/app.config';
 
 const SET_UP_TIMEOUT = 60_000;
@@ -911,6 +912,196 @@ describe('Assignments (e2e)', () => {
           value: 90,
           comment: 'Late journal edit',
         })
+        .expect(400);
+    });
+  });
+
+  describe('PATCH /courses/submissions/:id/return', () => {
+    it('supports first and repeated revision cycles without creating a false review state', async () => {
+      const {
+        courseAssignmentId,
+        teacherToken,
+        studentToken,
+        studentId,
+        groupId,
+      } = await setupAssignments();
+      const assignmentId = new Types.ObjectId();
+      const submissionId = new Types.ObjectId();
+      const firstFileId = await createUploadedFile(studentId);
+      const correctedFileId = await createUploadedFile(studentId);
+
+      await connection.collection('assignments').insertOne({
+        _id: assignmentId,
+        courseAssignment: courseAssignmentId,
+        group: groupId,
+        title: 'Revision lifecycle',
+        description: 'Enterprise revision workflow',
+        dueDate: new Date(Date.now() + 86400000),
+        maxScore: 100,
+        files: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await connection.collection('submissions').insertOne({
+        _id: submissionId,
+        assignment: assignmentId,
+        student: studentId,
+        files: [firstFileId],
+        status: 'submitted',
+        attemptNumber: 1,
+        submittedAt: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      await request(app.getHttpServer())
+        .patch(`/api/courses/submissions/${submissionId.toHexString()}/return`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({ comment: '   ' })
+        .expect(400);
+
+      const firstReturnResponse = await request(app.getHttpServer())
+        .patch(`/api/courses/submissions/${submissionId.toHexString()}/return`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({ comment: 'Add evidence and correct the conclusion.' })
+        .expect(200);
+
+      const firstReturn = firstReturnResponse.body as SubmissionDto;
+      expect(firstReturn.status).toBe('returned');
+      expect(firstReturn.returnComment).toBe(
+        'Add evidence and correct the conclusion.',
+      );
+      expect(firstReturn.attemptNumber).toBe(1);
+
+      const pendingAfterReturn = await request(app.getHttpServer())
+        .get(
+          `/api/courses/assignments/${assignmentId.toHexString()}/submissions`,
+        )
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(200);
+      expect(
+        (pendingAfterReturn.body as PaginatedDto<SubmissionDto>).docs,
+      ).toHaveLength(0);
+
+      const returnedNotification = await connection
+        .collection('notifications')
+        .findOne({
+          userId: studentId,
+          type: 'assignment_returned',
+          entityId: submissionId.toHexString(),
+        });
+      expect(returnedNotification?.actionUrl).toBe(
+        `/assignments?assignmentId=${assignmentId.toHexString()}`,
+      );
+
+      await request(app.getHttpServer())
+        .delete(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
+        .set('Authorization', `Bearer ${studentToken}`)
+        .expect(400);
+
+      const resubmitResponse = await request(app.getHttpServer())
+        .post(`/api/courses/assignments/${assignmentId.toHexString()}/submit`)
+        .set('Authorization', `Bearer ${studentToken}`)
+        .send({ fileIds: [correctedFileId.toHexString()] })
+        .expect(201);
+
+      const resubmitted = resubmitResponse.body as SubmissionDto;
+      expect(resubmitted.id).toBe(submissionId.toHexString());
+      expect(resubmitted.status).toBe('submitted');
+      expect(resubmitted.attemptNumber).toBe(2);
+
+      const pendingAfterResubmit = await request(app.getHttpServer())
+        .get(
+          `/api/courses/assignments/${assignmentId.toHexString()}/submissions`,
+        )
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(200);
+      expect(
+        (pendingAfterResubmit.body as PaginatedDto<SubmissionDto>).docs,
+      ).toEqual([
+        expect.objectContaining({
+          id: submissionId.toHexString(),
+          status: 'submitted',
+          attemptNumber: 2,
+        }),
+      ]);
+
+      await request(app.getHttpServer())
+        .post(`/api/courses/submissions/${submissionId.toHexString()}/grade`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({ score: 80, comment: 'Improved work.' })
+        .expect(201);
+
+      const activeGrade = await connection.collection('grades').findOne({
+        submission: submissionId,
+        status: 'active',
+      });
+      expect(activeGrade).toBeTruthy();
+
+      await request(app.getHttpServer())
+        .patch(`/api/courses/submissions/${submissionId.toHexString()}/return`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({ comment: 'One required section is still incomplete.' })
+        .expect(200);
+
+      const withdrawnGrade = await connection.collection('grades').findOne({
+        submission: submissionId,
+      });
+      expect(withdrawnGrade?.status).toBe('withdrawn');
+      expect(withdrawnGrade?.withdrawalReason).toBe(
+        'One required section is still incomplete.',
+      );
+
+      const studentGrades = await request(app.getHttpServer())
+        .get(
+          `/api/courses/grades/my/courses/${courseAssignmentId.toHexString()}`,
+        )
+        .set('Authorization', `Bearer ${studentToken}`)
+        .expect(200);
+      expect(
+        (studentGrades.body as PaginatedDto<GradeResponseDto>).docs,
+      ).toHaveLength(0);
+
+      const returnNotificationCount = await connection
+        .collection('notifications')
+        .countDocuments({
+          userId: studentId,
+          type: 'assignment_returned',
+          entityId: submissionId.toHexString(),
+        });
+      expect(returnNotificationCount).toBe(2);
+    });
+
+    it('rejects revision requests after the assignment deadline', async () => {
+      const { courseAssignmentId, teacherToken, studentId, groupId } =
+        await setupAssignments();
+      const assignmentId = new Types.ObjectId();
+      const submissionId = new Types.ObjectId();
+
+      await connection.collection('assignments').insertOne({
+        _id: assignmentId,
+        courseAssignment: courseAssignmentId,
+        group: groupId,
+        title: 'Expired revision',
+        description: 'Deadline protected',
+        dueDate: new Date(Date.now() - 86400000),
+        maxScore: 100,
+        files: [],
+      });
+      await connection.collection('submissions').insertOne({
+        _id: submissionId,
+        assignment: assignmentId,
+        student: studentId,
+        files: [],
+        status: 'submitted',
+        attemptNumber: 1,
+      });
+
+      await request(app.getHttpServer())
+        .patch(`/api/courses/submissions/${submissionId.toHexString()}/return`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({ comment: 'Too late to request a revision.' })
         .expect(400);
     });
   });

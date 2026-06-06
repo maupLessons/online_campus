@@ -66,6 +66,7 @@ describe('Grades (e2e)', () => {
   });
 
   const setupGrades = async () => {
+    const teacherId = new Types.ObjectId();
     const studentId = new Types.ObjectId();
     const groupId = new Types.ObjectId();
     const courseId = new Types.ObjectId();
@@ -75,6 +76,22 @@ describe('Grades (e2e)', () => {
       sub: studentId.toHexString(),
       login: 'student_e2e',
       role: Role.STUDENT,
+    });
+    const teacherToken = jwtService.sign({
+      sub: teacherId.toHexString(),
+      login: 'teacher_e2e',
+      role: Role.TEACHER,
+    });
+
+    await connection.collection('users').insertOne({
+      _id: teacherId,
+      login: 'teacher_e2e',
+      role: Role.TEACHER,
+      email: 'teacher_e2e@test.com',
+      firstName: 'Test',
+      lastName: 'Teacher',
+      status: 'active',
+      passwordHash: 'hash',
     });
 
     await connection.collection('users').insertOne({
@@ -105,7 +122,7 @@ describe('Grades (e2e)', () => {
     await connection.collection('courseassignments').insertOne({
       _id: courseAssignmentId,
       course: courseId,
-      teacher: new Types.ObjectId(),
+      teacher: teacherId,
       group: groupId,
       academicYear: '2023-2024',
       semester: 1,
@@ -129,7 +146,15 @@ describe('Grades (e2e)', () => {
       },
     ]);
 
-    return { studentId, groupId, courseId, courseAssignmentId, accessToken };
+    return {
+      teacherId,
+      studentId,
+      groupId,
+      courseId,
+      courseAssignmentId,
+      accessToken,
+      teacherToken,
+    };
   };
 
   describe('GET /courses/grades/my/courses', () => {
@@ -195,23 +220,8 @@ describe('Grades (e2e)', () => {
     });
 
     it('should allow teacher to see student grades (200)', async () => {
-      const { courseAssignmentId, studentId } = await setupGrades();
-      const teacherId = new Types.ObjectId();
-      await connection.collection('users').insertOne({
-        _id: teacherId,
-        login: 'teacher_e2e',
-        email: 'teacher@test.com',
-        role: Role.TEACHER,
-        status: 'active',
-        firstName: 'Teacher',
-        lastName: 'E2E',
-        passwordHash: 'hash',
-      });
-      const teacherToken = jwtService.sign({
-        sub: teacherId.toHexString(),
-        login: 'teacher_e2e',
-        role: Role.TEACHER,
-      });
+      const { courseAssignmentId, studentId, teacherToken } =
+        await setupGrades();
 
       const response = await request(app.getHttpServer())
         .get(
@@ -311,7 +321,7 @@ describe('Grades (e2e)', () => {
       expect(body.value).toBe(12);
     });
 
-    it('should delete a grade (200)', async () => {
+    it('should not expose hard deletion for academic grades (404)', async () => {
       const { studentId, courseAssignmentId } = await setupGrades();
       const gid = new Types.ObjectId();
       await connection.collection('grades').insertOne({
@@ -343,12 +353,12 @@ describe('Grades (e2e)', () => {
       await request(app.getHttpServer())
         .delete(`/api/courses/grades/${gid.toHexString()}`)
         .set('Authorization', `Bearer ${adminToken}`)
-        .expect(200);
+        .expect(404);
 
-      const deleted = await connection
+      const preserved = await connection
         .collection('grades')
         .findOne({ _id: gid });
-      expect(deleted).toBeNull();
+      expect(preserved).toBeTruthy();
     });
   });
 });

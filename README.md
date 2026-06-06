@@ -1315,7 +1315,7 @@ Developer → git push → GitHub → GitHub Actions
                           ┌─────────┴──────────┐
                           ▼                    ▼
                     PR/branch              push master
-                  [ci.yml]              [deploy.yml]
+                    [ci.yml]               [deploy.yml]
              audit + lint + test       git pull → docker compose up
 ```
 
@@ -1378,7 +1378,7 @@ jobs:
           cache-dependency-path: client/package-lock.json
       - run: npm ci
       - run: npm audit --audit-level=moderate
-      - run: npm run lint
+      - run: npm run lint:check
       - run: npm run build
 ```
 

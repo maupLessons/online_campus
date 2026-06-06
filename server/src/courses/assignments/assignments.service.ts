@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, PaginateModel } from 'mongoose';
 import { User, UserDocument } from '../../users/schemas';
@@ -53,9 +49,15 @@ export class AssignmentsService {
   async findAssignments(
     courseAssignmentId: string,
     paginationDto: PaginationDto,
-    userId?: string,
-    role?: Role,
+    userId: string,
+    role: Role,
   ): Promise<PaginatedDto<AssignmentDto>> {
+    await this.coursesService.assertCourseAssignmentAccess(
+      courseAssignmentId,
+      userId,
+      role,
+    );
+
     const { page, limit } = paginationDto;
     const options = {
       page,
@@ -70,7 +72,7 @@ export class AssignmentsService {
     const result = await this.assignmentModel.paginate(filter, options);
     const paginatedDto = transformToPaginatedDto(AssignmentDto, result);
 
-    if (role === Role.STUDENT && userId) {
+    if (role === Role.STUDENT) {
       const assignments = result.docs;
       const submissions = await this.submissionModel
         .find({
@@ -102,8 +104,8 @@ export class AssignmentsService {
 
   async findOne(
     id: string,
-    userId?: string,
-    role?: Role,
+    userId: string,
+    role: Role,
   ): Promise<AssignmentDto> {
     const assignment = await this.assignmentModel
       .findById(id)
@@ -115,22 +117,13 @@ export class AssignmentsService {
       throw new NotFoundException('Завдання не знайдено');
     }
 
-    if (role === Role.STUDENT && userId) {
-      const user = await this.userModel
-        .findById(userId)
-        .select('studentProfile')
-        .lean()
-        .exec();
+    await this.coursesService.assertCourseAssignmentAccess(
+      toId(assignment.courseAssignment),
+      userId,
+      role,
+    );
 
-      if (
-        !user?.studentProfile ||
-        toId(user.studentProfile.group) !== toId(assignment.group)
-      ) {
-        throw new ForbiddenException(
-          'Ви не належите до групи, якій призначено це завдання',
-        );
-      }
-
+    if (role === Role.STUDENT) {
       const submission = await this.submissionModel
         .findOne({
           student: new Types.ObjectId(userId),
@@ -273,18 +266,41 @@ export class AssignmentsService {
       lean: true,
     };
 
-    const result = await this.assignmentModel.paginate(
-      { group: user.studentProfile.group },
+    const accessibleCourseAssignmentIds =
+      await this.coursesService.findAccessibleCourseAssignmentIdsForStudent(
+        studentId,
+        toId(user.studentProfile.group),
+      );
+
+    if (accessibleCourseAssignmentIds.length === 0) {
+      return transformToPaginatedDto(AssignmentDto, {
+        docs: [],
+        totalDocs: 0,
+        limit,
+        page,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      });
+    }
+
+    const filteredResult = await this.assignmentModel.paginate(
+      {
+        group: user.studentProfile.group,
+        courseAssignment: { $in: accessibleCourseAssignmentIds },
+      },
       options as never,
     );
-
-    const paginatedDto = transformToPaginatedDto(AssignmentDto, result);
-    const assignments = result.docs;
+    const filteredPaginatedDto = transformToPaginatedDto(
+      AssignmentDto,
+      filteredResult,
+    );
+    const filteredAssignments = filteredResult.docs;
 
     const submissions = (await this.submissionModel
       .find({
         student: new Types.ObjectId(studentId),
-        assignment: { $in: assignments.map((a) => a._id) },
+        assignment: { $in: filteredAssignments.map((a) => a._id) },
       } as never)
       .populate('files')
       .lean()
@@ -293,8 +309,8 @@ export class AssignmentsService {
       submissions.map((s) => [toId(s.assignment), s]),
     );
 
-    paginatedDto.docs = paginatedDto.docs.map((dto, index) => {
-      const a = assignments[index];
+    filteredPaginatedDto.docs = filteredPaginatedDto.docs.map((dto, index) => {
+      const a = filteredAssignments[index];
       const ca = a.courseAssignment;
 
       dto.courseName = ca?.course?.name;
@@ -312,7 +328,7 @@ export class AssignmentsService {
       return dto;
     });
 
-    return paginatedDto;
+    return filteredPaginatedDto;
   }
 
   private async notifyAssignmentCreated(

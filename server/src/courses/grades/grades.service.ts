@@ -236,6 +236,24 @@ export class GradesService {
       };
     }
 
+    const accessibleCourseAssignmentIds =
+      await this.coursesService.findAccessibleCourseAssignmentIdsForStudent(
+        studentId,
+        toId(groupId),
+      );
+
+    if (accessibleCourseAssignmentIds.length === 0) {
+      return {
+        docs: [],
+        totalDocs: 0,
+        limit: pagination.limit || 10,
+        page: pagination.page || 1,
+        totalPages: 0,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+    }
+
     const options = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
@@ -245,7 +263,7 @@ export class GradesService {
     };
 
     const result = await this.courseAssignmentModel.paginate(
-      { group: groupId },
+      { _id: { $in: accessibleCourseAssignmentIds } },
       options,
     );
 

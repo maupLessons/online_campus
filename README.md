@@ -265,7 +265,13 @@
 | GET    | `/courses/assignments/:id/submissions` | teacher+                                           |
 | GET    | `/courses/grades/my`              | student                                                 |
 | POST   | `/courses/assignments/:id/submit` | student                                                 |
+| DELETE | `/courses/assignments/:id/submit` | student (лише неоцінена робота до дедлайну)             |
+| PATCH  | `/courses/submissions/:id/return` | teacher+ (повернення на доопрацювання до дедлайну)      |
 | POST   | `/courses/submissions/:id/grade`  | teacher                                                 |
+
+Життєвий цикл студентської роботи: `submitted → returned → submitted → graded`.
+Оцінка за повернену роботу архівується без фізичного видалення, а повторна
+здача створює нову спробу в межах того самого запису роботи.
 
 ---
 
@@ -788,7 +794,9 @@ AuditLogEntry
 | GET   | `/courses/assignments/my`         | student       |
 | GET   | `/courses/assignments/:id/submissions` | teacher+ |
 | POST  | `/courses/assignments/:id/submit` | student       |
+| DELETE | `/courses/assignments/:id/submit` | student (до дедлайну, якщо роботу не оцінено і не повернено) |
 | GET   | `/courses/grades/my`              | student       |
+| PATCH | `/courses/submissions/:id/return` | teacher+ (до дедлайну) |
 | POST  | `/courses/submissions/:id/grade`  | teacher       |
 
 ### Опитування `/api/surveys`

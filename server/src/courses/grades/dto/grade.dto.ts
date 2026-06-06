@@ -12,6 +12,14 @@ const getNestedString = (value: unknown, key: string): string | undefined => {
   return typeof nestedValue === 'string' ? nestedValue : undefined;
 };
 
+const getNestedValue = (value: unknown, key: string): unknown => {
+  if (!value || typeof value !== 'object' || !(key in value)) {
+    return undefined;
+  }
+
+  return (value as Record<string, unknown>)[key];
+};
+
 export class GradeResponseDto {
   @ApiProperty()
   @Expose()
@@ -102,4 +110,28 @@ export class GradeResponseDto {
     getNestedString(obj.assignment, 'title'),
   )
   assignmentTitle?: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  @Expose()
+  @Transform(({ obj }: { obj: Grade }) => {
+    const dueDate = getNestedValue(obj.assignment, 'dueDate');
+    if (!dueDate) return null;
+
+    const normalized = new Date(dueDate as string | Date);
+    return Number.isNaN(normalized.getTime()) ? null : normalized.toISOString();
+  })
+  assignmentDueDate?: string | null;
+
+  @ApiProperty()
+  @Expose()
+  @Transform(({ obj }: { obj: Grade }) => {
+    if (!obj.assignment) return true;
+
+    const dueDate = getNestedValue(obj.assignment, 'dueDate');
+    if (!dueDate) return false;
+
+    const normalized = new Date(dueDate as string | Date);
+    return !Number.isNaN(normalized.getTime()) && normalized >= new Date();
+  })
+  canModify: boolean;
 }

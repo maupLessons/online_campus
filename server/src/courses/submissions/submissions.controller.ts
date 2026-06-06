@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -14,7 +15,7 @@ import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../../auth/roles.guard';
 import { Role } from '../../common/types/roles.enum';
 import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
-import { SubmissionDto, SubmitAssignmentDto } from './dto';
+import { ReturnSubmissionDto, SubmissionDto, SubmitAssignmentDto } from './dto';
 import { RequestWithUser } from '../../common/types/request-with-user.interface';
 import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
 import { PaginationDto } from '../../common/dto/pagination.dto';
@@ -54,20 +55,22 @@ export class SubmissionsController {
     return this.submissionsService.submitAssignment(id, dto, req.user.sub);
   }
 
-  @Delete('assignments/:assignmentId/submissions/:studentId')
+  @Patch('submissions/:id/return')
   @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.ADMIN)
-  async removeSubmission(
-    @Param('assignmentId') assignmentId: string,
-    @Param('studentId') studentId: string,
+  @ApiResponse({ type: SubmissionDto })
+  async returnForRevision(
+    @Param('id') id: string,
+    @Body() dto: ReturnSubmissionDto,
     @Request() req: RequestWithUser,
-  ): Promise<{ success: boolean }> {
-    return this.submissionsService.removeSubmission(
-      assignmentId,
-      studentId,
+  ): Promise<SubmissionDto> {
+    return this.submissionsService.returnForRevision(
+      id,
+      dto,
       req.user.sub,
       req.user.role,
     );
   }
+
   @Delete('assignments/:id/submit')
   @Roles(Role.STUDENT)
   async deleteOwnSubmission(

@@ -34,7 +34,7 @@ describe('Application configuration (e2e smoke)', () => {
 
     app = moduleFixture.createNestApplication<NestExpressApplication>();
     configureApp(app, { swaggerEnabled: false });
-    await app.init();
+    await app.listen(0, '127.0.0.1');
   });
 
   afterAll(async () => {

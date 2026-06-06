@@ -75,6 +75,12 @@ export class GradesService {
       role,
     );
 
+    if (submission.status === 'returned') {
+      throw new BadRequestException(
+        'Роботу повернено на доопрацювання та ще не здано повторно',
+      );
+    }
+
     if (submission.status === 'graded') {
       this.assertGradeEditableBeforeDeadline(assignment);
     }
@@ -140,7 +146,9 @@ export class GradesService {
     userId: string,
     role: Role,
   ): Promise<GradeResponseDto> {
-    const grade = await this.gradeModel.findById(id).exec();
+    const grade = await this.gradeModel
+      .findOne({ _id: id, status: { $ne: 'withdrawn' } })
+      .exec();
     if (!grade) {
       throw new NotFoundException('Оцінку не знайдено');
     }
@@ -190,31 +198,6 @@ export class GradesService {
     }
 
     return transformToDto(GradeResponseDto, populated.toObject());
-  }
-
-  async remove(
-    id: string,
-    userId: string,
-    role: Role,
-  ): Promise<{ id: string }> {
-    const grade = await this.gradeModel.findById(id).exec();
-    if (!grade) {
-      throw new NotFoundException('Оцінку не знайдено');
-    }
-
-    await this.coursesService.validateOwnership(
-      toId(grade.courseAssignment),
-      userId,
-      role,
-    );
-    const linkedAssignment = await this.findLinkedAssignment(grade);
-    if (linkedAssignment) {
-      this.assertGradeEditableBeforeDeadline(linkedAssignment);
-      await this.resetSubmissionGrade(grade);
-    }
-
-    await this.gradeModel.findByIdAndDelete(id).exec();
-    return { id };
   }
 
   async findMyCoursesWithGrades(
@@ -274,7 +257,15 @@ export class GradesService {
     studentId: string,
     courseAssignmentId: string,
     pagination: PaginationDto,
+    requesterId: string,
+    requesterRole: Role,
   ): Promise<PaginatedDto<GradeResponseDto>> {
+    await this.coursesService.assertCourseAssignmentAccess(
+      courseAssignmentId,
+      requesterId,
+      requesterRole,
+    );
+
     const { page, limit } = pagination;
     const options = {
       page,
@@ -294,6 +285,7 @@ export class GradesService {
       {
         student: new Types.ObjectId(studentId),
         courseAssignment: new Types.ObjectId(courseAssignmentId),
+        status: { $ne: 'withdrawn' },
       },
       options,
     );
@@ -304,7 +296,15 @@ export class GradesService {
   async findGradesByCourseAssignment(
     courseAssignmentId: string,
     pagination: PaginationDto,
+    userId: string,
+    role: Role,
   ): Promise<PaginatedDto<GradeJournalResponseDto>> {
+    await this.coursesService.assertCourseAssignmentAccess(
+      courseAssignmentId,
+      userId,
+      role,
+    );
+
     const ca = await this.courseAssignmentModel
       .findById(courseAssignmentId)
       .populate('group')
@@ -341,6 +341,7 @@ export class GradesService {
       .find({
         courseAssignment: new Types.ObjectId(courseAssignmentId),
         student: { $in: studentIds },
+        status: { $ne: 'withdrawn' },
       } as never)
       .populate({
         path: 'courseAssignment',
@@ -410,6 +411,11 @@ export class GradesService {
             type: 'current',
             value: dto.score,
             comment: this.buildSubmissionGradeComment(assignment, dto.comment),
+            status: 'active',
+          },
+          $unset: {
+            withdrawnAt: '',
+            withdrawalReason: '',
           },
         },
         {
@@ -448,10 +454,14 @@ export class GradesService {
   }
 
   private shouldNotifySubmissionGrade(
-    previousGrade: { value?: unknown; comment?: unknown } | null,
+    previousGrade: {
+      value?: unknown;
+      comment?: unknown;
+      status?: unknown;
+    } | null,
     nextGrade: GradeDocument,
   ): boolean {
-    if (!previousGrade) {
+    if (!previousGrade || previousGrade.status === 'withdrawn') {
       return true;
     }
 
@@ -524,23 +534,6 @@ export class GradesService {
             comment: this.extractSubmissionComment(grade.comment, assignment),
             status: 'graded',
           },
-        },
-        { runValidators: true },
-      )
-      .exec();
-  }
-
-  private async resetSubmissionGrade(grade: GradeDocument): Promise<void> {
-    if (!grade.submission) {
-      return;
-    }
-
-    await this.submissionModel
-      .findByIdAndUpdate(
-        toId(grade.submission),
-        {
-          $set: { status: 'submitted' },
-          $unset: { score: '', comment: '' },
         },
         { runValidators: true },
       )

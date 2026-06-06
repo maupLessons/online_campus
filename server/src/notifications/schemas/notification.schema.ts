@@ -21,6 +21,7 @@ export class Notification {
       'schedule_change',
       'new_assignment',
       'assignment_submitted',
+      'assignment_returned',
       'new_survey',
       'grade',
       'announcement',

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { Download, Trash2, X } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FileUploader } from '../../components/FileUploader';
 import api, { filesApi } from '../../services/api';
@@ -11,6 +12,8 @@ export default function AssignmentsPage() {
   const { t, i18n } = useTranslation();
   const locale = i18n.language === 'en' ? 'en-US' : 'uk-UA';
   const [statusMessage, setStatusMessage] = useState('');
+  const [searchParams] = useSearchParams();
+  const highlightedAssignmentId = searchParams.get('assignmentId');
 
   const {
     data: assignments = [],
@@ -51,6 +54,13 @@ export default function AssignmentsPage() {
           maxScore: assignment.maxScore,
         }),
         color: 'bg-green-100 text-green-700',
+      };
+    }
+
+    if (assignment.submission.status === 'returned') {
+      return {
+        label: t('assignments.statusReturned'),
+        color: 'bg-amber-100 text-amber-800',
       };
     }
 
@@ -101,6 +111,24 @@ export default function AssignmentsPage() {
     }
   };
 
+  const handleUpload = async (assignmentId: string, fileToUpload: File) => {
+    try {
+      await filesApi.submitAssignment(assignmentId, fileToUpload);
+      await refetch();
+    } catch (error: unknown) {
+      const responseMessage = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : undefined;
+      const message =
+        typeof responseMessage === 'string'
+          ? responseMessage
+          : t('assignments.uploadError');
+
+      showStatus(t('assignments.uploadWarning', { message }));
+      throw error;
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
@@ -133,9 +161,17 @@ export default function AssignmentsPage() {
         <p className="text-sm text-gray-400">{t('assignments.empty')}</p>
       ) : (
         <div className="space-y-4">
-          {assignments.map((assignment) => {
+          {[...assignments]
+            .sort((left, right) => {
+              if (left.id === highlightedAssignmentId) return -1;
+              if (right.id === highlightedAssignmentId) return 1;
+              return 0;
+            })
+            .map((assignment) => {
             const status = getStatusBadge(assignment);
             const isOverdue = new Date(assignment.dueDate) < new Date();
+            const isReturned =
+              assignment.submission?.status === 'returned';
             const file = assignment.submission?.files?.[0] ?? null;
             const fileId = file ? file.id || file._id : undefined;
             const fileName =
@@ -146,7 +182,11 @@ export default function AssignmentsPage() {
             return (
               <article
                 key={assignment.id}
-                className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+                className={`rounded-xl border bg-white p-5 shadow-sm transition ${
+                  assignment.id === highlightedAssignmentId
+                    ? 'border-blue-400 ring-2 ring-blue-100'
+                    : 'border-gray-200'
+                }`}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <h3 className="font-semibold text-gray-900">
@@ -168,7 +208,11 @@ export default function AssignmentsPage() {
                 {assignment.submission ? (
                   <div className="mt-4 border-t border-gray-100 pt-4">
                     <p className="mb-3 text-sm text-gray-500">
-                      {t('assignments.uploadedWork')}
+                      {t(
+                        isReturned
+                          ? 'assignments.previousSubmission'
+                          : 'assignments.uploadedWork',
+                      )}
                     </p>
                     <div className="flex flex-wrap items-center gap-3">
                       <button
@@ -181,7 +225,7 @@ export default function AssignmentsPage() {
                         <Download className="h-4 w-4" />
                         {fileName}
                       </button>
-                      {assignment.submission.status !== 'graded' &&
+                      {assignment.submission.status === 'submitted' &&
                         !isOverdue && (
                           <button
                             type="button"
@@ -194,6 +238,38 @@ export default function AssignmentsPage() {
                           </button>
                         )}
                     </div>
+
+                    {isReturned && (
+                      <div className="mt-4 space-y-4">
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                          <div className="font-medium">
+                            {t('assignments.revisionReason')}
+                          </div>
+                          <p className="mt-1 whitespace-pre-wrap">
+                            {assignment.submission.returnComment ||
+                              t('teacherCourse.common.noData')}
+                          </p>
+                        </div>
+
+                        {isOverdue ? (
+                          <p className="text-sm font-medium text-red-500">
+                            {t('assignments.overdueUploadBlocked')}
+                          </p>
+                        ) : (
+                          <div>
+                            <p className="mb-3 text-sm font-medium text-gray-700">
+                              {t('assignments.resubmit')}
+                            </p>
+                            <FileUploader
+                              allowedTypes={['.pdf', '.doc', '.docx', '.zip']}
+                              onUpload={(fileToUpload) =>
+                                handleUpload(assignment.id, fileToUpload)
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : isOverdue ? (
                   <div className="mt-4 border-t border-gray-100 pt-4">
@@ -208,28 +284,9 @@ export default function AssignmentsPage() {
                     </p>
                     <FileUploader
                       allowedTypes={['.pdf', '.doc', '.docx', '.zip']}
-                      onUpload={async (fileToUpload) => {
-                        try {
-                          await filesApi.submitAssignment(
-                            assignment.id,
-                            fileToUpload,
-                          );
-                          await refetch();
-                        } catch (error: unknown) {
-                          const responseMessage = axios.isAxiosError(error)
-                            ? error.response?.data?.message
-                            : undefined;
-                          const message =
-                            typeof responseMessage === 'string'
-                              ? responseMessage
-                              : t('assignments.uploadError');
-
-                          showStatus(
-                            t('assignments.uploadWarning', { message }),
-                          );
-                          throw error;
-                        }
-                      }}
+                      onUpload={(fileToUpload) =>
+                        handleUpload(assignment.id, fileToUpload)
+                      }
                     />
                   </div>
                 )}
@@ -248,6 +305,13 @@ export default function AssignmentsPage() {
                       {new Date(
                         assignment.submission.submittedAt,
                       ).toLocaleString(locale)}
+                    </span>
+                  )}
+                  {assignment.submission && (
+                    <span>
+                      {t('assignments.attempt', {
+                        count: assignment.submission.attemptNumber ?? 1,
+                      })}
                     </span>
                   )}
                   {assignment.submission?.comment && (

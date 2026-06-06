@@ -53,6 +53,19 @@ export class Grade {
 
   @Prop()
   comment: string;
+
+  @Prop({
+    required: true,
+    enum: ['active', 'withdrawn'],
+    default: 'active',
+  })
+  status: string;
+
+  @Prop({ type: Date, default: null })
+  withdrawnAt?: Date | null;
+
+  @Prop({ type: String, trim: true, maxlength: 1000, default: null })
+  withdrawalReason?: string | null;
 }
 
 export const GradeSchema = SchemaFactory.createForClass(Grade);
@@ -62,3 +75,4 @@ GradeSchema.index({ courseAssignment: 1, type: 1, date: -1 });
 GradeSchema.index({ lessonJournalEntry: 1, student: 1, type: 1 });
 GradeSchema.index({ assignment: 1, student: 1 });
 GradeSchema.index({ submission: 1 }, { unique: true, sparse: true });
+GradeSchema.index({ courseAssignment: 1, status: 1, date: -1 });

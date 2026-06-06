@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Patch,
-  Delete,
   Body,
   Param,
   UseGuards,
@@ -60,15 +59,8 @@ export class GradesController {
     return this.gradesService.update(id, dto, sub, role);
   }
 
-  @Delete('grades/:id')
-  @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
-  async deleteGrade(@Param('id') id: string, @Request() req: RequestWithUser) {
-    const { sub, role } = req.user;
-    return this.gradesService.remove(id, sub, role);
-  }
-
   @Post('submissions/:id/grade')
-  @Roles(Role.TEACHER)
+  @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.ADMIN)
   @ApiResponse({ type: SubmissionDto })
   async gradeSubmission(
     @Param('id') id: string,
@@ -85,8 +77,14 @@ export class GradesController {
   async getGradeJournal(
     @Param('courseAssignmentId') caId: string,
     @Query() paginationDto: PaginationDto,
+    @Request() req: RequestWithUser,
   ): Promise<PaginatedDto<GradeJournalResponseDto>> {
-    return this.gradesService.findGradesByCourseAssignment(caId, paginationDto);
+    return this.gradesService.findGradesByCourseAssignment(
+      caId,
+      paginationDto,
+      req.user.sub,
+      req.user.role,
+    );
   }
 
   @Get('grades/my/courses')
@@ -114,6 +112,8 @@ export class GradesController {
       req.user.sub,
       caId,
       paginationDto,
+      req.user.sub,
+      req.user.role,
     );
   }
 
@@ -142,6 +142,8 @@ export class GradesController {
       studentId,
       caId,
       paginationDto,
+      req.user.sub,
+      req.user.role,
     );
   }
 }

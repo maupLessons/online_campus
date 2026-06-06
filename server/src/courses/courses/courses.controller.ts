@@ -56,8 +56,13 @@ export class CoursesController {
   @ApiResponse({ type: CourseAssignmentDto })
   async findOneAssignment(
     @Param('id') id: string,
+    @Request() req: RequestWithUser,
   ): Promise<CourseAssignmentDto> {
-    return this.coursesService.findCourseAssignmentById(id);
+    return this.coursesService.findCourseAssignmentById(
+      id,
+      req.user.sub,
+      req.user.role,
+    );
   }
 
   @Get(':id')

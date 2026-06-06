@@ -178,29 +178,11 @@ export class SubmissionsService {
       throw new NotFoundException('Завдання не знайдено');
     }
 
-    if (role !== Role.STUDENT) {
-      await this.coursesService.validateOwnership(
-        toId(assignment.courseAssignment),
-        userId,
-        role,
-      );
-      return assignment;
-    }
-
-    const user = await this.userModel
-      .findById(userId)
-      .select('studentProfile')
-      .lean()
-      .exec();
-
-    if (
-      !user?.studentProfile ||
-      toId(user.studentProfile.group) !== toId(assignment.group)
-    ) {
-      throw new ForbiddenException(
-        'Ви не належите до групи, якій призначено це завдання',
-      );
-    }
+    await this.coursesService.assertCourseAssignmentAccess(
+      toId(assignment.courseAssignment),
+      userId,
+      role,
+    );
 
     return assignment;
   }

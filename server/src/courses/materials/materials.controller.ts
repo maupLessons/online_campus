@@ -33,8 +33,14 @@ export class MaterialsController {
   async getMaterials(
     @Param('courseAssignmentId') caId: string,
     @Query() paginationDto: PaginationDto,
+    @Request() req: RequestWithUser,
   ): Promise<PaginatedDto<MaterialDto>> {
-    return this.materialsService.findMaterials(caId, paginationDto);
+    return this.materialsService.findMaterials(
+      caId,
+      paginationDto,
+      req.user.sub,
+      req.user.role,
+    );
   }
 
   @Post()

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   NotFoundException,
   ForbiddenException,
@@ -26,6 +27,14 @@ import {
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
 
+const COURSE_OVERSIGHT_ROLES = new Set<Role>([
+  Role.DISPATCHER,
+  Role.DEAN,
+  Role.RECTOR,
+  Role.PRESIDENT,
+  Role.ADMIN,
+]);
+
 @Injectable()
 export class CoursesService {
   constructor(
@@ -41,6 +50,8 @@ export class CoursesService {
     userId: string,
     role: Role,
   ): Promise<CourseAssignmentDocument> {
+    this.assertValidObjectId(courseAssignmentId, 'призначення курсу');
+
     const ca = await this.courseAssignmentModel
       .findById(courseAssignmentId)
       .exec();
@@ -54,6 +65,58 @@ export class CoursesService {
     }
 
     return ca;
+  }
+
+  async assertCourseAssignmentAccess(
+    courseAssignmentId: string,
+    userId: string,
+    role: Role,
+  ): Promise<CourseAssignmentDocument> {
+    this.assertValidObjectId(courseAssignmentId, 'призначення курсу');
+    this.assertValidObjectId(userId, 'користувача');
+
+    const courseAssignment = await this.courseAssignmentModel
+      .findById(courseAssignmentId)
+      .exec();
+
+    if (!courseAssignment) {
+      throw new NotFoundException('Призначення курсу не знайдено');
+    }
+
+    if (COURSE_OVERSIGHT_ROLES.has(role)) {
+      return courseAssignment;
+    }
+
+    if (role !== Role.STUDENT) {
+      if (toId(courseAssignment.teacher) !== userId) {
+        throw new ForbiddenException('Немає доступу до цього курсу');
+      }
+      return courseAssignment;
+    }
+
+    const student = await this.userModel
+      .findById(userId)
+      .select('studentProfile.group')
+      .lean()
+      .exec();
+
+    if (
+      !student?.studentProfile?.group ||
+      toId(student.studentProfile.group) !== toId(courseAssignment.group)
+    ) {
+      throw new ForbiddenException('Немає доступу до цього курсу');
+    }
+
+    if (
+      courseAssignment.source === CourseAssignmentSource.ELECTIVE &&
+      !courseAssignment.enrolledStudents.some(
+        (enrolledStudent) => toId(enrolledStudent) === userId,
+      )
+    ) {
+      throw new ForbiddenException('Ви не зараховані на цю дисципліну');
+    }
+
+    return courseAssignment;
   }
 
   async findAllCourses(
@@ -78,7 +141,17 @@ export class CoursesService {
     return transformToDto(CourseDto, course);
   }
 
-  async findCourseAssignmentById(id: string): Promise<CourseAssignmentDto> {
+  async findCourseAssignmentById(
+    id: string,
+    userId?: string,
+    role?: Role,
+  ): Promise<CourseAssignmentDto> {
+    if (userId && role) {
+      await this.assertCourseAssignmentAccess(id, userId, role);
+    } else {
+      this.assertValidObjectId(id, 'призначення курсу');
+    }
+
     const ca = await this.courseAssignmentModel
       .findById(id)
       .populate([
@@ -174,7 +247,6 @@ export class CoursesService {
       };
     }
 
-    const studentObjectId = new Types.ObjectId(studentId);
     const options = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
@@ -184,21 +256,30 @@ export class CoursesService {
     };
 
     const result = await this.courseAssignmentModel.paginate(
-      {
-        group: user.studentProfile.group,
-        $or: [
-          { source: { $exists: false } },
-          { source: CourseAssignmentSource.STANDARD },
-          {
-            source: CourseAssignmentSource.ELECTIVE,
-            enrolledStudents: studentObjectId,
-          },
-        ],
-      },
+      this.buildStudentCourseAssignmentFilter(
+        studentId,
+        toId(user.studentProfile.group),
+      ),
       options as any,
     );
 
     return transformToPaginatedDto(CourseAssignmentDto, result);
+  }
+
+  async findAccessibleCourseAssignmentIdsForStudent(
+    studentId: string,
+    groupId: string,
+  ): Promise<Types.ObjectId[]> {
+    this.assertValidObjectId(studentId, 'студента');
+    this.assertValidObjectId(groupId, 'групи');
+
+    const assignments = await this.courseAssignmentModel
+      .find(this.buildStudentCourseAssignmentFilter(studentId, groupId))
+      .select('_id')
+      .lean()
+      .exec();
+
+    return assignments.map((assignment) => assignment._id);
   }
 
   async findCoursesByTeacher(
@@ -352,5 +433,28 @@ export class CoursesService {
       .select('teacher group')
       .lean()
       .exec();
+  }
+
+  private buildStudentCourseAssignmentFilter(
+    studentId: string,
+    groupId: string,
+  ): Record<string, unknown> {
+    return {
+      group: new Types.ObjectId(groupId),
+      $or: [
+        { source: { $exists: false } },
+        { source: CourseAssignmentSource.STANDARD },
+        {
+          source: CourseAssignmentSource.ELECTIVE,
+          enrolledStudents: new Types.ObjectId(studentId),
+        },
+      ],
+    };
+  }
+
+  private assertValidObjectId(value: string, entity: string): void {
+    if (!Types.ObjectId.isValid(value)) {
+      throw new BadRequestException(`Некоректний ID ${entity}`);
+    }
   }
 }

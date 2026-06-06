@@ -184,6 +184,32 @@ describe('Materials (e2e)', () => {
       expect(Array.isArray(body.docs)).toBe(true);
       expect(body.docs.some((m) => m.id === materialId)).toBe(true);
     });
+
+    it('should reject another teacher reading course materials (403)', async () => {
+      const { courseAssignmentId } = await setupMaterials();
+      const otherTeacherId = new Types.ObjectId();
+      const otherTeacherToken = jwtService.sign({
+        sub: otherTeacherId.toHexString(),
+        login: 'other_materials_teacher',
+        role: Role.TEACHER,
+      });
+
+      await connection.collection('users').insertOne({
+        _id: otherTeacherId,
+        login: 'other_materials_teacher',
+        email: 'other_materials_teacher@example.com',
+        role: Role.TEACHER,
+        status: 'active',
+        firstName: 'Other',
+        lastName: 'Teacher',
+        passwordHash: 'hash',
+      });
+
+      await request(app.getHttpServer())
+        .get(`/api/courses/${courseAssignmentId.toHexString()}/materials`)
+        .set('Authorization', `Bearer ${otherTeacherToken}`)
+        .expect(403);
+    });
   });
 
   describe('PUT /courses/:courseAssignmentId/materials/:id', () => {

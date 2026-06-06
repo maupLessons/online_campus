@@ -233,6 +233,50 @@ describe('Assignments (e2e)', () => {
         expect(assignment.submission?.status).toBe('submitted');
       }
     });
+
+    it('should reject assignments from another group (403)', async () => {
+      const { teacherId, studentToken } = await setupAssignments();
+      const foreignCourseAssignmentId = new Types.ObjectId();
+
+      await connection.collection('courseassignments').insertOne({
+        _id: foreignCourseAssignmentId,
+        teacher: teacherId,
+        course: new Types.ObjectId(),
+        group: new Types.ObjectId(),
+        academicYear: '2025-2026',
+        semester: 1,
+      });
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/courses/${foreignCourseAssignmentId.toHexString()}/assignments`,
+        )
+        .set('Authorization', `Bearer ${studentToken}`)
+        .expect(403);
+    });
+
+    it('should reject assignments from an unselected elective (403)', async () => {
+      const { teacherId, studentToken, groupId } = await setupAssignments();
+      const electiveCourseAssignmentId = new Types.ObjectId();
+
+      await connection.collection('courseassignments').insertOne({
+        _id: electiveCourseAssignmentId,
+        teacher: teacherId,
+        course: new Types.ObjectId(),
+        group: groupId,
+        academicYear: '2025-2026',
+        semester: 2,
+        source: 'elective',
+        enrolledStudents: [new Types.ObjectId()],
+      });
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/courses/${electiveCourseAssignmentId.toHexString()}/assignments`,
+        )
+        .set('Authorization', `Bearer ${studentToken}`)
+        .expect(403);
+    });
   });
 
   describe('GET /courses/assignments/:id', () => {
@@ -341,7 +385,7 @@ describe('Assignments (e2e)', () => {
 
   describe('GET /courses/assignments/my', () => {
     it('should return student assignments (200)', async () => {
-      const { courseAssignmentId, studentToken, groupId } =
+      const { courseAssignmentId, studentId, studentToken, groupId } =
         await setupAssignments();
       const assignmentId = new Types.ObjectId();
       // Create an assignment first
@@ -358,6 +402,58 @@ describe('Assignments (e2e)', () => {
         updatedAt: new Date(),
       });
 
+      const selectedElectiveId = new Types.ObjectId();
+      const unselectedElectiveId = new Types.ObjectId();
+      await connection.collection('courseassignments').insertMany([
+        {
+          _id: selectedElectiveId,
+          teacher: new Types.ObjectId(),
+          course: new Types.ObjectId(),
+          group: groupId,
+          academicYear: '2025-2026',
+          semester: 1,
+          source: 'elective',
+          enrolledStudents: [studentId],
+        },
+        {
+          _id: unselectedElectiveId,
+          teacher: new Types.ObjectId(),
+          course: new Types.ObjectId(),
+          group: groupId,
+          academicYear: '2025-2026',
+          semester: 2,
+          source: 'elective',
+          enrolledStudents: [new Types.ObjectId()],
+        },
+      ]);
+
+      await connection.collection('assignments').insertMany([
+        {
+          _id: new Types.ObjectId(),
+          courseAssignment: selectedElectiveId,
+          group: groupId,
+          title: 'Selected Elective Assignment',
+          description: 'Visible',
+          dueDate: new Date(Date.now() + 86400000),
+          maxScore: 100,
+          files: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          _id: new Types.ObjectId(),
+          courseAssignment: unselectedElectiveId,
+          group: groupId,
+          title: 'Unselected Elective Assignment',
+          description: 'Hidden',
+          dueDate: new Date(Date.now() + 86400000),
+          maxScore: 100,
+          files: [],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
       const response = await request(app.getHttpServer())
         .get('/api/courses/assignments/my')
         .set('Authorization', `Bearer ${studentToken}`)
@@ -371,6 +467,14 @@ describe('Assignments (e2e)', () => {
       );
       expect(assignment).toBeDefined();
       expect(assignment?.id).toBeDefined();
+      expect(
+        body.docs.some((item) => item.title === 'Selected Elective Assignment'),
+      ).toBe(true);
+      expect(
+        body.docs.some(
+          (item) => item.title === 'Unselected Elective Assignment',
+        ),
+      ).toBe(false);
     });
   });
 

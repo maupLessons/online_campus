@@ -29,7 +29,7 @@ describe('SubmissionsService security checks', () => {
     assertFilesCanBeAttached: jest.Mock;
   };
   let coursesService: {
-    validateOwnership: jest.Mock;
+    assertCourseAssignmentAccess: jest.Mock;
     findCourseAssignmentById: jest.Mock;
   };
   let notificationsService: {
@@ -52,7 +52,7 @@ describe('SubmissionsService security checks', () => {
       assertFilesCanBeAttached: jest.fn(),
     };
     coursesService = {
-      validateOwnership: jest.fn(),
+      assertCourseAssignmentAccess: jest.fn().mockResolvedValue({}),
       findCourseAssignmentById: jest.fn(),
     };
     notificationsService = {
@@ -79,9 +79,6 @@ describe('SubmissionsService security checks', () => {
     };
 
     assignmentModel.findById.mockReturnValue(query(assignment));
-    coursesService.validateOwnership.mockResolvedValue({
-      _id: courseAssignmentId,
-    });
     submissionModel.paginate.mockResolvedValue({
       docs: [],
       totalDocs: 0,
@@ -99,7 +96,7 @@ describe('SubmissionsService security checks', () => {
       Role.TEACHER,
     );
 
-    expect(coursesService.validateOwnership).toHaveBeenCalledWith(
+    expect(coursesService.assertCourseAssignmentAccess).toHaveBeenCalledWith(
       courseAssignmentId.toHexString(),
       teacherId.toHexString(),
       Role.TEACHER,
@@ -148,11 +145,6 @@ describe('SubmissionsService security checks', () => {
     const submission = { _id: objectId() };
 
     assignmentModel.findById.mockReturnValue(query(assignment));
-    userModel.findById.mockReturnValue(
-      query({
-        studentProfile: { group: groupId },
-      }),
-    );
     submissionModel.findOne.mockReturnValue(query(submission));
     submissionModel.deleteOne.mockReturnValue(query({ deletedCount: 1 }));
 
@@ -223,12 +215,6 @@ describe('SubmissionsService security checks', () => {
     };
 
     assignmentModel.findById.mockReturnValue(query(assignment));
-    userModel.findById.mockReturnValue(
-      query({
-        studentProfile: { group: groupId },
-      }),
-    );
-
     await expect(
       service.submitAssignment(
         assignment._id.toHexString(),
@@ -253,11 +239,6 @@ describe('SubmissionsService security checks', () => {
     };
 
     assignmentModel.findById.mockReturnValue(query(assignment));
-    userModel.findById.mockReturnValue(
-      query({
-        studentProfile: { group: groupId },
-      }),
-    );
     submissionModel.findOne.mockReturnValue(
       query({ _id: objectId(), status: 'graded' }),
     );

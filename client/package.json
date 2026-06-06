@@ -24,6 +24,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "lint:check": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {

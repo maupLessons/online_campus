@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -17,6 +17,7 @@ import type {
   ElectiveSelection,
   ReferenceView,
 } from '../../types';
+import { ElectivePeriodStatus } from '../../types';
 
 type EntityWithId = {
   id?: string;
@@ -61,21 +62,43 @@ function referenceLabel(reference: ReferenceView) {
   return reference.name ?? reference.code ?? getEntityId(reference);
 }
 
+function isPeriodSelectionOpen(item: ActiveElectivePeriod, now: number) {
+  const startsAt = Date.parse(item.period.startsAt);
+  const endsAt = Date.parse(item.period.endsAt);
+
+  return (
+    item.period.status === ElectivePeriodStatus.ACTIVE &&
+    Number.isFinite(startsAt) &&
+    Number.isFinite(endsAt) &&
+    startsAt <= now &&
+    now <= endsAt
+  );
+}
+
 function ActivePeriodCard({
   item,
   locale,
+  now,
   onSelect,
   onCancel,
   workingKey,
 }: {
   item: ActiveElectivePeriod;
   locale: string;
+  now: number;
   onSelect: (periodId: string, disciplineId: string) => void;
   onCancel: (periodId: string, selectionId: string) => void;
   workingKey: string;
 }) {
   const { t } = useTranslation();
   const periodId = getEntityId(item.period);
+  const isPeriodOpen = isPeriodSelectionOpen(item, now);
+  const periodStatusLabel =
+    item.period.status === ElectivePeriodStatus.FINALIZED
+      ? t('electives.statuses.finalized')
+      : isPeriodOpen
+        ? t('electives.periodActive')
+        : t('electives.statuses.closed');
   const selectedDisciplineIds = useMemo(
     () =>
       new Set(
@@ -91,9 +114,14 @@ function ActivePeriodCard({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
+            <span
+              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold ${
+                isPeriodOpen
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-slate-100 text-slate-600'
+              }`}>
               <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-              {t('electives.periodActive')}
+              {periodStatusLabel}
             </span>
             <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
               {item.period.academicYear}, {item.period.semester}{' '}
@@ -153,8 +181,13 @@ function ActivePeriodCard({
             (workingKey === actionKey ||
               (Boolean(cancelKey) && workingKey === cancelKey));
           const hasSelectableIds = Boolean(periodId && disciplineId);
-          const canCancel = Boolean(periodId && selectionId) && !isWorking;
+          const showCancel =
+            isPeriodOpen &&
+            !selection?.finalizedAt &&
+            Boolean(periodId && selectionId);
+          const canCancel = showCancel && !isWorking;
           const canSelect =
+            isPeriodOpen &&
             hasSelectableIds &&
             !isWorking &&
             !isFull &&
@@ -205,7 +238,7 @@ function ActivePeriodCard({
                   )}
                 </div>
 
-                {isSelected && selection ? (
+                {isSelected && selection && showCancel ? (
                   <button
                     type="button"
                     disabled={!canCancel}
@@ -213,9 +246,11 @@ function ActivePeriodCard({
                     className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:text-slate-300"
                   >
                     <Undo2 className="h-4 w-4" aria-hidden="true" />
-                    {t('electives.cancel')}
+                    {isWorking
+                      ? t('electives.processing')
+                      : t('electives.cancel')}
                   </button>
-                ) : (
+                ) : !isSelected && isPeriodOpen ? (
                   <button
                     type="button"
                     disabled={!canSelect}
@@ -225,7 +260,7 @@ function ActivePeriodCard({
                     <BookOpenCheck className="h-4 w-4" aria-hidden="true" />
                     {selectLabel}
                   </button>
-                )}
+                ) : null}
               </div>
 
               <div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
@@ -267,6 +302,7 @@ export default function ElectivesPage() {
   const queryClient = useQueryClient();
   const locale = i18n.language.startsWith('en') ? 'en-US' : 'uk-UA';
   const [pendingActionKey, setPendingActionKey] = useState('');
+  const [now, setNow] = useState(() => Date.now());
 
   const {
     data: activePeriods = [],
@@ -276,7 +312,27 @@ export default function ElectivesPage() {
   } = useQuery({
     queryKey: ['electives', 'active'],
     queryFn: electivesApi.listActive,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: true,
   });
+
+  useEffect(() => {
+    const futureDeadlines = activePeriods
+      .map((item) => Date.parse(item.period.endsAt))
+      .filter((deadline) => Number.isFinite(deadline) && deadline > now);
+    const nextDeadline = Math.min(...futureDeadlines);
+
+    if (!Number.isFinite(nextDeadline)) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setNow(Date.now());
+      void queryClient.invalidateQueries({
+        queryKey: ['electives', 'active'],
+      });
+    }, Math.min(nextDeadline - now + 250, 2_147_483_647));
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activePeriods, now, queryClient]);
 
   const selectMutation = useMutation({
     mutationFn: ({
@@ -286,11 +342,9 @@ export default function ElectivesPage() {
       periodId: string;
       disciplineId: string;
     }) => electivesApi.select(periodId, disciplineId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['electives'] });
-    },
-    onSettled: () => {
+    onSettled: async () => {
       setPendingActionKey('');
+      await queryClient.invalidateQueries({ queryKey: ['electives'] });
     },
   });
 
@@ -302,11 +356,9 @@ export default function ElectivesPage() {
       periodId: string;
       selectionId: string;
     }) => electivesApi.cancelSelection(periodId, selectionId),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['electives'] });
-    },
-    onSettled: () => {
+    onSettled: async () => {
       setPendingActionKey('');
+      await queryClient.invalidateQueries({ queryKey: ['electives'] });
     },
   });
 
@@ -371,6 +423,7 @@ export default function ElectivesPage() {
               key={item.period.id}
               item={item}
               locale={locale}
+              now={now}
               workingKey={workingKey}
               onSelect={(periodId, disciplineId) => {
                 setPendingActionKey(`${periodId}:${disciplineId}`);

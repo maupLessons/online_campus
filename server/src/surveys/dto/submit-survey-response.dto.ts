@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsDefined,
   IsMongoId,
@@ -23,9 +22,8 @@ export class SubmitSurveyAnswerDto {
 }
 
 export class SubmitSurveyResponseDto {
-  @ApiProperty({ type: [SubmitSurveyAnswerDto], minItems: 1, maxItems: 100 })
+  @ApiProperty({ type: [SubmitSurveyAnswerDto], maxItems: 100 })
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => SubmitSurveyAnswerDto)

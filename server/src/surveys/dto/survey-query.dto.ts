@@ -1,8 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { SurveyStatus, SurveyTargetType } from '../schemas';
 
 export class SurveyQueryDto {
+  @ApiPropertyOptional({ maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
   @ApiPropertyOptional({ enum: SurveyStatus })
   @IsOptional()
   @IsEnum(SurveyStatus)

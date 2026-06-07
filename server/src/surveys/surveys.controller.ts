@@ -42,8 +42,11 @@ export class SurveysController {
   @Get()
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'List surveys for managers' })
-  findAll(@Query() query: SurveyQueryDto) {
-    return this.surveysService.findAll(query);
+  findAll(
+    @Query() query: SurveyQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.surveysService.findAll(query, req.user);
   }
 
   @Get('active')

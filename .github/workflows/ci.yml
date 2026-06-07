@@ -66,6 +66,9 @@ jobs:
       - name: Elective disciplines database E2E tests
         run: npm run test:e2e:db -- electives.e2e-spec.ts
 
+      - name: Surveys database E2E tests
+        run: npm run test:e2e:db -- surveys.e2e-spec.ts
+
   client:
     name: Client
     runs-on: ubuntu-latest

@@ -167,7 +167,7 @@ export class AuditLogService {
     if (entry.result === 'success') {
       this.logger.log(logMessage);
     } else {
-      this.logger.error(logMessage);
+      this.logger.warn(logMessage);
     }
 
     void this.auditModel

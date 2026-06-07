@@ -104,6 +104,7 @@ describe('Elective disciplines (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication<NestExpressApplication>();
+    app.useLogger(['error']);
     configureApp(app, { swaggerEnabled: false });
     await app.init();
 

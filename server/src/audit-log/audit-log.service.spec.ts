@@ -9,6 +9,7 @@ describe('AuditLogService', () => {
   let service: AuditLogService;
   let loggerErrorSpy: jest.SpyInstance;
   let loggerLogSpy: jest.SpyInstance;
+  let loggerWarnSpy: jest.SpyInstance;
   const auditModel = {
     create: jest.fn().mockResolvedValue({}),
     find: jest.fn(),
@@ -19,6 +20,7 @@ describe('AuditLogService', () => {
     jest.clearAllMocks();
     loggerErrorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
     loggerLogSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+    loggerWarnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -36,6 +38,7 @@ describe('AuditLogService', () => {
   afterEach(() => {
     loggerErrorSpy.mockRestore();
     loggerLogSpy.mockRestore();
+    loggerWarnSpy.mockRestore();
   });
 
   it('should be defined', () => {
@@ -63,6 +66,10 @@ describe('AuditLogService', () => {
         requestId: 'req-1',
       }),
     );
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Result: failure'),
+    );
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
   });
 
   it('should redact sensitive audit details before persisting', async () => {

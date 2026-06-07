@@ -251,6 +251,7 @@ export default function SurveyResultsPage() {
     queryKey: ['surveys', id, 'results'],
     enabled: Boolean(id),
     queryFn: () => surveysApi.getResults(id as string),
+    refetchInterval: 30_000,
   });
 
   const handleExport = async () => {
@@ -346,14 +347,26 @@ export default function SurveyResultsPage() {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-lg bg-slate-50 px-4 py-3">
+            <p className="flex items-center gap-2 text-xs text-slate-500">
+              <Users className="h-4 w-4" aria-hidden="true" />
+              {t('surveys.results.expectedRecipients')}
+            </p>
+            <p className="mt-1 text-2xl font-bold text-slate-900">
+              {results.expectedRecipients}
+            </p>
+          </div>
           <div className="rounded-lg bg-slate-50 px-4 py-3">
             <p className="flex items-center gap-2 text-xs text-slate-500">
               <Users className="h-4 w-4" aria-hidden="true" />
               {t('surveys.results.totalCompletions')}
             </p>
             <p className="mt-1 text-2xl font-bold text-slate-900">
-              {results.totalCompletions}
+              {results.totalCompletions}{' '}
+              <span className="text-sm font-semibold text-slate-500">
+                ({results.completionRate}%)
+              </span>
             </p>
           </div>
           <div className="rounded-lg bg-slate-50 px-4 py-3">

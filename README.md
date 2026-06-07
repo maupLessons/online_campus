@@ -311,10 +311,9 @@ interface SurveyQuestion {
   surveyId: string;
   order: number;
   text: string;
-  type: "single_choice" | "multiple_choice" | "text" | "rating";
+  type: "single" | "multiple" | "text" | "rating";
   required: boolean;
-  options?: { id: string; text: string }[]; // для single/multiple_choice
-  ratingMax?: number; // для rating (напр. 5 або 10)
+  options: string[]; // для single/multiple
 }
 
 interface SurveyResponse {
@@ -324,7 +323,7 @@ interface SurveyResponse {
   submittedAt: string;
   answers: {
     questionId: string;
-    value: string | string[]; // string[] для multiple_choice
+    value: string | string[] | number; // string[] для multiple, number 1..5 для rating
   }[];
 }
 ```
@@ -334,25 +333,28 @@ interface SurveyResponse {
 | Метод  | Шлях                          | Доступ                          | Опис                                         |
 | ------ | ----------------------------- | ------------------------------- | -------------------------------------------- |
 | POST   | `/surveys`                    | admin, dean, rector             | Створити опитування                          |
-| GET    | `/surveys`                    | admin, dean, rector             | Список всіх опитувань                        |
+| GET    | `/surveys`                    | admin, dean, rector             | Список опитувань; dean бачить лише власні    |
 | GET    | `/surveys/active`             | student, teacher                | Активні опитування для поточного користувача |
 | GET    | `/surveys/:id`                | авторизовані                    | Деталі опитування з питаннями                |
 | PUT    | `/surveys/:id`                | admin, dean (автор)             | Редагування (тільки в статусі draft)         |
 | PATCH  | `/surveys/:id/publish`        | admin, dean (автор)             | Публікація (draft → active)                  |
-| PATCH  | `/surveys/:id/close`          | admin, dean (автор)             | Закрити опитування (active → closed)         |
+| PATCH  | `/surveys/:id/close`          | admin, dean (автор)             | Закрити активне опитування (active → closed) |
 | DELETE | `/surveys/:id`                | admin                           | Видалити (тільки draft)                      |
 | POST   | `/surveys/:id/respond`        | student, teacher                | Надіслати відповіді                          |
 | GET    | `/surveys/:id/my-response`    | student, teacher                | Перевірити — чи вже пройшов                  |
-| GET    | `/surveys/:id/results`        | admin, dean+, rector, president | Агреговані результати                        |
-| GET    | `/surveys/:id/results/export` | admin, dean+                    | Вивантаження у CSV                           |
+| GET    | `/surveys/:id/results`        | admin, dean (автор), rector, president | Агреговані результати                 |
+| GET    | `/surveys/:id/results/export` | admin, dean (автор), rector, president | Вивантаження у CSV                    |
 
 **Логіка:**
 
 - Студент або викладач може проходити доступне йому опитування **лише один раз**
 - Аудиторія `all` означає всіх студентів; для викладачів використовуються окремі аудиторії `teachers` і `students_teachers`
 - При `isAnonymous: true` — userId не зберігається у відповіді, але факт проходження фіксується окремо (щоб не дати пройти двічі)
-- Опитування з `endDate` у минулому автоматично переводяться в статус `closed` (cron або перевірка при запиті)
-- Результати показують: кількість відповідей на кожен варіант, середнє для rating, текстові відповіді списком
+- Публікація з майбутнім `startDate` зберігає запланований старт; опитування видиме за прямим посиланням, але пройти його можна лише після старту
+- Опитування з `endDate` у минулому автоматично переводяться в статус `closed` під час запитів
+- Результати показують: очікувану аудиторію, кількість проходжень, відсоток проходження, кількість відповідей на кожен варіант, середнє для rating, текстові відповіді списком
+- CSV-експорт екранує формули (`=`, `+`, `-`, `@`) для захисту від spreadsheet injection
+- Для модуля є окремий MongoDB E2E quality gate: `npm run test:e2e:db -- surveys.e2e-spec.ts`
 
 ---
 
@@ -805,17 +807,17 @@ AuditLogEntry
 | Метод  | Шлях                          | Доступ                          |
 | ------ | ----------------------------- | ------------------------------- |
 | POST   | `/surveys`                    | admin, dean, rector             |
-| GET    | `/surveys`                    | admin, dean, rector             |
+| GET    | `/surveys`                    | admin, dean (власні), rector    |
 | GET    | `/surveys/active`             | student, teacher                |
 | GET    | `/surveys/:id`                | Авторизований                   |
 | PUT    | `/surveys/:id`                | admin, dean (тільки draft)      |
 | PATCH  | `/surveys/:id/publish`        | admin, dean                     |
-| PATCH  | `/surveys/:id/close`          | admin, dean                     |
+| PATCH  | `/surveys/:id/close`          | admin, dean (автор)             |
 | DELETE | `/surveys/:id`                | admin (тільки draft)            |
 | POST   | `/surveys/:id/respond`        | student, teacher                |
 | GET    | `/surveys/:id/my-response`    | student, teacher                |
-| GET    | `/surveys/:id/results`        | admin, dean+, rector, president |
-| GET    | `/surveys/:id/results/export` | admin, dean+                    |
+| GET    | `/surveys/:id/results`        | admin, dean (автор), rector, president |
+| GET    | `/surveys/:id/results/export` | admin, dean (автор), rector, president |
 
 ### Сповіщення `/api/notifications`
 

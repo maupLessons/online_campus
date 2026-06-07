@@ -8,11 +8,13 @@ import {
   ArrowLeft,
   CheckCircle2,
   ClipboardCheck,
+  Clock3,
   ShieldCheck,
 } from 'lucide-react';
 import { surveysApi } from '../../services/surveysApi';
 import {
   SurveyQuestionType,
+  SurveyStatus,
   type SurveyAnswer,
   type SurveyAnswerValue,
   type SurveyMyResponse,
@@ -170,6 +172,20 @@ export default function SurveyPlayerPage() {
   }, [responseQuery.data?.response?.answers]);
 
   const completed = Boolean(responseQuery.data?.completed);
+  const startsAt = survey?.startDate
+    ? new Date(survey.startDate).getTime()
+    : null;
+  const endsAt = survey?.endDate ? new Date(survey.endDate).getTime() : null;
+  const now = surveyQuery.dataUpdatedAt;
+  const isScheduled =
+    !completed &&
+    startsAt !== null &&
+    !Number.isNaN(startsAt) &&
+    startsAt > now;
+  const isClosed =
+    !completed &&
+    (survey?.status === SurveyStatus.CLOSED ||
+      (endsAt !== null && !Number.isNaN(endsAt) && endsAt <= now));
   const requiredQuestions = useMemo(
     () => sortedQuestions.filter((question) => question.required),
     [sortedQuestions],
@@ -385,6 +401,37 @@ export default function SurveyPlayerPage() {
               ))}
             </div>
           )}
+        </section>
+      ) : isScheduled || isClosed ? (
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
+                isScheduled
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              <Clock3 className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                {isScheduled
+                  ? t('surveys.player.scheduledTitle')
+                  : t('surveys.player.closedTitle')}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                {isScheduled && survey.startDate
+                  ? t('surveys.player.scheduledDescription', {
+                      date: new Intl.DateTimeFormat(undefined, {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      }).format(new Date(survey.startDate)),
+                    })
+                  : t('surveys.player.closedDescription')}
+              </p>
+            </div>
+          </div>
         </section>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">

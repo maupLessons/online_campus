@@ -329,6 +329,7 @@ export interface Survey {
   closedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  completed?: boolean;
   questions: SurveyQuestion[];
 }
 
@@ -424,6 +425,8 @@ export interface SurveyResults {
   anonymous: boolean;
   totalResponses: number;
   totalCompletions: number;
+  expectedRecipients: number;
+  completionRate: number;
   questions: SurveyQuestionResult[];
 }
 

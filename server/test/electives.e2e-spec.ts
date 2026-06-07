@@ -17,6 +17,7 @@ import { SeedService } from '../src/seed-data/seed.service';
 
 const SETUP_TIMEOUT = 120_000;
 const TEST_JWT_SECRET = 'electives-e2e-secret-with-sufficient-entropy';
+const TEST_CSRF_SECRET = 'electives-e2e-csrf-secret-with-sufficient-entropy';
 
 type Actor = {
   id: Types.ObjectId;
@@ -85,6 +86,13 @@ describe('Elective disciplines (e2e)', () => {
     const mongoUri = `mongodb://${container.getHost()}:${container.getMappedPort(
       27017,
     )}/electives-e2e`;
+    const testConfig = new ConfigService({
+      MONGODB_URI: mongoUri,
+      JWT_SECRET: TEST_JWT_SECRET,
+      AUTH_CSRF_SECRET: TEST_CSRF_SECRET,
+      NODE_ENV: 'test',
+      CLIENT_URL: 'http://localhost:5173',
+    });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -92,15 +100,7 @@ describe('Elective disciplines (e2e)', () => {
       .overrideProvider(SeedService)
       .useValue({ onModuleInit: jest.fn() })
       .overrideProvider(ConfigService)
-      .useValue({
-        get: (key: string) => {
-          if (key === 'MONGODB_URI') return mongoUri;
-          if (key === 'JWT_SECRET') return TEST_JWT_SECRET;
-          if (key === 'NODE_ENV') return 'test';
-          if (key === 'CLIENT_URL') return 'http://localhost:5173';
-          return process.env[key];
-        },
-      })
+      .useValue(testConfig)
       .compile();
 
     app = moduleFixture.createNestApplication<NestExpressApplication>();

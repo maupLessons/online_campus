@@ -68,6 +68,19 @@ export class ElectiveSelectionPeriod {
   })
   finalizedBy?: User | Types.ObjectId | null;
 
+  @Prop({ type: Date, default: null })
+  finalizationStartedAt?: Date | null;
+
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  })
+  finalizationStartedBy?: User | Types.ObjectId | null;
+
+  @Prop({ type: String, default: null, select: false })
+  finalizationToken?: string | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -80,3 +93,4 @@ ElectiveSelectionPeriodSchema.plugin(paginate);
 ElectiveSelectionPeriodSchema.index({ status: 1, startsAt: 1, endsAt: 1 });
 ElectiveSelectionPeriodSchema.index({ academicYear: 1, semester: 1 });
 ElectiveSelectionPeriodSchema.index({ targetGroups: 1 });
+ElectiveSelectionPeriodSchema.index({ status: 1, finalizationStartedAt: 1 });

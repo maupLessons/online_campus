@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { randomUUID } from 'crypto';
 import { Model, Types } from 'mongoose';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
@@ -155,6 +156,13 @@ type FinalizationBucket = {
   studentIds: Types.ObjectId[];
   selectionIds: Types.ObjectId[];
 };
+
+type ExistingSelectionQuota = {
+  discipline?: Types.ObjectId | string;
+  choiceSlot?: number;
+};
+
+const FINALIZATION_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class ElectiveDisciplinesService {
@@ -462,113 +470,175 @@ export class ElectiveDisciplinesService {
     this.ensurePeriodManager(user);
     await this.closeExpiredPeriods();
 
-    const period = await this.getPeriodOrThrow(periodId);
-    if (period.status === ElectiveSelectionPeriodStatus.FINALIZED) {
-      return this.getFinalizationSummary(period);
-    }
+    const periodObjectId = this.toObjectId(periodId);
+    const finalizedAt = new Date();
+    const finalizedBy = this.toObjectId(user.sub);
+    const finalizationToken = randomUUID();
+    const staleBefore = new Date(
+      finalizedAt.getTime() - FINALIZATION_LOCK_TIMEOUT_MS,
+    );
 
-    if (period.status !== ElectiveSelectionPeriodStatus.CLOSED) {
+    const period = await this.periodModel
+      .findOneAndUpdate(
+        {
+          _id: periodObjectId,
+          status: ElectiveSelectionPeriodStatus.CLOSED,
+          $or: [
+            { finalizationStartedAt: null },
+            { finalizationStartedAt: { $exists: false } },
+            { finalizationStartedAt: { $lt: staleBefore } },
+          ],
+        },
+        {
+          $set: {
+            finalizationStartedAt: finalizedAt,
+            finalizationStartedBy: finalizedBy,
+            finalizationToken,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
+
+    if (!period) {
+      const currentPeriod = await this.getPeriodOrThrow(periodId);
+      if (currentPeriod.status === ElectiveSelectionPeriodStatus.FINALIZED) {
+        return this.getFinalizationSummary(currentPeriod);
+      }
+      if (
+        currentPeriod.status === ElectiveSelectionPeriodStatus.CLOSED &&
+        currentPeriod.finalizationStartedAt
+      ) {
+        throw new ConflictException('Фіналізація періоду вже виконується');
+      }
       throw new BadRequestException(
         'Фіналізувати можна лише закритий період вибору',
       );
     }
 
-    const finalizedAt = new Date();
-    const finalizedBy = this.toObjectId(user.sub);
-    const selections = await this.selectionModel
-      .find({ period: period._id })
-      .populate({
-        path: 'discipline',
-        populate: [{ path: 'department' }, { path: 'teacher' }],
-      })
-      .populate('student')
-      .populate('group')
-      .exec();
-
-    const buckets = this.groupSelectionsForFinalization(selections);
-    const courseAssignments: ElectivePeriodFinalizationView['courseAssignments'] =
-      [];
-
-    for (const bucket of buckets.values()) {
-      const discipline = bucket.discipline;
-      const teacherId = this.idToString(discipline.teacher);
-      if (!teacherId || !Types.ObjectId.isValid(teacherId)) {
-        throw new BadRequestException(
-          `Для дисципліни ${discipline.code} потрібно призначити викладача перед фіналізацією`,
-        );
-      }
-
-      const course = await this.courseModel
-        .findOneAndUpdate(
-          { code: discipline.code },
-          {
-            $setOnInsert: {
-              name: discipline.title,
-              code: discipline.code,
-              department: this.toObjectId(
-                this.idToString(discipline.department),
-              ),
-              semester: discipline.semester,
-              credits: discipline.credits,
-            },
-          },
-          {
-            returnDocument: 'after',
-            runValidators: true,
-            setDefaultsOnInsert: true,
-            upsert: true,
-          },
-        )
+    try {
+      const selections = await this.selectionModel
+        .find({ period: period._id })
+        .populate({
+          path: 'discipline',
+          populate: [{ path: 'department' }, { path: 'teacher' }],
+        })
+        .populate('student')
+        .populate('group')
         .exec();
 
-      if (!course) {
-        throw new NotFoundException('Не вдалося створити курс дисципліни');
+      const buckets = this.groupSelectionsForFinalization(selections);
+      await this.validateFinalizationBuckets(buckets);
+
+      const courseAssignments: ElectivePeriodFinalizationView['courseAssignments'] =
+        [];
+
+      for (const bucket of buckets.values()) {
+        const discipline = bucket.discipline;
+        const teacherId = this.toObjectId(this.idToString(discipline.teacher));
+        const departmentId = this.toObjectId(
+          this.idToString(discipline.department),
+        );
+        const course = await this.courseModel
+          .findOneAndUpdate(
+            { code: discipline.code },
+            {
+              $setOnInsert: {
+                name: discipline.title,
+                code: discipline.code,
+                department: departmentId,
+                semester: discipline.semester,
+                credits: discipline.credits,
+              },
+            },
+            {
+              returnDocument: 'after',
+              runValidators: true,
+              setDefaultsOnInsert: true,
+              upsert: true,
+            },
+          )
+          .exec();
+
+        if (!course) {
+          throw new NotFoundException('Не вдалося створити курс дисципліни');
+        }
+
+        this.ensureCourseMatchesDiscipline(course, discipline);
+
+        const assignment = await this.upsertFinalizedCourseAssignment({
+          courseId: course._id,
+          discipline,
+          groupId: bucket.groupId,
+          period,
+          studentIds: bucket.studentIds,
+          teacherId,
+          finalizedAt,
+        });
+
+        await this.selectionModel
+          .updateMany(
+            { _id: { $in: bucket.selectionIds } },
+            {
+              $set: {
+                courseAssignment: assignment._id,
+                finalizedAt,
+                finalizedBy,
+              },
+            },
+          )
+          .exec();
+
+        courseAssignments.push({
+          id: this.idToString(assignment._id),
+          courseId: this.idToString(course._id),
+          disciplineId: this.idToString(discipline._id),
+          groupId: this.idToString(bucket.groupId),
+          studentCount: bucket.studentIds.length,
+        });
       }
 
-      const assignment = await this.upsertFinalizedCourseAssignment({
-        courseId: course._id,
-        discipline,
-        groupId: bucket.groupId,
-        period,
-        studentIds: bucket.studentIds,
-        teacherId: this.toObjectId(teacherId),
-        finalizedAt,
-      });
-
-      await this.selectionModel
-        .updateMany(
-          { _id: { $in: bucket.selectionIds } },
+      const finalizedPeriod = await this.periodModel
+        .findOneAndUpdate(
+          {
+            _id: period._id,
+            status: ElectiveSelectionPeriodStatus.CLOSED,
+            finalizationToken,
+          },
           {
             $set: {
-              courseAssignment: assignment._id,
+              status: ElectiveSelectionPeriodStatus.FINALIZED,
+              closedAt: period.closedAt ?? finalizedAt,
               finalizedAt,
               finalizedBy,
             },
+            $unset: {
+              finalizationStartedAt: '',
+              finalizationStartedBy: '',
+              finalizationToken: '',
+            },
           },
+          { returnDocument: 'after' },
         )
         .exec();
 
-      courseAssignments.push({
-        id: this.idToString(assignment._id),
-        courseId: this.idToString(course._id),
-        disciplineId: this.idToString(discipline._id),
-        groupId: this.idToString(bucket.groupId),
-        studentCount: bucket.studentIds.length,
-      });
+      if (!finalizedPeriod) {
+        throw new ConflictException(
+          'Не вдалося підтвердити право на фіналізацію періоду',
+        );
+      }
+
+      await this.notifyPeriodFinalized(finalizedPeriod, selections);
+
+      return {
+        period: await this.findPeriodView(finalizedPeriod._id),
+        totalSelections: selections.length,
+        courseAssignments,
+      };
+    } catch (error) {
+      await this.releaseFinalizationLock(period._id, finalizationToken);
+      throw error;
     }
-
-    period.status = ElectiveSelectionPeriodStatus.FINALIZED;
-    period.closedAt = period.closedAt ?? finalizedAt;
-    period.finalizedAt = finalizedAt;
-    period.finalizedBy = finalizedBy;
-    await period.save();
-    await this.notifyPeriodFinalized(period, selections);
-
-    return {
-      period: await this.findPeriodView(period._id),
-      totalSelections: selections.length,
-      courseAssignments,
-    };
   }
 
   async findActiveForStudent(
@@ -716,19 +786,14 @@ export class ElectiveDisciplinesService {
     const disciplineId = this.toObjectId(dto.disciplineId);
     const groupObjectId = this.toObjectId(groupId);
 
-    const [selectedCount, duplicateSelection, discipline] = await Promise.all([
+    const [existingSelections, discipline] = await Promise.all([
       this.selectionModel
-        .countDocuments({
+        .find({
           period: period._id,
           student: studentId,
         })
-        .exec(),
-      this.selectionModel
-        .findOne({
-          period: period._id,
-          student: studentId,
-          discipline: disciplineId,
-        })
+        .select('discipline choiceSlot')
+        .lean<ExistingSelectionQuota[]>()
         .exec(),
       this.disciplineModel.findById(disciplineId).exec(),
     ]);
@@ -744,10 +809,15 @@ export class ElectiveDisciplinesService {
         'Дисципліна не належить до семестру цього періоду вибору',
       );
     }
-    if (duplicateSelection) {
+    if (
+      existingSelections.some(
+        (selection) =>
+          this.idToString(selection.discipline) === disciplineId.toHexString(),
+      )
+    ) {
       throw new ConflictException('Цю дисципліну вже обрано');
     }
-    if (selectedCount >= period.requiredChoices) {
+    if (existingSelections.length >= period.requiredChoices) {
       throw new ConflictException(
         'Ліміт вибору дисциплін для періоду вичерпано',
       );
@@ -770,29 +840,15 @@ export class ElectiveDisciplinesService {
       throw new ConflictException('Вільних місць на дисципліні вже немає');
     }
 
+    let selection: ElectiveSelectionDocument;
     try {
-      const selection = await this.selectionModel.create({
-        period: period._id,
-        discipline: disciplineId,
-        student: studentId,
-        group: groupObjectId,
-        selectedAt: new Date(),
+      selection = await this.createSelectionInAvailableSlot({
+        period,
+        disciplineId,
+        studentId,
+        groupId: groupObjectId,
+        existingSelections,
       });
-
-      const populated = await this.selectionModel
-        .findById(selection._id)
-        .populate({
-          path: 'discipline',
-          populate: [{ path: 'department' }, { path: 'teacher' }],
-        })
-        .populate('group')
-        .exec();
-
-      if (!populated) {
-        throw new NotFoundException('Вибір не знайдено після створення');
-      }
-
-      return this.formatSelection(populated);
     } catch (error) {
       await this.disciplineModel
         .updateOne(
@@ -801,11 +857,23 @@ export class ElectiveDisciplinesService {
         )
         .exec();
 
-      if (this.isDuplicateKeyError(error)) {
-        throw new ConflictException('Цю дисципліну вже обрано');
-      }
       throw error;
     }
+
+    const populated = await this.selectionModel
+      .findById(selection._id)
+      .populate({
+        path: 'discipline',
+        populate: [{ path: 'department' }, { path: 'teacher' }],
+      })
+      .populate('group')
+      .exec();
+
+    if (!populated) {
+      throw new NotFoundException('Вибір не знайдено після створення');
+    }
+
+    return this.formatSelection(populated);
   }
 
   async cancelSelection(
@@ -821,7 +889,7 @@ export class ElectiveDisciplinesService {
     this.ensurePeriodIsOpen(period);
 
     const selection = await this.selectionModel
-      .findOne({
+      .findOneAndDelete({
         _id: this.toObjectId(selectionId),
         period: period._id,
         student: this.toObjectId(user.sub),
@@ -832,7 +900,6 @@ export class ElectiveDisciplinesService {
       throw new NotFoundException('Вибір дисципліни не знайдено');
     }
 
-    await selection.deleteOne();
     const disciplineId = this.toObjectId(this.idToString(selection.discipline));
     await this.disciplineModel
       .updateOne(
@@ -957,6 +1024,93 @@ export class ElectiveDisciplinesService {
     return `\uFEFF${rows
       .map((row) => row.map((value) => this.escapeCsv(value)).join(','))
       .join('\n')}\n`;
+  }
+
+  private async createSelectionInAvailableSlot(params: {
+    period: ElectiveSelectionPeriodDocument;
+    disciplineId: Types.ObjectId;
+    studentId: Types.ObjectId;
+    groupId: Types.ObjectId;
+    existingSelections: ExistingSelectionQuota[];
+  }): Promise<ElectiveSelectionDocument> {
+    const occupiedSlots = this.getOccupiedChoiceSlots(
+      params.existingSelections,
+      params.period.requiredChoices,
+    );
+
+    for (
+      let choiceSlot = 0;
+      choiceSlot < params.period.requiredChoices;
+      choiceSlot += 1
+    ) {
+      if (occupiedSlots.has(choiceSlot)) {
+        continue;
+      }
+
+      try {
+        return await this.selectionModel.create({
+          period: params.period._id,
+          discipline: params.disciplineId,
+          student: params.studentId,
+          group: params.groupId,
+          choiceSlot,
+          selectedAt: new Date(),
+        });
+      } catch (error) {
+        if (!this.isDuplicateKeyError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    const duplicate = await this.selectionModel
+      .findOne({
+        period: params.period._id,
+        student: params.studentId,
+        discipline: params.disciplineId,
+      })
+      .select('_id')
+      .lean()
+      .exec();
+
+    if (duplicate) {
+      throw new ConflictException('Цю дисципліну вже обрано');
+    }
+
+    throw new ConflictException('Ліміт вибору дисциплін для періоду вичерпано');
+  }
+
+  private getOccupiedChoiceSlots(
+    selections: ExistingSelectionQuota[],
+    requiredChoices: number,
+  ): Set<number> {
+    const occupied = new Set(
+      selections
+        .map((selection) => selection.choiceSlot)
+        .filter(
+          (slot): slot is number =>
+            typeof slot === 'number' &&
+            Number.isInteger(slot) &&
+            slot >= 0 &&
+            slot < requiredChoices,
+        ),
+    );
+    const legacySelections = selections.filter(
+      (selection) => !Number.isInteger(selection.choiceSlot),
+    ).length;
+
+    for (
+      let slot = 0, assigned = 0;
+      slot < requiredChoices && assigned < legacySelections;
+      slot += 1
+    ) {
+      if (!occupied.has(slot)) {
+        occupied.add(slot);
+        assigned += 1;
+      }
+    }
+
+    return occupied;
   }
 
   private ensureDisciplineManager(user: AuthenticatedUser): void {
@@ -1211,6 +1365,106 @@ export class ElectiveDisciplinesService {
     }
 
     return buckets;
+  }
+
+  private async validateFinalizationBuckets(
+    buckets: Map<string, FinalizationBucket>,
+  ): Promise<void> {
+    if (buckets.size === 0) {
+      return;
+    }
+
+    const teacherIds = [
+      ...new Set(
+        [...buckets.values()].map((bucket) => {
+          const teacherId = this.idToString(bucket.discipline.teacher);
+          if (!Types.ObjectId.isValid(teacherId)) {
+            throw new BadRequestException(
+              `Для дисципліни ${bucket.discipline.code} потрібно призначити викладача перед фіналізацією`,
+            );
+          }
+          return teacherId;
+        }),
+      ),
+    ];
+    const teachers = await this.userModel
+      .find({
+        _id: { $in: teacherIds.map((id) => this.toObjectId(id)) },
+        role: {
+          $in: [
+            Role.TEACHER,
+            Role.DEPARTMENT_HEAD,
+            Role.DEAN,
+            Role.RECTOR,
+            Role.PRESIDENT,
+          ],
+        },
+        status: 'active',
+      })
+      .select('_id teacherProfile.department')
+      .lean<
+        Array<{
+          _id: Types.ObjectId;
+          teacherProfile?: { department?: unknown };
+        }>
+      >()
+      .exec();
+    const teachersById = new Map(
+      teachers.map((teacher) => [this.idToString(teacher._id), teacher]),
+    );
+
+    for (const bucket of buckets.values()) {
+      const teacherId = this.idToString(bucket.discipline.teacher);
+      const departmentId = this.idToString(bucket.discipline.department);
+      const teacher = teachersById.get(teacherId);
+      if (
+        !teacher ||
+        this.idToString(teacher.teacherProfile?.department) !== departmentId
+      ) {
+        throw new BadRequestException(
+          `Для дисципліни ${bucket.discipline.code} потрібно призначити активного викладача цієї кафедри`,
+        );
+      }
+    }
+  }
+
+  private ensureCourseMatchesDiscipline(
+    course: CourseDocument,
+    discipline: ElectiveDisciplineDocument,
+  ): void {
+    const matches =
+      this.idToString(course.department) ===
+        this.idToString(discipline.department) &&
+      course.semester === discipline.semester &&
+      course.credits === discipline.credits;
+
+    if (!matches) {
+      throw new ConflictException(
+        `Код ${discipline.code} вже використовується іншим навчальним курсом`,
+      );
+    }
+  }
+
+  private async releaseFinalizationLock(
+    periodId: Types.ObjectId,
+    finalizationToken: string,
+  ): Promise<void> {
+    await this.periodModel
+      .updateOne(
+        {
+          _id: periodId,
+          status: ElectiveSelectionPeriodStatus.CLOSED,
+          finalizationToken,
+        },
+        {
+          $unset: {
+            finalizationStartedAt: '',
+            finalizationStartedBy: '',
+            finalizationToken: '',
+          },
+        },
+      )
+      .exec();
   }
 
   private async upsertFinalizedCourseAssignment(params: {
@@ -1589,9 +1843,10 @@ export class ElectiveDisciplinesService {
   }
 
   private escapeCsv(value: string): string {
-    if (/[",\n\r]/.test(value)) {
-      return `"${value.replace(/"/g, '""')}"`;
+    const safeValue = /^\s*[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+    if (/[",\n\r]/.test(safeValue)) {
+      return `"${safeValue.replace(/"/g, '""')}"`;
     }
-    return value;
+    return safeValue;
   }
 }

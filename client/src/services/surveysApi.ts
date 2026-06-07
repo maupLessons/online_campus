@@ -1,6 +1,8 @@
 import api from './api';
 import type {
   CreateSurveyInput,
+  PaginatedResponse,
+  ReferenceView,
   Survey,
   SurveyMyResponse,
   SurveyResults,
@@ -9,13 +11,24 @@ import type {
   SurveyTargetType,
 } from '../types';
 
+export type SurveyCourseTarget = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 export type SurveyListFilters = {
+  search?: string;
   status?: SurveyStatus | '';
   targetType?: SurveyTargetType | '';
 };
 
 function buildSurveyParams(filters?: SurveyListFilters) {
   const params = new URLSearchParams();
+
+  if (filters?.search?.trim()) {
+    params.set('search', filters.search.trim());
+  }
 
   if (filters?.status) {
     params.set('status', filters.status);
@@ -98,5 +111,18 @@ export const surveysApi = {
       responseType: 'blob',
     });
     return data;
+  },
+
+  listTargetGroups: async () => {
+    const { data } = await api.get<ReferenceView[]>('/references/groups');
+    return data;
+  },
+
+  listTargetCourses: async () => {
+    const { data } = await api.get<PaginatedResponse<SurveyCourseTarget>>(
+      '/courses',
+      { params: { page: 1, limit: 100 } },
+    );
+    return data.docs;
   },
 };

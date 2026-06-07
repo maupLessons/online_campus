@@ -10,9 +10,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { surveysApi } from '../../services/surveysApi';
-import type { Survey, SurveyMyResponse } from '../../types';
-
-type SurveyStatusMap = Record<string, SurveyMyResponse>;
+import type { Survey } from '../../types';
 
 function normalizeSurveyDates(survey: Survey) {
   const now = Date.now();
@@ -44,37 +42,17 @@ export default function SurveysPage() {
     queryFn: surveysApi.listActive,
   });
 
-  const { data: responseStates = {}, isLoading: isLoadingStates } = useQuery({
-    queryKey: ['surveys', 'active', 'my-response', surveys.map((s) => s.id)],
-    enabled: surveys.length > 0,
-    queryFn: async () => {
-      const entries = await Promise.allSettled(
-        surveys.map(async (survey) => {
-          const state = await surveysApi.getMyResponse(survey.id);
-          return [survey.id, state] as const;
-        }),
-      );
-
-      return entries.reduce<SurveyStatusMap>((acc, entry) => {
-        if (entry.status === 'fulfilled') {
-          acc[entry.value[0]] = entry.value[1];
-        }
-        return acc;
-      }, {});
-    },
-  });
-
   const sortedSurveys = useMemo(() => {
     return [...surveys].sort((a, b) => {
-      const aCompleted = responseStates[a.id]?.completed ? 1 : 0;
-      const bCompleted = responseStates[b.id]?.completed ? 1 : 0;
+      const aCompleted = a.completed ? 1 : 0;
+      const bCompleted = b.completed ? 1 : 0;
       if (aCompleted !== bCompleted) return aCompleted - bCompleted;
       return (
         new Date(a.endDate ?? a.createdAt ?? 0).getTime() -
         new Date(b.endDate ?? b.createdAt ?? 0).getTime()
       );
     });
-  }, [responseStates, surveys]);
+  }, [surveys]);
 
   const formatDate = (value?: string) => {
     if (!value) return t('surveys.noDeadline');
@@ -103,7 +81,7 @@ export default function SurveysPage() {
   }
 
   const completedCount = surveys.filter(
-    (survey) => responseStates[survey.id]?.completed,
+    (survey) => survey.completed,
   ).length;
 
   return (
@@ -140,8 +118,7 @@ export default function SurveysPage() {
       ) : (
         <div className="grid gap-4 xl:grid-cols-2">
           {sortedSurveys.map((survey) => {
-            const state = responseStates[survey.id];
-            const completed = Boolean(state?.completed);
+            const completed = Boolean(survey.completed);
             const { isEndingSoon, isExpired } = normalizeSurveyDates(survey);
             const questionsCount = survey.questions?.length ?? 0;
 
@@ -251,11 +228,6 @@ export default function SurveysPage() {
         </div>
       )}
 
-      {isLoadingStates && surveys.length > 0 && (
-        <p className="text-center text-xs text-slate-500">
-          {t('surveys.loadingStatuses')}
-        </p>
-      )}
     </div>
   );
 }

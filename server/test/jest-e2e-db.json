@@ -9,7 +9,8 @@
     "<rootDir>/courses.e2e-spec.ts",
     "<rootDir>/electives.e2e-spec.ts",
     "<rootDir>/grades.e2e-spec.ts",
-    "<rootDir>/materials.e2e-spec.ts"
+    "<rootDir>/materials.e2e-spec.ts",
+    "<rootDir>/surveys.e2e-spec.ts"
   ],
   "detectOpenHandles": true,
   "transform": {

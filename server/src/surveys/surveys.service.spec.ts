@@ -45,6 +45,15 @@ const createSurveyDoc = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+const createPublishedSurveyDoc = (
+  draft: ReturnType<typeof createSurveyDoc>,
+) => ({
+  ...draft,
+  status: SurveyStatus.ACTIVE,
+  startDate: draft.startDate ?? new Date(),
+  publishedAt: new Date(),
+});
+
 const createQuestionDoc = (overrides: Record<string, unknown> = {}) => ({
   _id: new Types.ObjectId(),
   survey: new Types.ObjectId('6622b2a00f3a22d5b625d170'),
@@ -62,6 +71,7 @@ describe('SurveysService', () => {
   let service: SurveysService;
   let surveyModel: {
     findById: jest.Mock;
+    findOneAndUpdate: jest.Mock;
     updateMany: jest.Mock;
   };
   let questionModel: {
@@ -78,7 +88,10 @@ describe('SurveysService', () => {
     countDocuments: jest.Mock;
   };
   let usersService: jest.Mocked<
-    Pick<UsersService, 'findOne' | 'findActiveUserIdsByRoles'>
+    Pick<
+      UsersService,
+      'findOne' | 'findActiveUserIdsByRoles' | 'getStudentsByGroup'
+    >
   >;
   let coursesService: jest.Mocked<
     Pick<
@@ -99,6 +112,7 @@ describe('SurveysService', () => {
   beforeEach(() => {
     surveyModel = {
       findById: jest.fn().mockReturnValue(execQuery(surveyDoc)),
+      findOneAndUpdate: jest.fn(),
       updateMany: jest.fn().mockReturnValue(execQuery({ modifiedCount: 0 })),
     };
     questionModel = {
@@ -134,6 +148,24 @@ describe('SurveysService', () => {
       findActiveUserIdsByRoles: jest
         .fn()
         .mockResolvedValue([userId.toHexString()]),
+      getStudentsByGroup: jest.fn().mockResolvedValue([
+        {
+          id: userId.toHexString(),
+          login: 'student',
+          email: 'student@example.com',
+          role: Role.STUDENT,
+          firstName: 'Test',
+          lastName: 'Student',
+          status: 'active',
+          studentProfile: {
+            group: '6622b2a00f3a22d5b625d174',
+            recordBookNumber: 'RB-1',
+            year: 1,
+          },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ]),
     };
     coursesService = {
       isUserAssignedToCourseTargets: jest.fn().mockResolvedValue(false),
@@ -335,7 +367,7 @@ describe('SurveysService', () => {
     );
   });
 
-  it('creates one student-only new_survey notification on all-students publish', async () => {
+  it('preserves a scheduled start and creates a student notification on publish', async () => {
     const draftSurvey = createSurveyDoc({
       status: SurveyStatus.DRAFT,
       startDate: new Date('2099-01-01T00:00:00.000Z'),
@@ -349,13 +381,18 @@ describe('SurveysService', () => {
     });
 
     surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    surveyModel.findOneAndUpdate.mockReturnValueOnce(
+      execQuery(createPublishedSurveyDoc(draftSurvey)),
+    );
     await service.publish(draftSurvey._id.toString(), {
       sub: draftSurvey.createdBy.toString(),
       login: 'dean',
       role: Role.DEAN,
     });
 
-    expect(draftSurvey.startDate?.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(draftSurvey.startDate?.toISOString()).toBe(
+      '2099-01-01T00:00:00.000Z',
+    );
     expect(notificationsService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         type: NotificationType.NEW_SURVEY,
@@ -377,6 +414,9 @@ describe('SurveysService', () => {
     draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
 
     surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    surveyModel.findOneAndUpdate.mockReturnValueOnce(
+      execQuery(createPublishedSurveyDoc(draftSurvey)),
+    );
     await service.publish(draftSurvey._id.toString(), {
       sub: draftSurvey.createdBy.toString(),
       login: 'dean',
@@ -401,6 +441,9 @@ describe('SurveysService', () => {
     draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
 
     surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    surveyModel.findOneAndUpdate.mockReturnValueOnce(
+      execQuery(createPublishedSurveyDoc(draftSurvey)),
+    );
     await service.publish(draftSurvey._id.toString(), {
       sub: draftSurvey.createdBy.toString(),
       login: 'dean',
@@ -427,6 +470,9 @@ describe('SurveysService', () => {
     draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
 
     surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    surveyModel.findOneAndUpdate.mockReturnValueOnce(
+      execQuery(createPublishedSurveyDoc(draftSurvey)),
+    );
     await service.publish(draftSurvey._id.toString(), {
       sub: draftSurvey.createdBy.toString(),
       login: 'dean',
@@ -459,6 +505,9 @@ describe('SurveysService', () => {
     draftSurvey.save = jest.fn().mockResolvedValue(draftSurvey);
 
     surveyModel.findById.mockReturnValueOnce(execQuery(draftSurvey));
+    surveyModel.findOneAndUpdate.mockReturnValueOnce(
+      execQuery(createPublishedSurveyDoc(draftSurvey)),
+    );
     await service.publish(draftSurvey._id.toString(), {
       sub: draftSurvey.createdBy.toString(),
       login: 'dean',

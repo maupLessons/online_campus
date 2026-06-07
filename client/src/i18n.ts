@@ -505,6 +505,7 @@ const resources = {
       'surveys.targetTypes.course': 'Курси',
       'surveys.statuses.draft': 'Чернетка',
       'surveys.statuses.active': 'Активне',
+      'surveys.statuses.scheduled': 'Заплановане',
       'surveys.statuses.closed': 'Закрите',
       'surveys.questionTypes.single': 'Один варіант',
       'surveys.questionTypes.multiple': 'Кілька варіантів',
@@ -530,6 +531,12 @@ const resources = {
         'Відповіді збережено анонімно, тому вони не відображаються у профілі.',
       'surveys.player.savedAnswers': 'Ваші збережені відповіді:',
       'surveys.player.noSavedAnswer': 'Відповідь не збережена',
+      'surveys.player.scheduledTitle': 'Опитування ще не розпочалося',
+      'surveys.player.scheduledDescription':
+        'Відповіді можна буде надіслати після {{date}}.',
+      'surveys.player.closedTitle': 'Опитування завершено',
+      'surveys.player.closedDescription':
+        'Період приймання відповідей уже закрито.',
 
       'surveys.admin.title': 'Опитування',
       'surveys.admin.subtitle':
@@ -547,7 +554,13 @@ const resources = {
       'surveys.admin.updateError': 'Не вдалося оновити опитування',
       'surveys.admin.loadError': 'Не вдалося завантажити список опитувань',
       'surveys.admin.empty': 'Опитувань за цими фільтрами немає.',
+      'surveys.admin.targetOptionsError':
+        'Не вдалося завантажити доступні групи або курси.',
+      'surveys.admin.targetOptionsEmpty':
+        'Доступних цільових обʼєктів немає.',
+      'surveys.admin.selectedTargets': 'Вибрано: {{count}}',
       'surveys.admin.filters': 'Фільтри',
+      'surveys.admin.searchPlaceholder': 'Пошук за назвою',
       'surveys.admin.allStatuses': 'Усі статуси',
       'surveys.admin.allTargets': 'Усі аудиторії',
       'surveys.admin.questionsTitle': 'Конструктор питань',
@@ -566,14 +579,16 @@ const resources = {
       'surveys.admin.closeSuccess': 'Опитування закрито.',
       'surveys.admin.deleteSuccess': 'Опитування видалено.',
       'surveys.admin.actionError': 'Не вдалося виконати дію',
+      'surveys.admin.publishConfirm':
+        'Опублікувати опитування? Після публікації редагування буде недоступне.',
+      'surveys.admin.closeConfirm':
+        'Закрити опитування? Нові відповіді більше не прийматимуться.',
       'surveys.admin.deleteConfirm':
         'Видалити чернетку опитування? Дію не можна скасувати.',
       'surveys.admin.fields.title': 'Назва',
       'surveys.admin.fields.description': 'Опис',
       'surveys.admin.fields.targetType': 'Цільова аудиторія',
-      'surveys.admin.fields.targetIds': 'Ідентифікатори аудиторії',
-      'surveys.admin.fields.targetIdsPlaceholder':
-        'Вкажіть ID груп або course assignment через кому чи з нового рядка',
+      'surveys.admin.fields.targetIds': 'Оберіть групи або курси',
       'surveys.admin.fields.anonymous': 'Анонімне опитування',
       'surveys.admin.fields.questionText': 'Текст питання',
       'surveys.admin.fields.questionType': 'Тип питання',
@@ -591,6 +606,7 @@ const resources = {
       'surveys.results.exportCsv': 'Експорт CSV',
       'surveys.results.exporting': 'Експорт...',
       'surveys.results.exportError': 'Не вдалося експортувати CSV',
+      'surveys.results.expectedRecipients': 'Цільова аудиторія',
       'surveys.results.totalCompletions': 'Проходжень',
       'surveys.results.totalResponses': 'Збережених відповідей',
       'surveys.results.answersCount': 'відповідей',
@@ -1167,6 +1183,7 @@ const resources = {
       'surveys.targetTypes.course': 'Courses',
       'surveys.statuses.draft': 'Draft',
       'surveys.statuses.active': 'Active',
+      'surveys.statuses.scheduled': 'Scheduled',
       'surveys.statuses.closed': 'Closed',
       'surveys.questionTypes.single': 'Single choice',
       'surveys.questionTypes.multiple': 'Multiple choice',
@@ -1192,6 +1209,12 @@ const resources = {
         'Answers were saved anonymously, so they are not shown in your profile.',
       'surveys.player.savedAnswers': 'Your saved answers:',
       'surveys.player.noSavedAnswer': 'Answer was not saved',
+      'surveys.player.scheduledTitle': 'This survey has not started yet',
+      'surveys.player.scheduledDescription':
+        'Answers can be submitted after {{date}}.',
+      'surveys.player.closedTitle': 'This survey is closed',
+      'surveys.player.closedDescription':
+        'The response window has already ended.',
 
       'surveys.admin.title': 'Surveys',
       'surveys.admin.subtitle':
@@ -1209,7 +1232,12 @@ const resources = {
       'surveys.admin.updateError': 'Could not update survey',
       'surveys.admin.loadError': 'Could not load survey list',
       'surveys.admin.empty': 'No surveys match these filters.',
+      'surveys.admin.targetOptionsError':
+        'Could not load available groups or courses.',
+      'surveys.admin.targetOptionsEmpty': 'No target options are available.',
+      'surveys.admin.selectedTargets': 'Selected: {{count}}',
       'surveys.admin.filters': 'Filters',
+      'surveys.admin.searchPlaceholder': 'Search by title',
       'surveys.admin.allStatuses': 'All statuses',
       'surveys.admin.allTargets': 'All audiences',
       'surveys.admin.questionsTitle': 'Question builder',
@@ -1228,14 +1256,16 @@ const resources = {
       'surveys.admin.closeSuccess': 'Survey was closed.',
       'surveys.admin.deleteSuccess': 'Survey was deleted.',
       'surveys.admin.actionError': 'Could not perform action',
+      'surveys.admin.publishConfirm':
+        'Publish this survey? Editing will be disabled after publication.',
+      'surveys.admin.closeConfirm':
+        'Close this survey? New responses will no longer be accepted.',
       'surveys.admin.deleteConfirm':
         'Delete this survey draft? This action cannot be undone.',
       'surveys.admin.fields.title': 'Title',
       'surveys.admin.fields.description': 'Description',
       'surveys.admin.fields.targetType': 'Target audience',
-      'surveys.admin.fields.targetIds': 'Audience identifiers',
-      'surveys.admin.fields.targetIdsPlaceholder':
-        'Enter group IDs or course assignment IDs separated by commas or new lines',
+      'surveys.admin.fields.targetIds': 'Select groups or courses',
       'surveys.admin.fields.anonymous': 'Anonymous survey',
       'surveys.admin.fields.questionText': 'Question text',
       'surveys.admin.fields.questionType': 'Question type',
@@ -1253,6 +1283,7 @@ const resources = {
       'surveys.results.exportCsv': 'Export CSV',
       'surveys.results.exporting': 'Exporting...',
       'surveys.results.exportError': 'Could not export CSV',
+      'surveys.results.expectedRecipients': 'Target audience',
       'surveys.results.totalCompletions': 'Completions',
       'surveys.results.totalResponses': 'Saved responses',
       'surveys.results.answersCount': 'answers',

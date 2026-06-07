@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsISO8601,
   IsInt,
+  IsMongoId,
   IsOptional,
   IsString,
   MaxLength,
@@ -77,6 +78,7 @@ export class CreateSurveyDto {
   @IsArray()
   @ArrayMaxSize(100)
   @IsString({ each: true })
+  @IsMongoId({ each: true })
   @MaxLength(80, { each: true })
   targetIds?: string[];
 

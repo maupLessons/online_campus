@@ -98,11 +98,14 @@ describe('ElectiveDisciplinesService', () => {
   let periodModel: {
     find: jest.Mock;
     findById: jest.Mock;
+    findOneAndUpdate: jest.Mock;
     updateMany: jest.Mock;
+    updateOne: jest.Mock;
   };
   let selectionModel: {
     find: jest.Mock;
     findOne: jest.Mock;
+    findOneAndDelete: jest.Mock;
     findById: jest.Mock;
     countDocuments: jest.Mock;
     create: jest.Mock;
@@ -115,6 +118,9 @@ describe('ElectiveDisciplinesService', () => {
     find: jest.Mock;
     findOne: jest.Mock;
     findOneAndUpdate: jest.Mock;
+  };
+  let userModel: {
+    find: jest.Mock;
   };
   let usersService: jest.Mocked<Pick<UsersService, 'findOne'>>;
 
@@ -133,11 +139,14 @@ describe('ElectiveDisciplinesService', () => {
     periodModel = {
       find: jest.fn().mockReturnValue(queryChain([period])),
       findById: jest.fn().mockReturnValue(queryChain(period)),
+      findOneAndUpdate: jest.fn().mockReturnValue(queryChain(period)),
       updateMany: jest.fn().mockReturnValue(queryChain({ modifiedCount: 0 })),
+      updateOne: jest.fn().mockReturnValue(queryChain({ modifiedCount: 1 })),
     };
     selectionModel = {
       find: jest.fn().mockReturnValue(queryChain([])),
       findOne: jest.fn().mockReturnValue(queryChain(null)),
+      findOneAndDelete: jest.fn().mockReturnValue(queryChain(null)),
       findById: jest.fn().mockReturnValue(
         queryChain({
           _id: new Types.ObjectId('6622b2a00f3a22d5b625d186'),
@@ -159,6 +168,9 @@ describe('ElectiveDisciplinesService', () => {
         queryChain({
           _id: new Types.ObjectId('6622b2a00f3a22d5b625d190'),
           code: discipline.code,
+          department: discipline.department,
+          semester: discipline.semester,
+          credits: discipline.credits,
         }),
       ),
     };
@@ -173,6 +185,9 @@ describe('ElectiveDisciplinesService', () => {
           enrolledStudents: [studentId],
         }),
       ),
+    };
+    userModel = {
+      find: jest.fn().mockReturnValue(queryChain([])),
     };
     usersService = {
       findOne: jest.fn().mockResolvedValue({
@@ -201,7 +216,7 @@ describe('ElectiveDisciplinesService', () => {
       courseAssignmentModel as never,
       {} as never,
       {} as never,
-      {} as never,
+      userModel as never,
       usersService as unknown as UsersService,
       { createMany: jest.fn() } as unknown as NotificationsService,
     );
@@ -253,14 +268,39 @@ describe('ElectiveDisciplinesService', () => {
         period: period._id,
         discipline: discipline._id,
         student: studentId,
+        choiceSlot: 0,
       }),
     );
     expect(result.discipline.id).toBe(discipline._id.toString());
   });
 
+  it('keeps the reserved seat when selection creation committed but reload fails', async () => {
+    selectionModel.findById.mockReturnValueOnce(queryChain(null));
+
+    await expect(
+      service.selectDiscipline(
+        period._id.toString(),
+        { disciplineId: discipline._id.toString() },
+        {
+          sub: studentId.toHexString(),
+          login: 'student1',
+          role: Role.STUDENT,
+        },
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    expect(selectionModel.create).toHaveBeenCalledTimes(1);
+    expect(disciplineModel.updateOne).not.toHaveBeenCalled();
+  });
+
   it('rejects duplicate selections before reserving another seat', async () => {
-    selectionModel.findOne.mockReturnValueOnce(
-      queryChain({ _id: new Types.ObjectId() }),
+    selectionModel.find.mockReturnValueOnce(
+      queryChain([
+        {
+          discipline: discipline._id,
+          choiceSlot: 0,
+        },
+      ]),
     );
 
     await expect(
@@ -350,6 +390,7 @@ describe('ElectiveDisciplinesService', () => {
     });
     const teacherId = new Types.ObjectId('6622b2a00f3a22d5b625d188');
     const finalizedDiscipline = createDiscipline({ teacher: teacherId });
+    const departmentId = new Types.ObjectId('6622b2a00f3a22d5b625d181');
     const selectionId = new Types.ObjectId('6622b2a00f3a22d5b625d189');
     const selection = {
       _id: selectionId,
@@ -365,10 +406,24 @@ describe('ElectiveDisciplinesService', () => {
       selectedAt: new Date('2026-01-02T00:00:00.000Z'),
     };
 
-    periodModel.findById
+    const finalizedPeriod = createPeriod({
+      ...closedPeriod,
+      status: ElectiveSelectionPeriodStatus.FINALIZED,
+      finalizedAt: new Date('2026-01-10T00:05:00.000Z'),
+    });
+    periodModel.findOneAndUpdate
       .mockReturnValueOnce(queryChain(closedPeriod))
-      .mockReturnValueOnce(queryChain(closedPeriod));
+      .mockReturnValueOnce(queryChain(finalizedPeriod));
+    periodModel.findById.mockReturnValue(queryChain(finalizedPeriod));
     selectionModel.find.mockReturnValueOnce(queryChain([selection]));
+    userModel.find.mockReturnValueOnce(
+      queryChain([
+        {
+          _id: teacherId,
+          teacherProfile: { department: departmentId },
+        },
+      ]),
+    );
 
     const result = await service.finalizePeriod(closedPeriod._id.toString(), {
       sub: '6622b2a00f3a22d5b625d182',
@@ -415,7 +470,7 @@ describe('ElectiveDisciplinesService', () => {
     );
     expect(selectionCall[1].$set?.finalizedAt).toBeInstanceOf(Date);
     expect(selectionCall[1].$set?.finalizedBy).toBeInstanceOf(Types.ObjectId);
-    expect(closedPeriod.status).toBe(ElectiveSelectionPeriodStatus.FINALIZED);
+    expect(result.period.status).toBe(ElectiveSelectionPeriodStatus.FINALIZED);
     expect(result.courseAssignments).toHaveLength(1);
   });
 });

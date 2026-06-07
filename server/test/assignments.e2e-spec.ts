@@ -16,6 +16,8 @@ import { GradeResponseDto } from '../src/courses/grades/dto';
 import { configureApp } from '../src/app.config';
 
 const SET_UP_TIMEOUT = 60_000;
+const TEST_JWT_SECRET = 'assignments-e2e-secret-with-sufficient-entropy';
+const TEST_CSRF_SECRET = 'assignments-e2e-csrf-secret-with-sufficient-entropy';
 
 describe('Assignments (e2e)', () => {
   let app: NestExpressApplication;
@@ -31,6 +33,13 @@ describe('Assignments (e2e)', () => {
 
   beforeEach(async () => {
     const mongoUri = `mongodb://${container.getHost()}:${container.getMappedPort(27017)}/test-db`;
+    const testConfig = new ConfigService({
+      MONGODB_URI: mongoUri,
+      JWT_SECRET: TEST_JWT_SECRET,
+      AUTH_CSRF_SECRET: TEST_CSRF_SECRET,
+      NODE_ENV: 'test',
+      CLIENT_URL: 'http://localhost:5173',
+    });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -38,13 +47,7 @@ describe('Assignments (e2e)', () => {
       .overrideProvider(SeedService)
       .useValue({ onModuleInit: jest.fn() })
       .overrideProvider(ConfigService)
-      .useValue({
-        get: (key: string) => {
-          if (key === 'MONGODB_URI') return mongoUri;
-          if (key === 'JWT_SECRET') return 'test-secret-key';
-          return process.env[key];
-        },
-      })
+      .useValue(testConfig)
       .compile();
 
     app = moduleFixture.createNestApplication<NestExpressApplication>();

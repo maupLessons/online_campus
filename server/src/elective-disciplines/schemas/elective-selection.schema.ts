@@ -44,6 +44,9 @@ export class ElectiveSelection {
   @Prop({ type: Date, required: true, default: Date.now })
   selectedAt: Date;
 
+  @Prop({ type: Number, min: 0, max: 4 })
+  choiceSlot?: number;
+
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'CourseAssignment',
@@ -72,6 +75,13 @@ ElectiveSelectionSchema.plugin(paginate);
 ElectiveSelectionSchema.index(
   { period: 1, student: 1, discipline: 1 },
   { unique: true },
+);
+ElectiveSelectionSchema.index(
+  { period: 1, student: 1, choiceSlot: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { choiceSlot: { $type: 'number' } },
+  },
 );
 ElectiveSelectionSchema.index({ period: 1, student: 1, selectedAt: -1 });
 ElectiveSelectionSchema.index({ period: 1, group: 1 });

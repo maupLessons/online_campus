@@ -81,7 +81,9 @@ ScheduleEntrySchema.index(
   {
     partialFilterExpression: {
       classroom: { $type: 'objectId' },
-      status: { $ne: ScheduleEntryStatus.CANCELLED },
+      status: {
+        $in: [ScheduleEntryStatus.SCHEDULED, ScheduleEntryStatus.RESCHEDULED],
+      },
     },
   },
 );

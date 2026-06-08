@@ -3,7 +3,9 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
+import * as ExcelJS from 'exceljs';
 import { Connection, Types } from 'mongoose';
+import type { Response as SuperAgentResponse } from 'superagent';
 import * as request from 'supertest';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import { AppModule } from '../src/app.module';
@@ -18,6 +20,16 @@ import { SeedService } from '../src/seed-data/seed.service';
 const SETUP_TIMEOUT = 120_000;
 const TEST_JWT_SECRET = 'electives-e2e-secret-with-sufficient-entropy';
 const TEST_CSRF_SECRET = 'electives-e2e-csrf-secret-with-sufficient-entropy';
+
+const parseBinaryResponse = (
+  response: SuperAgentResponse,
+  callback: (error: Error | null, body: Buffer) => void,
+): void => {
+  const chunks: Buffer[] = [];
+  response.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+  response.on('end', () => callback(null, Buffer.concat(chunks)));
+  response.on('error', (error: Error) => callback(error, Buffer.alloc(0)));
+};
 
 type Actor = {
   id: Types.ObjectId;
@@ -65,6 +77,9 @@ type CourseListBody = {
 
 type ResultsBody = {
   totalSelections: number;
+  totalStudents: number;
+  expectedSelections: number;
+  completionRate: number;
   disciplines: Array<{ students: Array<{ id: string }> }>;
 };
 
@@ -727,7 +742,66 @@ describe('Elective disciplines (e2e)', () => {
     );
   });
 
-  it('exports authorized CSV results and neutralizes spreadsheet formulas', async () => {
+  it('enforces period lifecycle for closing, results and exports', async () => {
+    const fixture = await seedBase();
+    const draftPeriodId = await seedPeriod(fixture, {
+      status: ElectiveSelectionPeriodStatus.DRAFT,
+      publishedAt: undefined,
+    });
+
+    await request(app.getHttpServer())
+      .patch(`/api/electives/periods/${draftPeriodId.toHexString()}/status`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ status: ElectiveSelectionPeriodStatus.CLOSED })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(
+        `/api/electives/periods/${draftPeriodId.toHexString()}/results/export`,
+      )
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(400);
+    await request(app.getHttpServer())
+      .patch(`/api/electives/periods/${draftPeriodId.toHexString()}/status`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ status: ElectiveSelectionPeriodStatus.ACTIVE })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/electives/periods/${draftPeriodId.toHexString()}/status`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ status: ElectiveSelectionPeriodStatus.DRAFT })
+      .expect(400);
+
+    const activePeriodId = await seedPeriod(fixture);
+    await request(app.getHttpServer())
+      .get(`/api/electives/periods/${activePeriodId.toHexString()}/results`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(
+        `/api/electives/periods/${activePeriodId.toHexString()}/results/export?format=xlsx`,
+      )
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .patch(`/api/electives/periods/${activePeriodId.toHexString()}/status`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ status: ElectiveSelectionPeriodStatus.CLOSED })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/electives/periods/${activePeriodId.toHexString()}/status`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ status: ElectiveSelectionPeriodStatus.CLOSED })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(
+        `/api/electives/periods/${activePeriodId.toHexString()}/results/export?format=pdf`,
+      )
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(400);
+  });
+
+  it('exports secure, structured CSV and XLSX reports after closing', async () => {
     const fixture = await seedBase();
     await collection('User').updateOne(
       { _id: fixture.studentA.id },
@@ -741,12 +815,21 @@ describe('Elective disciplines (e2e)', () => {
     });
     await select(fixture.studentA, periodId, disciplineId).expect(201);
 
+    await request(app.getHttpServer())
+      .patch(`/api/electives/periods/${periodId.toHexString()}/status`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ status: ElectiveSelectionPeriodStatus.CLOSED })
+      .expect(200);
+
     const results = await request(app.getHttpServer())
       .get(`/api/electives/periods/${periodId.toHexString()}/results`)
       .set('Authorization', `Bearer ${fixture.dean.token}`)
       .expect(200);
     const resultsBody = results.body as ResultsBody;
     expect(resultsBody.totalSelections).toBe(1);
+    expect(resultsBody.totalStudents).toBe(1);
+    expect(resultsBody.expectedSelections).toBe(2);
+    expect(resultsBody.completionRate).toBe(50);
     expect(resultsBody.disciplines[0].students).toHaveLength(1);
 
     await request(app.getHttpServer())
@@ -761,16 +844,65 @@ describe('Elective disciplines (e2e)', () => {
     const csv = await request(app.getHttpServer())
       .get(`/api/electives/periods/${periodId.toHexString()}/results/export`)
       .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .buffer(true)
+      .parse(parseBinaryResponse)
       .expect('Content-Type', /text\/csv/)
       .expect(
         'Content-Disposition',
         `attachment; filename="elective-period-${periodId.toHexString()}-results.csv"`,
       )
       .expect(200);
-    expect(csv.text.startsWith('\uFEFF')).toBe(true);
-    expect(csv.text).toContain(`'=SUM(1,1)`);
-    expect(csv.text).toContain(`'@dangerous-title`);
-    expect(csv.text).toContain(`'=HYPERLINK`);
+    expect(Buffer.isBuffer(csv.body)).toBe(true);
+    const csvBuffer = csv.body as Buffer;
+    expect([...csvBuffer.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const csvText = csvBuffer.toString('utf8');
+    expect(csvText.startsWith('\uFEFF')).toBe(true);
+    expect(csvText).not.toContain('sep=;');
+    expect(csvText.split('\r\n')[0]).toContain(
+      'Період;Навчальний рік;Семестр;Статус',
+    );
+    expect(csvText).toContain('Код дисципліни;Дисципліна;Кафедра');
+    expect(csvText).toContain('ID студента;Логін;ПІБ студента;Група');
+    expect(csvText).toContain(`'=SUM(1,1)`);
+    expect(csvText).toContain(`'@dangerous-title`);
+    expect(csvText).toContain(`'=HYPERLINK`);
+
+    const xlsx = await request(app.getHttpServer())
+      .get(
+        `/api/electives/periods/${periodId.toHexString()}/results/export?format=xlsx`,
+      )
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .buffer(true)
+      .parse(parseBinaryResponse)
+      .expect(
+        'Content-Type',
+        /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/,
+      )
+      .expect(
+        'Content-Disposition',
+        `attachment; filename="elective-period-${periodId.toHexString()}-results.xlsx"`,
+      )
+      .expect(200);
+
+    expect(Buffer.isBuffer(xlsx.body)).toBe(true);
+    const workbook = new ExcelJS.Workbook();
+    const workbookData = Uint8Array.from(xlsx.body as Buffer).buffer;
+    await workbook.xlsx.load(workbookData);
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
+      'Зведення',
+      'Вибори студентів',
+    ]);
+    expect(workbook.getWorksheet('Зведення')?.getCell('A1').value).toBe(
+      'Результати вибору вибіркових дисциплін',
+    );
+    const summaryWorksheet = workbook.getWorksheet('Зведення');
+    expect(summaryWorksheet?.getColumn(1).width).toBe(38);
+    expect(summaryWorksheet?.getCell('B3').alignment.horizontal).toBe('left');
+    expect(summaryWorksheet?.getCell('B17').alignment.horizontal).toBe('left');
+    expect(summaryWorksheet?.getCell('G18').alignment.horizontal).toBe('left');
+    expect(
+      workbook.getWorksheet('Вибори студентів')?.getCell('D3').value,
+    ).toContain(`'=HYPERLINK`);
   });
 
   async function expectAuditEntry(

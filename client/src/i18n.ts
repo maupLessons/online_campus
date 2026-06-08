@@ -669,7 +669,15 @@ const resources = {
       'electives.admin.activate': 'Активувати',
       'electives.admin.archive': 'В архів',
       'electives.admin.openPeriod': 'Відкрити',
+      'electives.admin.confirmOpenPeriod':
+        'Відкрити період вибору? Цільові студенти отримають сповіщення.',
+      'electives.admin.confirmClosePeriod':
+        'Закрити період вибору? Після цього студенти не зможуть змінювати свій вибір.',
       'electives.admin.finalizePeriod': 'Фіналізувати',
+      'electives.admin.confirmFinalizePeriod':
+        'Фіналізувати результати? Для обраних дисциплін буде створено навчальні курси.',
+      'electives.admin.exportCsv': 'Експорт CSV',
+      'electives.admin.exportXlsx': 'Експорт XLSX',
       'electives.admin.finalizedSuccess':
         'Період фіналізовано, дисципліни додано до розділу “Мої дисципліни”.',
       'electives.admin.disciplineSaved': 'Дисципліну збережено.',
@@ -1346,7 +1354,15 @@ const resources = {
       'electives.admin.activate': 'Activate',
       'electives.admin.archive': 'Archive',
       'electives.admin.openPeriod': 'Open',
+      'electives.admin.confirmOpenPeriod':
+        'Open this selection period? Target students will be notified.',
+      'electives.admin.confirmClosePeriod':
+        'Close this selection period? Students will no longer be able to change their selections.',
       'electives.admin.finalizePeriod': 'Finalize',
+      'electives.admin.confirmFinalizePeriod':
+        'Finalize these results? Course assignments will be created for selected disciplines.',
+      'electives.admin.exportCsv': 'Export CSV',
+      'electives.admin.exportXlsx': 'Export XLSX',
       'electives.admin.finalizedSuccess':
         'Selection period finalized and disciplines were added to My courses.',
       'electives.admin.disciplineSaved': 'Discipline saved.',

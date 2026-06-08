@@ -34,6 +34,8 @@ export type ElectivePeriodFilters = {
   semester?: number | '';
 };
 
+export type ElectiveExportFormat = 'csv' | 'xlsx';
+
 function buildParams(
   filters?: Record<string, string | number | undefined | null>,
 ) {
@@ -163,12 +165,16 @@ export const electivesApi = {
     return data;
   },
 
-  exportPeriodResultsCsv: async (id: string) => {
-    const { data } = await api.get<Blob>(
+  exportPeriodResults: async (id: string, format: ElectiveExportFormat) => {
+    const { data } = await api.get<ArrayBuffer>(
       `/electives/periods/${id}/results/export`,
-      { responseType: 'blob' },
+      { params: { format }, responseType: 'arraybuffer' },
     );
-    return data;
+    const contentType =
+      format === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv;charset=utf-8';
+    return new Blob([data], { type: contentType });
   },
 };
 

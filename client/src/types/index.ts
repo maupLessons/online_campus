@@ -534,6 +534,9 @@ export interface CreateElectivePeriodInput {
 export interface ElectivePeriodResults {
   period: ElectivePeriod;
   totalSelections: number;
+  totalStudents: number;
+  expectedSelections: number;
+  completionRate: number;
   disciplines: Array<{
     discipline: ElectiveDiscipline;
     selectedCount: number;
@@ -544,6 +547,7 @@ export interface ElectivePeriodResults {
       login?: string;
       fullName: string;
       group: ReferenceView;
+      selectedAt: string;
     }>;
   }>;
 }

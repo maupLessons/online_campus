@@ -121,6 +121,7 @@ describe('ElectiveDisciplinesService', () => {
   };
   let userModel: {
     find: jest.Mock;
+    countDocuments: jest.Mock;
   };
   let usersService: jest.Mocked<Pick<UsersService, 'findOne'>>;
 
@@ -188,6 +189,7 @@ describe('ElectiveDisciplinesService', () => {
     };
     userModel = {
       find: jest.fn().mockReturnValue(queryChain([])),
+      countDocuments: jest.fn().mockReturnValue(queryChain(0)),
     };
     usersService = {
       findOne: jest.fn().mockResolvedValue({

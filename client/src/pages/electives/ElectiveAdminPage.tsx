@@ -7,6 +7,7 @@ import {
   Archive,
   CheckCircle2,
   Download,
+  FileSpreadsheet,
   FilePenLine,
   Filter,
   GraduationCap,
@@ -19,6 +20,7 @@ import {
   electiveReferencesApi,
   electivesApi,
   type ElectiveDisciplineFilters,
+  type ElectiveExportFormat,
   type ElectivePeriodFilters,
 } from '../../services/electivesApi';
 import {
@@ -177,12 +179,15 @@ function statusBadgeClass(status: ElectiveDisciplineStatus | ElectivePeriodStatu
   return 'bg-amber-100 text-amber-700';
 }
 
-function downloadCsv(blob: Blob, filename: string) {
+function downloadFile(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
   link.click();
+  link.remove();
   URL.revokeObjectURL(url);
 }
 
@@ -388,9 +393,15 @@ export default function ElectiveAdminPage() {
     },
   });
   const exportMutation = useMutation({
-    mutationFn: electivesApi.exportPeriodResultsCsv,
-    onSuccess: (blob, periodId) => {
-      downloadCsv(blob, `elective-period-${periodId}-results.csv`);
+    mutationFn: ({
+      id,
+      format,
+    }: {
+      id: string;
+      format: ElectiveExportFormat;
+    }) => electivesApi.exportPeriodResults(id, format),
+    onSuccess: (blob, { id, format }) => {
+      downloadFile(blob, `elective-period-${id}-results.${format}`);
     },
   });
 
@@ -1145,12 +1156,18 @@ export default function ElectiveAdminPage() {
                           <button
                             type="button"
                             disabled={isWorking}
-                            onClick={() =>
-                              setPeriodStatusMutation.mutate({
-                                id: period.id,
-                                status: ElectivePeriodStatus.ACTIVE,
-                              })
-                            }
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  t('electives.admin.confirmOpenPeriod'),
+                                )
+                              ) {
+                                setPeriodStatusMutation.mutate({
+                                  id: period.id,
+                                  status: ElectivePeriodStatus.ACTIVE,
+                                });
+                              }
+                            }}
                             className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
                           >
                             <CheckCircle2
@@ -1160,17 +1177,22 @@ export default function ElectiveAdminPage() {
                             {t('electives.admin.openPeriod')}
                           </button>
                         )}
-                        {period.status !== ElectivePeriodStatus.CLOSED &&
-                          period.status !== ElectivePeriodStatus.FINALIZED && (
+                        {period.status === ElectivePeriodStatus.ACTIVE && (
                           <button
                             type="button"
                             disabled={isWorking}
-                            onClick={() =>
-                              setPeriodStatusMutation.mutate({
-                                id: period.id,
-                                status: ElectivePeriodStatus.CLOSED,
-                              })
-                            }
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  t('electives.admin.confirmClosePeriod'),
+                                )
+                              ) {
+                                setPeriodStatusMutation.mutate({
+                                  id: period.id,
+                                  status: ElectivePeriodStatus.CLOSED,
+                                });
+                              }
+                            }}
                             className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                           >
                             <XCircle className="h-4 w-4" aria-hidden="true" />
@@ -1181,9 +1203,15 @@ export default function ElectiveAdminPage() {
                           <button
                             type="button"
                             disabled={isWorking}
-                            onClick={() =>
-                              finalizePeriodMutation.mutate(period.id)
-                            }
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  t('electives.admin.confirmFinalizePeriod'),
+                                )
+                              ) {
+                                finalizePeriodMutation.mutate(period.id);
+                              }
+                            }}
                             className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-300"
                           >
                             <CheckCircle2
@@ -1193,15 +1221,45 @@ export default function ElectiveAdminPage() {
                             {t('electives.admin.finalizePeriod')}
                           </button>
                         )}
-                        <button
-                          type="button"
-                          disabled={isWorking}
-                          onClick={() => exportMutation.mutate(period.id)}
-                          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                        >
-                          <Download className="h-4 w-4" aria-hidden="true" />
-                          {t('surveys.results.exportCsv')}
-                        </button>
+                        {(period.status === ElectivePeriodStatus.CLOSED ||
+                          period.status === ElectivePeriodStatus.FINALIZED) && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isWorking}
+                              onClick={() =>
+                                exportMutation.mutate({
+                                  id: period.id,
+                                  format: 'csv',
+                                })
+                              }
+                              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Download
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                              {t('electives.admin.exportCsv')}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isWorking}
+                              onClick={() =>
+                                exportMutation.mutate({
+                                  id: period.id,
+                                  format: 'xlsx',
+                                })
+                              }
+                              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <FileSpreadsheet
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                              {t('electives.admin.exportXlsx')}
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </article>

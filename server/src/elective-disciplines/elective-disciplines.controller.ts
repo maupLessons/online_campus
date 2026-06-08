@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   Param,
   Patch,
   Post,
@@ -13,7 +12,13 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -23,6 +28,8 @@ import {
   CreateElectiveDisciplineDto,
   CreateElectivePeriodDto,
   ElectiveDisciplineQueryDto,
+  ElectiveExportFormat,
+  ElectiveExportQueryDto,
   ElectivePeriodQueryDto,
   SelectElectiveDto,
   SetElectiveDisciplineStatusDto,
@@ -195,21 +202,52 @@ export class ElectiveDisciplinesController {
 
   @Get('periods/:id/results/export')
   @Roles(...periodManagers)
-  @Header('Content-Type', 'text/csv; charset=utf-8')
-  @ApiOperation({ summary: 'Export elective selection period results as CSV' })
+  @ApiOperation({
+    summary: 'Export closed elective period results as CSV or XLSX',
+  })
+  @ApiProduces(
+    'text/csv',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiOkResponse({
+    description: 'CSV or XLSX report file',
+    schema: { type: 'string', format: 'binary' },
+  })
   async exportResults(
     @Param('id') id: string,
+    @Query() query: ElectiveExportQueryDto,
     @Request() req: AuthenticatedRequest,
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
-    const csv = await this.electivesService.exportPeriodResultsCsv(
+    const format = query.format ?? ElectiveExportFormat.CSV;
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    if (format === ElectiveExportFormat.XLSX) {
+      const workbook = await this.electivesService.exportPeriodResultsXlsx(
+        id,
+        req.user,
+      );
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="elective-period-${id}-results.xlsx"`,
+      );
+      return res.send(workbook);
+    }
+
+    const csvBuffer = await this.electivesService.exportPeriodResultsCsv(
       id,
       req.user,
     );
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Length', csvBuffer.length);
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="elective-period-${id}-results.csv"`,
     );
-    return csv;
+    return res.send(csvBuffer);
   }
 }

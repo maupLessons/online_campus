@@ -35,6 +35,10 @@ import {
   UpdateElectivePeriodDto,
 } from './dto';
 import {
+  buildElectiveResultsCsv,
+  buildElectiveResultsXlsx,
+} from './elective-results-exporter';
+import {
   ElectiveDiscipline,
   ElectiveDisciplineDocument,
   ElectiveDisciplineStatus,
@@ -109,6 +113,9 @@ export type ActiveElectivePeriodView = {
 export type ElectivePeriodResultsView = {
   period: ElectivePeriodView;
   totalSelections: number;
+  totalStudents: number;
+  expectedSelections: number;
+  completionRate: number;
   disciplines: Array<{
     discipline: ElectiveDisciplineView;
     selectedCount: number;
@@ -119,6 +126,7 @@ export type ElectivePeriodResultsView = {
       login?: string;
       fullName: string;
       group: ReferenceView;
+      selectedAt: string;
     }>;
   }>;
 };
@@ -436,31 +444,65 @@ export class ElectiveDisciplinesService {
       if (period.targetGroups.length === 0) {
         throw new BadRequestException('Період повинен мати цільові групи');
       }
-      period.status = ElectiveSelectionPeriodStatus.ACTIVE;
-      period.publishedAt = now;
-      period.closedAt = undefined;
-      await period.save();
-      await this.notifyPeriodPublished(period);
-      return this.findPeriodView(period._id);
+
+      const activated = await this.periodModel
+        .findOneAndUpdate(
+          {
+            _id: period._id,
+            status: ElectiveSelectionPeriodStatus.DRAFT,
+          },
+          {
+            $set: {
+              status: ElectiveSelectionPeriodStatus.ACTIVE,
+              publishedAt: now,
+            },
+            $unset: { closedAt: '' },
+          },
+          { returnDocument: 'after', runValidators: true },
+        )
+        .exec();
+      if (!activated) {
+        throw new ConflictException(
+          'Стан періоду вже змінився. Оновіть сторінку та повторіть дію',
+        );
+      }
+
+      await this.notifyPeriodPublished(activated);
+      return this.findPeriodView(activated._id);
     }
 
     if (dto.status === ElectiveSelectionPeriodStatus.CLOSED) {
-      if (period.status === ElectiveSelectionPeriodStatus.CLOSED) {
-        throw new BadRequestException('Період уже закритий');
+      if (period.status !== ElectiveSelectionPeriodStatus.ACTIVE) {
+        throw new BadRequestException(
+          'Закрити можна лише активний період вибору',
+        );
       }
-      period.status = ElectiveSelectionPeriodStatus.CLOSED;
-      period.closedAt = now;
-      await period.save();
-      return this.findPeriodView(period._id);
+
+      const closed = await this.periodModel
+        .findOneAndUpdate(
+          {
+            _id: period._id,
+            status: ElectiveSelectionPeriodStatus.ACTIVE,
+          },
+          {
+            $set: {
+              status: ElectiveSelectionPeriodStatus.CLOSED,
+              closedAt: now,
+            },
+          },
+          { returnDocument: 'after', runValidators: true },
+        )
+        .exec();
+      if (!closed) {
+        throw new ConflictException(
+          'Стан періоду вже змінився. Оновіть сторінку та повторіть дію',
+        );
+      }
+
+      return this.findPeriodView(closed._id);
     }
 
-    if (period.status !== ElectiveSelectionPeriodStatus.DRAFT) {
-      throw new BadRequestException(
-        'Повернути активний період у чернетку не можна',
-      );
-    }
-
-    return this.findPeriodView(period._id);
+    throw new BadRequestException('Недопустимий перехід стану періоду вибору');
   }
 
   async finalizePeriod(
@@ -916,8 +958,10 @@ export class ElectiveDisciplinesService {
     user: AuthenticatedUser,
   ): Promise<ElectivePeriodResultsView> {
     this.ensurePeriodManager(user);
+    await this.closeExpiredPeriods();
 
     const period = await this.getPeriodOrThrow(periodId);
+    this.ensurePeriodResultsAvailable(period);
     const selections = await this.selectionModel
       .find({ period: period._id })
       .populate({
@@ -939,6 +983,7 @@ export class ElectiveDisciplinesService {
         login?: string;
         fullName: string;
         group: ReferenceView;
+        selectedAt: string;
       }>;
     };
     const grouped = new Map<string, ResultBucket>();
@@ -970,12 +1015,35 @@ export class ElectiveDisciplinesService {
       disciplineBucket.students.push({
         ...this.studentView(selection.student),
         group,
+        selectedAt: selection.selectedAt.toISOString(),
       });
     }
+
+    const uniqueStudentIds = new Set(
+      selections.map((selection) => this.idToString(selection.student)),
+    );
+    const targetStudentCount = await this.userModel
+      .countDocuments({
+        role: Role.STUDENT,
+        status: 'active',
+        'studentProfile.group': {
+          $in: period.targetGroups.map((group) =>
+            this.toObjectId(this.idToString(group)),
+          ) as unknown as Group[],
+        },
+      })
+      .exec();
+    const expectedSelections = targetStudentCount * period.requiredChoices;
 
     return {
       period: await this.findPeriodView(period._id),
       totalSelections: selections.length,
+      totalStudents: uniqueStudentIds.size,
+      expectedSelections,
+      completionRate:
+        expectedSelections === 0
+          ? 0
+          : Math.min(100, (selections.length / expectedSelections) * 100),
       disciplines: [...grouped.values()].map((item) => ({
         discipline: item.discipline,
         selectedCount: item.selectedCount,
@@ -989,41 +1057,17 @@ export class ElectiveDisciplinesService {
   async exportPeriodResultsCsv(
     periodId: string,
     user: AuthenticatedUser,
-  ): Promise<string> {
+  ): Promise<Buffer> {
     const results = await this.getPeriodResults(periodId, user);
-    const rows = [
-      [
-        'period',
-        'academic_year',
-        'semester',
-        'discipline_code',
-        'discipline_title',
-        'student_id',
-        'student_login',
-        'student_name',
-        'group',
-      ],
-    ];
+    return Buffer.from(buildElectiveResultsCsv(results), 'utf8');
+  }
 
-    for (const item of results.disciplines) {
-      for (const student of item.students) {
-        rows.push([
-          results.period.title,
-          results.period.academicYear,
-          String(results.period.semester),
-          item.discipline.code,
-          item.discipline.title,
-          student.id,
-          student.login ?? '',
-          student.fullName,
-          student.group.code ?? student.group.id,
-        ]);
-      }
-    }
-
-    return `\uFEFF${rows
-      .map((row) => row.map((value) => this.escapeCsv(value)).join(','))
-      .join('\n')}\n`;
+  async exportPeriodResultsXlsx(
+    periodId: string,
+    user: AuthenticatedUser,
+  ): Promise<Buffer> {
+    const results = await this.getPeriodResults(periodId, user);
+    return buildElectiveResultsXlsx(results);
   }
 
   private async createSelectionInAvailableSlot(params: {
@@ -1275,6 +1319,19 @@ export class ElectiveDisciplinesService {
     }
     if (period.endsAt < now) {
       throw new BadRequestException('Період вибору вже завершений');
+    }
+  }
+
+  private ensurePeriodResultsAvailable(
+    period: ElectiveSelectionPeriodDocument,
+  ): void {
+    if (
+      period.status !== ElectiveSelectionPeriodStatus.CLOSED &&
+      period.status !== ElectiveSelectionPeriodStatus.FINALIZED
+    ) {
+      throw new BadRequestException(
+        'Результати та експорт доступні лише після закриття періоду',
+      );
     }
   }
 
@@ -1840,13 +1897,5 @@ export class ElectiveDisciplinesService {
       'code' in error &&
       (error as { code?: unknown }).code === 11000
     );
-  }
-
-  private escapeCsv(value: string): string {
-    const safeValue = /^\s*[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-    if (/[",\n\r]/.test(safeValue)) {
-      return `"${safeValue.replace(/"/g, '""')}"`;
-    }
-    return safeValue;
   }
 }

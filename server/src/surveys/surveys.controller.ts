@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   Param,
   Patch,
   Post,
@@ -13,7 +12,13 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiProduces,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
@@ -21,6 +26,10 @@ import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import { CreateSurveyDto } from './dto/create-survey.dto';
 import { SubmitSurveyResponseDto } from './dto/submit-survey-response.dto';
+import {
+  SurveyExportFormat,
+  SurveyExportQueryDto,
+} from './dto/survey-export-query.dto';
 import { SurveyQueryDto } from './dto/survey-query.dto';
 import { UpdateSurveyDto } from './dto/update-survey.dto';
 import { SurveysService } from './surveys.service';
@@ -121,18 +130,50 @@ export class SurveysController {
 
   @Get(':id/results/export')
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR, Role.PRESIDENT)
-  @Header('Content-Type', 'text/csv; charset=utf-8')
-  @ApiOperation({ summary: 'Export aggregated survey results as CSV' })
+  @ApiOperation({
+    summary: 'Export closed survey results as CSV or XLSX',
+  })
+  @ApiProduces(
+    'text/csv',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  )
+  @ApiOkResponse({
+    description: 'CSV or XLSX report file',
+    schema: { type: 'string', format: 'binary' },
+  })
   async exportResults(
     @Param('id') id: string,
+    @Query() query: SurveyExportQueryDto,
     @Request() req: AuthenticatedRequest,
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
-    const csv = await this.surveysService.exportResultsCsv(id, req.user);
+    const format = query.format ?? SurveyExportFormat.CSV;
+    res.setHeader('Cache-Control', 'private, no-store');
+
+    if (format === SurveyExportFormat.XLSX) {
+      const workbook = await this.surveysService.exportResultsXlsx(
+        id,
+        req.user,
+      );
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Length', workbook.length);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="survey-${id}-results.xlsx"`,
+      );
+      return res.send(workbook);
+    }
+
+    const csvBuffer = await this.surveysService.exportResultsCsv(id, req.user);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Length', csvBuffer.length);
     res.setHeader(
       'Content-Disposition',
       `attachment; filename="survey-${id}-results.csv"`,
     );
-    return csv;
+    return res.send(csvBuffer);
   }
 }

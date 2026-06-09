@@ -3,7 +3,9 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import { JwtService } from '@nestjs/jwt';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
+import * as ExcelJS from 'exceljs';
 import { Connection, Types } from 'mongoose';
+import type { Response as SuperAgentResponse } from 'superagent';
 import * as request from 'supertest';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import { AppModule } from '../src/app.module';
@@ -19,6 +21,16 @@ import { SeedService } from '../src/seed-data/seed.service';
 const SETUP_TIMEOUT = 120_000;
 const TEST_JWT_SECRET = 'surveys-e2e-secret-with-sufficient-entropy';
 const TEST_CSRF_SECRET = 'surveys-e2e-csrf-secret-with-sufficient-entropy';
+
+const parseBinaryResponse = (
+  response: SuperAgentResponse,
+  callback: (error: Error | null, body: Buffer) => void,
+): void => {
+  const chunks: Buffer[] = [];
+  response.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+  response.on('end', () => callback(null, Buffer.concat(chunks)));
+  response.on('error', (error: Error) => callback(error, Buffer.alloc(0)));
+};
 
 type Actor = {
   id: Types.ObjectId;
@@ -198,6 +210,7 @@ describe('Surveys (e2e)', () => {
     groupId: Types.ObjectId,
     overrides: Record<string, unknown> = {},
   ): Promise<SurveyBody> => {
+    const now = Date.now();
     const response = await request(app.getHttpServer())
       .post('/api/surveys')
       .set('Authorization', `Bearer ${actor.token}`)
@@ -207,6 +220,8 @@ describe('Surveys (e2e)', () => {
         anonymous: true,
         targetType: SurveyTargetType.GROUPS,
         targetIds: [groupId.toHexString()],
+        startDate: new Date(now - 60_000).toISOString(),
+        endDate: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
         questions: [
           {
             type: SurveyQuestionType.SINGLE,
@@ -257,6 +272,7 @@ describe('Surveys (e2e)', () => {
   it('enforces manager ownership and preserves scheduled publication', async () => {
     const fixture = await seedFixture();
     const futureStart = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const futureEnd = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
     await request(app.getHttpServer())
       .post('/api/surveys')
@@ -264,8 +280,26 @@ describe('Surveys (e2e)', () => {
       .send({})
       .expect(403);
 
+    await request(app.getHttpServer())
+      .post('/api/surveys')
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({
+        title: 'Survey without lifecycle dates',
+        targetType: SurveyTargetType.ALL,
+        questions: [
+          {
+            type: SurveyQuestionType.TEXT,
+            text: 'Comment',
+            required: true,
+            order: 0,
+          },
+        ],
+      })
+      .expect(400);
+
     const draft = await createSurvey(fixture.deanA, fixture.groupAId, {
       startDate: futureStart,
+      endDate: futureEnd,
     });
 
     const deanBList = await request(app.getHttpServer())
@@ -278,6 +312,11 @@ describe('Surveys (e2e)', () => {
       .get(`/api/surveys/${draft.id}/results`)
       .set('Authorization', `Bearer ${fixture.deanB.token}`)
       .expect(403);
+
+    await request(app.getHttpServer())
+      .get(`/api/surveys/${draft.id}/results`)
+      .set('Authorization', `Bearer ${fixture.deanA.token}`)
+      .expect(400);
 
     await request(app.getHttpServer())
       .patch(`/api/surveys/${draft.id}/close`)
@@ -410,7 +449,7 @@ describe('Surveys (e2e)', () => {
     ]);
   });
 
-  it('returns live aggregate statistics and neutralizes CSV formulas', async () => {
+  it('returns live statistics and exports secure CSV/XLSX only after closing', async () => {
     const fixture = await seedFixture();
     const draft = await createSurvey(fixture.admin, fixture.groupAId);
     const survey = await publishSurvey(fixture.admin, draft.id);
@@ -429,6 +468,11 @@ describe('Surveys (e2e)', () => {
       })
       .expect(201);
 
+    await collection('User').updateOne(
+      { _id: fixture.outsider.id },
+      { $set: { 'studentProfile.group': fixture.groupAId } },
+    );
+
     const results = await request(app.getHttpServer())
       .get(`/api/surveys/${survey.id}/results`)
       .set('Authorization', `Bearer ${fixture.admin.token}`)
@@ -445,12 +489,80 @@ describe('Surveys (e2e)', () => {
       fixture.studentA.id.toHexString(),
     );
 
+    await request(app.getHttpServer())
+      .get(`/api/surveys/${survey.id}/results/export`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .get(`/api/surveys/${survey.id}/results/export?format=xlsx`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .patch(`/api/surveys/${survey.id}/close`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(200);
+
     const csv = await request(app.getHttpServer())
       .get(`/api/surveys/${survey.id}/results/export`)
       .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .buffer(true)
+      .parse(parseBinaryResponse)
       .expect(200)
-      .expect('Content-Type', /text\/csv/);
-    expect(csv.text).toContain(`'=HYPERLINK`);
+      .expect('Content-Type', /text\/csv/)
+      .expect(
+        'Content-Disposition',
+        `attachment; filename="survey-${survey.id}-results.csv"`,
+      )
+      .expect('Cache-Control', 'private, no-store');
+    expect(Buffer.isBuffer(csv.body)).toBe(true);
+    const csvBuffer = csv.body as Buffer;
+    expect([...csvBuffer.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+    const csvText = csvBuffer.toString('utf8');
+    expect(csvText.startsWith('\uFEFF')).toBe(true);
+    expect(csvText.split('\r\n')[0]).toContain(
+      'Опитування;Статус;Анонімне;Цільова аудиторія',
+    );
+    expect(csvText).toContain(`'=HYPERLINK`);
+
+    const xlsx = await request(app.getHttpServer())
+      .get(`/api/surveys/${survey.id}/results/export?format=xlsx`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .buffer(true)
+      .parse(parseBinaryResponse)
+      .expect(200)
+      .expect(
+        'Content-Type',
+        /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/,
+      )
+      .expect(
+        'Content-Disposition',
+        `attachment; filename="survey-${survey.id}-results.xlsx"`,
+      )
+      .expect('Cache-Control', 'private, no-store');
+    expect(Buffer.isBuffer(xlsx.body)).toBe(true);
+
+    const workbook = new ExcelJS.Workbook();
+    const workbookData = Uint8Array.from(xlsx.body as Buffer).buffer;
+    await workbook.xlsx.load(workbookData);
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
+      'Зведення',
+      'Розподіл відповідей',
+      'Текстові відповіді',
+    ]);
+    expect(workbook.getWorksheet('Зведення')?.getCell('A1').value).toBe(
+      'Результати опитування',
+    );
+    expect(workbook.getWorksheet('Зведення')?.getColumn(1).width).toBe(38);
+    expect(
+      workbook.getWorksheet('Текстові відповіді')?.getCell('D3').value,
+    ).toBe(`'=HYPERLINK("https://example.test")`);
+
+    await request(app.getHttpServer())
+      .get(`/api/surveys/${survey.id}/results/export?format=pdf`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .expect(400);
   });
 
   it('closes an active survey and rejects further responses', async () => {

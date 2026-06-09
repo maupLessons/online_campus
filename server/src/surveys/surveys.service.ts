@@ -23,6 +23,10 @@ import { SubmitSurveyResponseDto } from './dto/submit-survey-response.dto';
 import { SurveyQueryDto } from './dto/survey-query.dto';
 import { UpdateSurveyDto } from './dto/update-survey.dto';
 import {
+  buildSurveyResultsCsv,
+  buildSurveyResultsXlsx,
+} from './survey-results-exporter';
+import {
   Survey,
   SurveyCompletion,
   SurveyCompletionDocument,
@@ -64,6 +68,7 @@ export interface SurveyView {
   endDate?: string;
   publishedAt?: string;
   closedAt?: string;
+  expectedRecipients?: number;
   createdAt?: string;
   updatedAt?: string;
   completed?: boolean;
@@ -410,14 +415,21 @@ export class SurveysService {
     }
 
     const now = new Date();
-    if (survey.endDate && survey.endDate <= now) {
+    if (!survey.startDate || !survey.endDate) {
+      throw new BadRequestException(
+        'Вкажіть дату початку та дату завершення опитування',
+      );
+    }
+    if (survey.endDate <= survey.startDate) {
+      throw new BadRequestException(
+        'Дата завершення повинна бути пізніше дати початку',
+      );
+    }
+    if (survey.endDate <= now) {
       throw new BadRequestException('Дата завершення вже минула');
     }
-    if (
-      (survey.targetType === SurveyTargetType.GROUPS ||
-        survey.targetType === SurveyTargetType.COURSE) &&
-      (await this.countExpectedRecipients(survey)) === 0
-    ) {
+    const expectedRecipients = await this.countExpectedRecipients(survey);
+    if (expectedRecipients === 0) {
       throw new BadRequestException(
         'Для вибраної аудиторії не знайдено активних отримувачів',
       );
@@ -429,8 +441,9 @@ export class SurveysService {
         {
           $set: {
             status: SurveyStatus.ACTIVE,
-            startDate: survey.startDate ?? now,
+            startDate: survey.startDate,
             publishedAt: now,
+            expectedRecipients,
           },
           $unset: { closedAt: 1 },
         },
@@ -620,18 +633,37 @@ export class SurveysService {
 
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanViewResults(survey, user);
+    this.ensureResultsAvailable(survey);
 
+    return this.buildResults(survey);
+  }
+
+  async exportResultsCsv(id: string, user: AuthenticatedUser): Promise<Buffer> {
+    const results = await this.getExportableResults(id, user);
+    return Buffer.from(buildSurveyResultsCsv(results), 'utf8');
+  }
+
+  async exportResultsXlsx(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<Buffer> {
+    const results = await this.getExportableResults(id, user);
+    return buildSurveyResultsXlsx(results);
+  }
+
+  private async buildResults(
+    survey: SurveyDocument,
+  ): Promise<SurveyResultsView> {
     const questions = await this.getQuestionsForSurvey(survey._id);
-    const [responses, totalCompletions, expectedRecipients] = await Promise.all(
-      [
-        this.responseModel
-          .find({ survey: survey._id })
-          .sort({ submittedAt: 1 })
-          .exec(),
-        this.completionModel.countDocuments({ survey: survey._id }).exec(),
-        this.countExpectedRecipients(survey),
-      ],
-    );
+    const [responses, totalCompletions] = await Promise.all([
+      this.responseModel
+        .find({ survey: survey._id })
+        .sort({ submittedAt: 1 })
+        .exec(),
+      this.completionModel.countDocuments({ survey: survey._id }).exec(),
+    ]);
+    const expectedRecipients =
+      survey.expectedRecipients ?? (await this.countExpectedRecipients(survey));
 
     return {
       survey: this.formatSurvey(survey, questions),
@@ -644,87 +676,17 @@ export class SurveysService {
     };
   }
 
-  async exportResultsCsv(id: string, user: AuthenticatedUser): Promise<string> {
-    const results = await this.getResults(id, user);
-    const rows = [
-      [
-        'question_order',
-        'question_type',
-        'question_text',
-        'metric',
-        'value',
-        'count',
-        'total',
-        'average',
-      ],
-    ];
+  private async getExportableResults(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<SurveyResultsView> {
+    await this.closeExpiredSurveys();
 
-    for (const question of results.questions) {
-      if (
-        question.type === SurveyQuestionType.SINGLE ||
-        question.type === SurveyQuestionType.MULTIPLE
-      ) {
-        for (const option of question.options) {
-          rows.push([
-            String(question.order),
-            question.type,
-            question.text,
-            'option',
-            option.value,
-            String(option.count),
-            String(question.totalAnswers),
-            '',
-          ]);
-        }
-        continue;
-      }
+    const survey = await this.getSurveyOrThrow(id);
+    this.ensureCanViewResults(survey, user);
+    this.ensureExportAvailable(survey);
 
-      if (question.type === SurveyQuestionType.RATING) {
-        rows.push([
-          String(question.order),
-          question.type,
-          question.text,
-          'average',
-          '',
-          '',
-          String(question.totalAnswers),
-          question.average === null ? '' : String(question.average),
-        ]);
-
-        for (const item of question.distribution) {
-          rows.push([
-            String(question.order),
-            question.type,
-            question.text,
-            'rating',
-            String(item.rating),
-            String(item.count),
-            String(question.totalAnswers),
-            question.average === null ? '' : String(question.average),
-          ]);
-        }
-        continue;
-      }
-
-      if (question.type === SurveyQuestionType.TEXT) {
-        for (const answer of question.answers) {
-          rows.push([
-            String(question.order),
-            question.type,
-            question.text,
-            'text',
-            answer,
-            '1',
-            String(question.totalAnswers),
-            '',
-          ]);
-        }
-      }
-    }
-
-    return `\uFEFF${rows
-      .map((row) => row.map((value) => this.escapeCsv(value)).join(','))
-      .join('\n')}\n`;
+    return this.buildResults(survey);
   }
 
   private async ensureCanRespond(
@@ -813,6 +775,22 @@ export class SurveysService {
     if (user.role === Role.DEAN && !this.canManageSurvey(survey, user)) {
       throw new ForbiddenException(
         'Декан може переглядати результати лише власних опитувань',
+      );
+    }
+  }
+
+  private ensureResultsAvailable(survey: SurveyDocument): void {
+    if (survey.status === SurveyStatus.DRAFT) {
+      throw new BadRequestException(
+        'Результати доступні лише після публікації опитування',
+      );
+    }
+  }
+
+  private ensureExportAvailable(survey: SurveyDocument): void {
+    if (survey.status !== SurveyStatus.CLOSED) {
+      throw new BadRequestException(
+        'Експорт результатів доступний лише після закриття опитування',
       );
     }
   }
@@ -1131,17 +1109,23 @@ export class SurveysService {
   private normalizeSurveyDates(
     startDate?: string,
     endDate?: string,
-  ): { startDate?: Date; endDate?: Date } {
-    const normalizedStart = startDate ? new Date(startDate) : undefined;
-    const normalizedEnd = endDate ? new Date(endDate) : undefined;
+  ): { startDate: Date; endDate: Date } {
+    if (!startDate || !endDate) {
+      throw new BadRequestException(
+        'Вкажіть дату початку та дату завершення опитування',
+      );
+    }
 
-    if (normalizedStart && Number.isNaN(normalizedStart.getTime())) {
+    const normalizedStart = new Date(startDate);
+    const normalizedEnd = new Date(endDate);
+
+    if (Number.isNaN(normalizedStart.getTime())) {
       throw new BadRequestException('Некоректна дата початку');
     }
-    if (normalizedEnd && Number.isNaN(normalizedEnd.getTime())) {
+    if (Number.isNaN(normalizedEnd.getTime())) {
       throw new BadRequestException('Некоректна дата завершення');
     }
-    if (normalizedStart && normalizedEnd && normalizedEnd <= normalizedStart) {
+    if (normalizedEnd <= normalizedStart) {
       throw new BadRequestException(
         'Дата завершення повинна бути пізніше дати початку',
       );
@@ -1422,6 +1406,9 @@ export class SurveysService {
         ? { publishedAt: survey.publishedAt.toISOString() }
         : {}),
       ...(survey.closedAt ? { closedAt: survey.closedAt.toISOString() } : {}),
+      ...(survey.expectedRecipients === undefined
+        ? {}
+        : { expectedRecipients: survey.expectedRecipients }),
       ...(survey.createdAt
         ? { createdAt: survey.createdAt.toISOString() }
         : {}),
@@ -1505,13 +1492,5 @@ export class SurveysService {
 
   private escapeRegex(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  private escapeCsv(value: string): string {
-    const safeValue = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-    if (/[",\n\r]/.test(safeValue)) {
-      return `"${safeValue.replace(/"/g, '""')}"`;
-    }
-    return safeValue;
   }
 }

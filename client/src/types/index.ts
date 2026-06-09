@@ -323,10 +323,11 @@ export interface Survey {
   targetType: SurveyTargetType;
   targetIds: string[];
   createdBy: string;
-  startDate?: string;
-  endDate?: string;
+  startDate: string;
+  endDate: string;
   publishedAt?: string;
   closedAt?: string;
+  expectedRecipients?: number;
   createdAt?: string;
   updatedAt?: string;
   completed?: boolean;
@@ -365,8 +366,8 @@ export interface CreateSurveyInput {
   anonymous?: boolean;
   targetType?: SurveyTargetType;
   targetIds?: string[];
-  startDate?: string;
-  endDate?: string;
+  startDate: string;
+  endDate: string;
   questions: CreateSurveyQuestionInput[];
 }
 

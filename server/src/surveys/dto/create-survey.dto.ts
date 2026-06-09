@@ -82,15 +82,13 @@ export class CreateSurveyDto {
   @MaxLength(80, { each: true })
   targetIds?: string[];
 
-  @ApiPropertyOptional({ format: 'date-time' })
-  @IsOptional()
+  @ApiProperty({ format: 'date-time' })
   @IsISO8601()
-  startDate?: string;
+  startDate: string;
 
-  @ApiPropertyOptional({ format: 'date-time' })
-  @IsOptional()
+  @ApiProperty({ format: 'date-time' })
   @IsISO8601()
-  endDate?: string;
+  endDate: string;
 
   @ApiProperty({ type: [CreateSurveyQuestionDto], minItems: 1, maxItems: 100 })
   @IsArray()

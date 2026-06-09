@@ -23,6 +23,8 @@ export type SurveyListFilters = {
   targetType?: SurveyTargetType | '';
 };
 
+export type SurveyExportFormat = 'csv' | 'xlsx';
+
 function buildSurveyParams(filters?: SurveyListFilters) {
   const params = new URLSearchParams();
 
@@ -106,11 +108,19 @@ export const surveysApi = {
     return data;
   },
 
-  exportResultsCsv: async (id: string) => {
-    const { data } = await api.get<Blob>(`/surveys/${id}/results/export`, {
-      responseType: 'blob',
-    });
-    return data;
+  exportResults: async (id: string, format: SurveyExportFormat) => {
+    const { data } = await api.get<ArrayBuffer>(
+      `/surveys/${id}/results/export`,
+      {
+        params: { format },
+        responseType: 'arraybuffer',
+      },
+    );
+    const contentType =
+      format === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv;charset=utf-8';
+    return new Blob([data], { type: contentType });
   },
 
   listTargetGroups: async () => {

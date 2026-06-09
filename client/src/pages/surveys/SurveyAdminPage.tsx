@@ -86,10 +86,8 @@ function surveyTargetTypeRequiresIds(targetType: SurveyTargetType) {
 }
 
 function toIsoDateTime(value: string) {
-  if (!value) return undefined;
-
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 function toDateTimeLocalValue(value?: string) {
@@ -194,12 +192,14 @@ function validateSurveyForm(form: SurveyFormState, t: (key: string) => string) {
     return t('surveys.admin.validation.targetRequired');
   }
 
-  if (form.startDate && form.endDate) {
-    const start = new Date(form.startDate).getTime();
-    const end = new Date(form.endDate).getTime();
-    if (!Number.isNaN(start) && !Number.isNaN(end) && end <= start) {
-      return t('surveys.admin.validation.endAfterStart');
-    }
+  if (!form.startDate || !form.endDate) {
+    return t('surveys.admin.validation.datesRequired');
+  }
+
+  const start = new Date(form.startDate).getTime();
+  const end = new Date(form.endDate).getTime();
+  if (!Number.isNaN(start) && !Number.isNaN(end) && end <= start) {
+    return t('surveys.admin.validation.endAfterStart');
   }
 
   const invalidQuestion = form.questions.find((question) => {
@@ -320,13 +320,15 @@ function SurveyManagementRow({
         </div>
 
         <div className="flex flex-wrap gap-2 lg:justify-end">
-          <Link
-            to={`/surveys/admin/${survey.id}/results`}
-            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          >
-            <BarChart3 className="h-4 w-4" aria-hidden="true" />
-            {t('surveys.admin.results')}
-          </Link>
+          {survey.status !== SurveyStatus.DRAFT && (
+            <Link
+              to={`/surveys/admin/${survey.id}/results`}
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              <BarChart3 className="h-4 w-4" aria-hidden="true" />
+              {t('surveys.admin.results')}
+            </Link>
+          )}
 
           {survey.status === SurveyStatus.DRAFT && (
             <button
@@ -889,9 +891,12 @@ export default function SurveyAdminPage() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm text-slate-600">
-                <span>{t('surveys.startsAt')}</span>
+                <span>
+                  {t('surveys.startsAt')} <span className="text-red-600">*</span>
+                </span>
                 <input
                   type="datetime-local"
+                  required
                   value={form.startDate}
                   onChange={(event) =>
                     setForm((current) => ({
@@ -904,9 +909,12 @@ export default function SurveyAdminPage() {
               </label>
 
               <label className="space-y-1 text-sm text-slate-600">
-                <span>{t('surveys.endsAt')}</span>
+                <span>
+                  {t('surveys.endsAt')} <span className="text-red-600">*</span>
+                </span>
                 <input
                   type="datetime-local"
+                  required
                   value={form.endDate}
                   onChange={(event) =>
                     setForm((current) => ({

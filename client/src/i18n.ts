@@ -596,6 +596,8 @@ const resources = {
       'surveys.admin.validation.titleRequired': 'Вкажіть назву опитування',
       'surveys.admin.validation.targetRequired':
         'Для вибраної аудиторії потрібно вказати ідентифікатори',
+      'surveys.admin.validation.datesRequired':
+        'Вкажіть дату початку та дату завершення опитування',
       'surveys.admin.validation.endAfterStart':
         'Дата завершення має бути пізніше дати початку',
       'surveys.admin.validation.questionInvalid':
@@ -604,8 +606,11 @@ const resources = {
       'surveys.results.title': 'Результати опитування',
       'surveys.results.loadError': 'Не вдалося завантажити результати',
       'surveys.results.exportCsv': 'Експорт CSV',
+      'surveys.results.exportXlsx': 'Експорт XLSX',
       'surveys.results.exporting': 'Експорт...',
-      'surveys.results.exportError': 'Не вдалося експортувати CSV',
+      'surveys.results.exportError': 'Не вдалося експортувати результати',
+      'surveys.results.liveNotice':
+        'Показано поточні результати активного опитування. Експорт CSV/XLSX стане доступним після закриття опитування.',
       'surveys.results.expectedRecipients': 'Цільова аудиторія',
       'surveys.results.totalCompletions': 'Проходжень',
       'surveys.results.totalResponses': 'Збережених відповідей',
@@ -1281,6 +1286,8 @@ const resources = {
       'surveys.admin.validation.titleRequired': 'Enter survey title',
       'surveys.admin.validation.targetRequired':
         'Audience identifiers are required for the selected target type',
+      'surveys.admin.validation.datesRequired':
+        'Enter both the survey start date and end date',
       'surveys.admin.validation.endAfterStart':
         'End date must be later than start date',
       'surveys.admin.validation.questionInvalid':
@@ -1289,8 +1296,11 @@ const resources = {
       'surveys.results.title': 'Survey results',
       'surveys.results.loadError': 'Could not load results',
       'surveys.results.exportCsv': 'Export CSV',
+      'surveys.results.exportXlsx': 'Export XLSX',
       'surveys.results.exporting': 'Exporting...',
-      'surveys.results.exportError': 'Could not export CSV',
+      'surveys.results.exportError': 'Could not export survey results',
+      'surveys.results.liveNotice':
+        'These are live results for an active survey. CSV/XLSX export becomes available after the survey is closed.',
       'surveys.results.expectedRecipients': 'Target audience',
       'surveys.results.totalCompletions': 'Completions',
       'surveys.results.totalResponses': 'Saved responses',

@@ -1,4 +1,8 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -371,6 +375,7 @@ describe('SurveysService', () => {
     const draftSurvey = createSurveyDoc({
       status: SurveyStatus.DRAFT,
       startDate: new Date('2099-01-01T00:00:00.000Z'),
+      endDate: new Date('2099-01-02T00:00:00.000Z'),
       save: jest.fn().mockImplementation(function save(this: {
         status: SurveyStatus;
         startDate?: Date;
@@ -404,6 +409,25 @@ describe('SurveysService', () => {
       }),
     );
     expect(notificationsService.createMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects publishing a legacy draft without lifecycle dates', async () => {
+    const legacyDraft = createSurveyDoc({
+      status: SurveyStatus.DRAFT,
+      startDate: undefined,
+      endDate: undefined,
+    });
+    surveyModel.findById.mockReturnValueOnce(execQuery(legacyDraft));
+
+    await expect(
+      service.publish(legacyDraft._id.toString(), {
+        sub: legacyDraft.createdBy.toString(),
+        login: 'admin',
+        role: Role.ADMIN,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(surveyModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('creates one teacher-only new_survey notification on all-teachers publish', async () => {

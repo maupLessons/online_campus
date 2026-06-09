@@ -38,17 +38,20 @@ export class Survey {
   @Prop({ type: Types.ObjectId, ref: User.name, required: true, index: true })
   createdBy: Types.ObjectId;
 
-  @Prop({ type: Date })
-  startDate?: Date;
+  @Prop({ type: Date, required: true })
+  startDate: Date;
 
-  @Prop({ type: Date, index: true })
-  endDate?: Date;
+  @Prop({ type: Date, required: true, index: true })
+  endDate: Date;
 
   @Prop({ type: Date })
   publishedAt?: Date;
 
   @Prop({ type: Date })
   closedAt?: Date;
+
+  @Prop({ type: Number, min: 0 })
+  expectedRecipients?: number;
 
   createdAt: Date;
   updatedAt: Date;

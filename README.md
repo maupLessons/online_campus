@@ -298,10 +298,11 @@ interface Survey {
   targetIds: string[]; // group ids для groups, course/course assignment ids для course, порожній масив для all/teachers/students_teachers
   status: "draft" | "active" | "closed";
   anonymous: boolean; // якщо true — відповіді без userId
-  startDate?: string;
-  endDate?: string;
+  startDate: string;
+  endDate: string;
   publishedAt?: string;
   closedAt?: string;
+  expectedRecipients?: number; // знімок розміру аудиторії на момент публікації
   createdAt: string;
   updatedAt: string;
 }
@@ -343,17 +344,23 @@ interface SurveyResponse {
 | POST   | `/surveys/:id/respond`        | student, teacher                | Надіслати відповіді                          |
 | GET    | `/surveys/:id/my-response`    | student, teacher                | Перевірити — чи вже пройшов                  |
 | GET    | `/surveys/:id/results`        | admin, dean (автор), rector, president | Агреговані результати                 |
-| GET    | `/surveys/:id/results/export` | admin, dean (автор), rector, president | Вивантаження у CSV                    |
+| GET    | `/surveys/:id/results/export?format=csv` | admin, dean (автор), rector, president | Структурований UTF-8 CSV-звіт після закриття |
+| GET    | `/surveys/:id/results/export?format=xlsx` | admin, dean (автор), rector, president | Форматований XLSX-звіт після закриття |
 
 **Логіка:**
 
 - Студент або викладач може проходити доступне йому опитування **лише один раз**
+- Дата початку та дата завершення є обов’язковими; без повного коректного періоду чернетку не можна створити або опублікувати
 - Аудиторія `all` означає всіх студентів; для викладачів використовуються окремі аудиторії `teachers` і `students_teachers`
 - При `isAnonymous: true` — userId не зберігається у відповіді, але факт проходження фіксується окремо (щоб не дати пройти двічі)
 - Публікація з майбутнім `startDate` зберігає запланований старт; опитування видиме за прямим посиланням, але пройти його можна лише після старту
 - Опитування з `endDate` у минулому автоматично переводяться в статус `closed` під час запитів
+- Під час публікації фіксується кількість активних отримувачів; історичний відсоток проходження не змінюється через подальші зміни груп, курсів або статусів користувачів
+- Живі агреговані результати доступні для активного опитування, але фінальний XLSX/CSV-експорт дозволений лише після переходу в статус `closed`
 - Результати показують: очікувану аудиторію, кількість проходжень, відсоток проходження, кількість відповідей на кожен варіант, середнє для rating, текстові відповіді списком
-- CSV-експорт екранує формули (`=`, `+`, `-`, `@`) для захисту від spreadsheet injection
+- CSV використовує UTF-8 BOM, Excel-сумісний роздільник `;`, CRLF та українські заголовки
+- XLSX містить окремі аркуші зведення, розподілу відповідей і текстових відповідей, автофільтри, закріплені рядки та числові формати
+- XLSX/CSV-експорт екранує формули (`=`, `+`, `-`, `@`) для захисту від spreadsheet injection та повертається з `Cache-Control: private, no-store`
 - Для модуля є окремий MongoDB E2E quality gate: `npm run test:e2e:db -- surveys.e2e-spec.ts`
 
 ---
@@ -651,7 +658,8 @@ src/
   - single/multiple_choice: горизонтальна гістограма з кількістю та відсотком
   - rating: середнє значення + розподіл
   - text: список відповідей із пагінацією
-- Кнопка "Вивантажити CSV"
+- Для активного опитування показуються живі результати без кнопок експорту
+- Після закриття доступні кнопки "Експорт CSV" і "Експорт XLSX"
 
 ---
 
@@ -826,7 +834,8 @@ AuditLogEntry
 | POST   | `/surveys/:id/respond`        | student, teacher                |
 | GET    | `/surveys/:id/my-response`    | student, teacher                |
 | GET    | `/surveys/:id/results`        | admin, dean (автор), rector, president |
-| GET    | `/surveys/:id/results/export` | admin, dean (автор), rector, president |
+| GET    | `/surveys/:id/results/export?format=csv` | admin, dean (автор), rector, president |
+| GET    | `/surveys/:id/results/export?format=xlsx` | admin, dean (автор), rector, president |
 
 ### Сповіщення `/api/notifications`
 

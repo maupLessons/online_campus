@@ -8,7 +8,10 @@ import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
-import { GradeResponseDto } from '../src/courses/grades/dto';
+import {
+  GradeJournalResponseDto,
+  GradeResponseDto,
+} from '../src/courses/grades/dto';
 import { StudentCourseResponseDto } from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed-data/seed.service';
 import { configureApp } from '../src/app.config';
@@ -53,6 +56,8 @@ describe('Grades (e2e)', () => {
       await connection.collection('courses').deleteMany({});
       await connection.collection('courseassignments').deleteMany({});
       await connection.collection('grades').deleteMany({});
+      await connection.collection('lessonjournalentries').deleteMany({});
+      await connection.collection('notifications').deleteMany({});
     }
     if (app) {
       await app.close();
@@ -243,6 +248,148 @@ describe('Grades (e2e)', () => {
         )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(403);
+    });
+  });
+
+  describe('Elective course roster integrity', () => {
+    it('uses only enrolled students across course, journal and grade flows', async () => {
+      const { courseAssignmentId, groupId, studentId, teacherToken } =
+        await setupGrades();
+      const outsiderId = new Types.ObjectId();
+
+      await connection.collection('users').insertOne({
+        _id: outsiderId,
+        login: 'elective_outsider',
+        role: Role.STUDENT,
+        email: 'elective_outsider@test.com',
+        firstName: 'Other',
+        lastName: 'Student',
+        status: 'active',
+        passwordHash: 'hash',
+        studentProfile: {
+          group: groupId,
+          recordBookNumber: 'OUTSIDER-1',
+          year: 1,
+        },
+      });
+      await connection.collection('courseassignments').updateOne(
+        { _id: courseAssignmentId },
+        {
+          $set: {
+            source: 'elective',
+            enrolledStudents: [studentId],
+            finalizedAt: new Date(),
+          },
+        },
+      );
+      await connection.collection('grades').insertOne({
+        student: outsiderId,
+        courseAssignment: courseAssignmentId,
+        date: new Date('2025-02-19'),
+        type: 'current',
+        value: 7,
+        comment: 'Legacy invalid grade',
+      });
+
+      const studentsResponse = await request(app.getHttpServer())
+        .get(
+          `/api/courses/course-assignments/${courseAssignmentId.toHexString()}/students`,
+        )
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(200);
+      const students = studentsResponse.body as Array<{ id: string }>;
+
+      expect(students.map((student) => student.id)).toEqual([
+        studentId.toHexString(),
+      ]);
+
+      const gradesResponse = await request(app.getHttpServer())
+        .get(`/api/courses/${courseAssignmentId.toHexString()}/grades`)
+        .query({ page: 1, limit: 100 })
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(200);
+      const gradeJournal =
+        gradesResponse.body as PaginatedDto<GradeJournalResponseDto>;
+
+      expect(gradeJournal.totalDocs).toBe(1);
+      expect(gradeJournal.docs).toHaveLength(1);
+      expect(gradeJournal.docs[0].studentId).toBe(studentId.toHexString());
+      expect(
+        gradeJournal.docs[0].grades.every(
+          (grade) => grade.studentId === studentId.toHexString(),
+        ),
+      ).toBe(true);
+
+      await request(app.getHttpServer())
+        .post('/api/courses/grades')
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({
+          studentId: outsiderId.toHexString(),
+          courseAssignmentId: courseAssignmentId.toHexString(),
+          type: 'current',
+          value: 10,
+        })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .get(
+          `/api/courses/${courseAssignmentId.toHexString()}/grades/student/${outsiderId.toHexString()}`,
+        )
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .post(`/api/courses/${courseAssignmentId.toHexString()}/journal`)
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .send({
+          date: '2026-06-10',
+          topic: 'Elective roster check',
+          attendance: [
+            {
+              studentId: outsiderId.toHexString(),
+              status: 'present',
+            },
+          ],
+        })
+        .expect(400);
+
+      expect(
+        await connection.collection('lessonjournalentries').countDocuments(),
+      ).toBe(0);
+    });
+
+    it('never falls back to the whole group for an empty elective roster', async () => {
+      const { courseAssignmentId, teacherToken } = await setupGrades();
+
+      await connection.collection('courseassignments').updateOne(
+        { _id: courseAssignmentId },
+        {
+          $set: {
+            source: 'elective',
+            enrolledStudents: [],
+            finalizedAt: new Date(),
+          },
+        },
+      );
+
+      const studentsResponse = await request(app.getHttpServer())
+        .get(
+          `/api/courses/course-assignments/${courseAssignmentId.toHexString()}/students`,
+        )
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(200);
+      expect(studentsResponse.body).toEqual([]);
+
+      const gradesResponse = await request(app.getHttpServer())
+        .get(`/api/courses/${courseAssignmentId.toHexString()}/grades`)
+        .query({ page: 1, limit: 100 })
+        .set('Authorization', `Bearer ${teacherToken}`)
+        .expect(200);
+      const gradeJournal =
+        gradesResponse.body as PaginatedDto<GradeJournalResponseDto>;
+
+      expect(gradeJournal.totalDocs).toBe(0);
+      expect(gradeJournal.docs).toEqual([]);
     });
   });
 

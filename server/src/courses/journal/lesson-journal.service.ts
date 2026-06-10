@@ -16,7 +16,6 @@ import { CoursesService } from '../courses/courses.service';
 import {
   CourseAssignment,
   CourseAssignmentDocument,
-  CourseAssignmentSource,
   Grade,
   GradeDocument,
   LessonJournalEntry,
@@ -300,25 +299,12 @@ export class LessonJournalService {
   private async getCourseStudentMap(
     courseAssignment: CourseAssignmentDocument,
   ): Promise<Map<string, StudentLean>> {
-    const filter: Record<string, unknown> = {
-      role: Role.STUDENT,
-      status: 'active',
-      'studentProfile.group': courseAssignment.group,
-    };
-
-    if (
-      courseAssignment.source === CourseAssignmentSource.ELECTIVE &&
-      courseAssignment.enrolledStudents.length > 0
-    ) {
-      filter._id = {
-        $in: courseAssignment.enrolledStudents.map((id) =>
-          this.toObjectId(toId(id)),
-        ),
-      };
-    }
-
     const students = await this.userModel
-      .find(filter as never)
+      .find(
+        this.coursesService.buildCourseStudentRosterFilter(
+          courseAssignment,
+        ) as never,
+      )
       .select(this.studentSelect())
       .lean<StudentLean[]>()
       .exec();

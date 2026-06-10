@@ -69,10 +69,14 @@ export class GradesService {
     }
 
     const assignment = submission.assignment as unknown as AssignmentDocument;
-    await this.coursesService.validateOwnership(
+    const courseAssignment = await this.coursesService.validateOwnership(
       toId(assignment.courseAssignment),
       userId,
       role,
+    );
+    await this.coursesService.assertStudentBelongsToCourseAssignment(
+      courseAssignment,
+      toId(submission.student),
     );
 
     if (submission.status === 'returned') {
@@ -115,10 +119,14 @@ export class GradesService {
     userId: string,
     role: Role,
   ): Promise<GradeResponseDto> {
-    await this.coursesService.validateOwnership(
+    const courseAssignment = await this.coursesService.validateOwnership(
       dto.courseAssignmentId,
       userId,
       role,
+    );
+    await this.coursesService.assertStudentBelongsToCourseAssignment(
+      courseAssignment,
+      dto.studentId,
     );
 
     const grade = new this.gradeModel({
@@ -153,10 +161,14 @@ export class GradesService {
       throw new NotFoundException('Оцінку не знайдено');
     }
 
-    await this.coursesService.validateOwnership(
+    const courseAssignment = await this.coursesService.validateOwnership(
       toId(grade.courseAssignment),
       userId,
       role,
+    );
+    await this.coursesService.assertStudentBelongsToCourseAssignment(
+      courseAssignment,
+      toId(grade.student),
     );
     const linkedAssignment = await this.findLinkedAssignment(grade);
     if (linkedAssignment) {
@@ -260,10 +272,15 @@ export class GradesService {
     requesterId: string,
     requesterRole: Role,
   ): Promise<PaginatedDto<GradeResponseDto>> {
-    await this.coursesService.assertCourseAssignmentAccess(
-      courseAssignmentId,
-      requesterId,
-      requesterRole,
+    const courseAssignment =
+      await this.coursesService.assertCourseAssignmentAccess(
+        courseAssignmentId,
+        requesterId,
+        requesterRole,
+      );
+    await this.coursesService.assertStudentBelongsToCourseAssignment(
+      courseAssignment,
+      studentId,
     );
 
     const { page, limit } = pagination;
@@ -299,28 +316,12 @@ export class GradesService {
     userId: string,
     role: Role,
   ): Promise<PaginatedDto<GradeJournalResponseDto>> {
-    await this.coursesService.assertCourseAssignmentAccess(
-      courseAssignmentId,
-      userId,
-      role,
-    );
-
-    const ca = await this.courseAssignmentModel
-      .findById(courseAssignmentId)
-      .populate('group')
-      .lean()
-      .exec();
-    if (!ca) {
-      return {
-        docs: [],
-        totalDocs: 0,
-        limit: pagination.limit || 10,
-        page: pagination.page || 1,
-        totalPages: 0,
-        hasNextPage: false,
-        hasPrevPage: false,
-      };
-    }
+    const courseAssignment =
+      await this.coursesService.assertCourseAssignmentAccess(
+        courseAssignmentId,
+        userId,
+        role,
+      );
 
     const { page, limit } = pagination;
     const studentOptions = {
@@ -331,7 +332,7 @@ export class GradesService {
     };
 
     const studentResult = await this.userModel.paginate(
-      { 'studentProfile.group': toId(ca.group) },
+      this.coursesService.buildCourseStudentRosterFilter(courseAssignment),
       studentOptions,
     );
 

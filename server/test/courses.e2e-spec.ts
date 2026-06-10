@@ -11,6 +11,7 @@ import { PaginatedDto } from '../src/common/dto/paginated.dto';
 import { CourseAssignmentDto, CourseDto } from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed-data/seed.service';
 import { configureApp } from '../src/app.config';
+import { CoursesService } from '../src/courses/courses/courses.service';
 
 const SET_UP_TIMEOUT = 60_000;
 
@@ -19,6 +20,7 @@ describe('Courses (e2e)', () => {
   let container: StartedTestContainer;
   let connection: Connection;
   let jwtService: JwtService;
+  let coursesService: CoursesService;
 
   beforeAll(async () => {
     container = await new GenericContainer('mongo')
@@ -43,6 +45,7 @@ describe('Courses (e2e)', () => {
 
     connection = app.get(getConnectionToken());
     jwtService = app.get(JwtService);
+    coursesService = app.get(CoursesService);
   });
 
   afterEach(async () => {
@@ -236,6 +239,82 @@ describe('Courses (e2e)', () => {
         )
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(403);
+    });
+  });
+
+  describe('Elective course targets', () => {
+    it('resolves only enrolled students for access and notifications', async () => {
+      const { groupId, studentId } = await setupData();
+      const outsiderId = new Types.ObjectId();
+      const teacherId = new Types.ObjectId();
+      const electiveAssignmentId = new Types.ObjectId();
+
+      await connection.collection('users').insertMany([
+        {
+          _id: outsiderId,
+          login: 'elective_target_outsider',
+          role: Role.STUDENT,
+          email: 'elective_target_outsider@example.com',
+          firstName: 'Other',
+          lastName: 'Student',
+          status: 'active',
+          passwordHash: 'hash',
+          studentProfile: { group: groupId },
+        },
+        {
+          _id: teacherId,
+          login: 'elective_target_teacher',
+          role: Role.TEACHER,
+          email: 'elective_target_teacher@example.com',
+          firstName: 'Course',
+          lastName: 'Teacher',
+          status: 'active',
+          passwordHash: 'hash',
+        },
+      ]);
+      await connection.collection('courseassignments').insertOne({
+        _id: electiveAssignmentId,
+        course: new Types.ObjectId(),
+        teacher: teacherId,
+        group: groupId,
+        academicYear: '2026-2027',
+        semester: 1,
+        source: 'elective',
+        enrolledStudents: [studentId],
+        finalizedAt: new Date(),
+      });
+
+      const targetIds = await coursesService.findStudentIdsByCourseTargets([
+        electiveAssignmentId.toHexString(),
+      ]);
+      const recipientIds = await coursesService.findUserIdsByCourseTargets([
+        electiveAssignmentId.toHexString(),
+      ]);
+
+      expect(targetIds).toEqual([studentId.toHexString()]);
+      expect(recipientIds).toEqual(
+        expect.arrayContaining([
+          teacherId.toHexString(),
+          studentId.toHexString(),
+        ]),
+      );
+      expect(recipientIds).not.toContain(outsiderId.toHexString());
+      await expect(
+        coursesService.isUserAssignedToCourseTargets({
+          userId: studentId.toHexString(),
+          role: Role.STUDENT,
+          targetIds: [electiveAssignmentId.toHexString()],
+          groupId: groupId.toHexString(),
+        }),
+      ).resolves.toBe(true);
+      await expect(
+        coursesService.isUserAssignedToCourseTargets({
+          userId: outsiderId.toHexString(),
+          role: Role.STUDENT,
+          targetIds: [electiveAssignmentId.toHexString()],
+          groupId: groupId.toHexString(),
+        }),
+      ).resolves.toBe(false);
     });
   });
 });

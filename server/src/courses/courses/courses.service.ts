@@ -109,7 +109,7 @@ export class CoursesService {
 
     if (
       courseAssignment.source === CourseAssignmentSource.ELECTIVE &&
-      !courseAssignment.enrolledStudents.some(
+      !(courseAssignment.enrolledStudents ?? []).some(
         (enrolledStudent) => toId(enrolledStudent) === userId,
       )
     ) {
@@ -177,31 +177,61 @@ export class CoursesService {
     role: Role,
   ): Promise<UserDto[]> {
     const ca = await this.validateOwnership(courseAssignmentId, userId, role);
-    const filter: Record<string, unknown> = {
-      role: Role.STUDENT,
-      status: 'active',
-      'studentProfile.group': ca.group,
-    };
-
-    if (
-      ca.source === CourseAssignmentSource.ELECTIVE &&
-      ca.enrolledStudents.length > 0
-    ) {
-      filter._id = {
-        $in: ca.enrolledStudents
-          .map((student) => toId(student))
-          .filter((id) => Types.ObjectId.isValid(id))
-          .map((id) => new Types.ObjectId(id)),
-      };
-    }
 
     const students = await this.userModel
-      .find(filter as never)
+      .find(this.buildCourseStudentRosterFilter(ca) as never)
       .sort({ lastName: 1, firstName: 1, middleName: 1 })
       .lean()
       .exec();
 
     return transformToDtoArray(UserDto, students);
+  }
+
+  buildCourseStudentRosterFilter(
+    courseAssignment: Pick<
+      CourseAssignment,
+      'group' | 'source' | 'enrolledStudents'
+    >,
+  ): Record<string, unknown> {
+    const groupId = toId(courseAssignment.group);
+    this.assertValidObjectId(groupId, 'групи');
+
+    const filter: Record<string, unknown> = {
+      role: Role.STUDENT,
+      status: 'active',
+      'studentProfile.group': new Types.ObjectId(groupId),
+    };
+
+    if (courseAssignment.source === CourseAssignmentSource.ELECTIVE) {
+      filter._id = {
+        $in: this.normalizeObjectIds(courseAssignment.enrolledStudents ?? []),
+      };
+    }
+
+    return filter;
+  }
+
+  async assertStudentBelongsToCourseAssignment(
+    courseAssignment: Pick<
+      CourseAssignment,
+      'group' | 'source' | 'enrolledStudents'
+    >,
+    studentId: string,
+  ): Promise<void> {
+    this.assertValidObjectId(studentId, 'студента');
+
+    const studentExists = await this.userModel
+      .exists({
+        $and: [
+          this.buildCourseStudentRosterFilter(courseAssignment),
+          { _id: new Types.ObjectId(studentId) },
+        ],
+      } as never)
+      .exec();
+
+    if (!studentExists) {
+      throw new BadRequestException('Студент не зарахований на цю дисципліну');
+    }
   }
 
   async findMy(
@@ -342,14 +372,30 @@ export class CoursesService {
     }
 
     if (params.role === Role.STUDENT) {
-      if (!params.groupId || !Types.ObjectId.isValid(params.groupId)) {
+      if (
+        !params.groupId ||
+        !Types.ObjectId.isValid(params.groupId) ||
+        !Types.ObjectId.isValid(params.userId)
+      ) {
         return false;
       }
 
       const match = await this.courseAssignmentModel
         .exists({
-          ...targetFilter,
-          group: new Types.ObjectId(params.groupId),
+          $and: [
+            targetFilter,
+            { group: new Types.ObjectId(params.groupId) },
+            {
+              $or: [
+                { source: { $exists: false } },
+                { source: CourseAssignmentSource.STANDARD },
+                {
+                  source: CourseAssignmentSource.ELECTIVE,
+                  enrolledStudents: new Types.ObjectId(params.userId),
+                },
+              ],
+            },
+          ],
         } as never)
         .exec();
 
@@ -365,54 +411,15 @@ export class CoursesService {
     const teacherIds = courseAssignments.map((assignment) =>
       toId(assignment.teacher),
     );
-    const groupIds = [
-      ...new Set(courseAssignments.map((assignment) => toId(assignment.group))),
-    ]
-      .filter((id) => Types.ObjectId.isValid(id))
-      .map((id) => new Types.ObjectId(id));
-
-    if (groupIds.length === 0) {
-      return [...new Set(teacherIds)];
-    }
-
-    const studentFilter: Record<string, unknown> = {
-      'studentProfile.group': { $in: groupIds },
-    };
-    const students = await this.userModel
-      .find(studentFilter as never)
-      .select('_id')
-      .lean()
-      .exec();
-    const studentIds = students.map((student) => toId(student._id));
+    const studentIds =
+      await this.findActiveStudentIdsForAssignments(courseAssignments);
 
     return [...new Set([...teacherIds, ...studentIds])];
   }
 
   async findStudentIdsByCourseTargets(targetIds: string[]): Promise<string[]> {
     const courseAssignments = await this.findCourseTargetAssignments(targetIds);
-    const groupIds = [
-      ...new Set(courseAssignments.map((assignment) => toId(assignment.group))),
-    ]
-      .filter((id) => Types.ObjectId.isValid(id))
-      .map((id) => new Types.ObjectId(id));
-
-    if (groupIds.length === 0) {
-      return [];
-    }
-
-    const studentFilter: Record<string, unknown> = {
-      role: Role.STUDENT,
-      status: 'active',
-      'studentProfile.group': { $in: groupIds },
-    };
-    const students = await this.userModel
-      .find(studentFilter as never)
-      .select('_id')
-      .lean()
-      .exec();
-    const studentIds = students.map((student) => toId(student._id));
-
-    return [...new Set(studentIds)];
+    return this.findActiveStudentIdsForAssignments(courseAssignments);
   }
 
   private async findCourseTargetAssignments(targetIds: string[]) {
@@ -430,9 +437,71 @@ export class CoursesService {
 
     return this.courseAssignmentModel
       .find(assignmentFilter as never)
-      .select('teacher group')
+      .select('teacher group source enrolledStudents')
       .lean()
       .exec();
+  }
+
+  private async findActiveStudentIdsForAssignments(
+    courseAssignments: Array<
+      Pick<
+        CourseAssignment,
+        'group' | 'source' | 'enrolledStudents' | 'teacher'
+      >
+    >,
+  ): Promise<string[]> {
+    const standardGroupIds = [
+      ...new Set(
+        courseAssignments
+          .filter(
+            (assignment) =>
+              assignment.source !== CourseAssignmentSource.ELECTIVE,
+          )
+          .map((assignment) => toId(assignment.group)),
+      ),
+    ]
+      .filter((id) => Types.ObjectId.isValid(id))
+      .map((id) => new Types.ObjectId(id));
+    const rosterFilters: Record<string, unknown>[] = [];
+
+    if (standardGroupIds.length > 0) {
+      rosterFilters.push({
+        'studentProfile.group': { $in: standardGroupIds },
+      });
+    }
+    for (const assignment of courseAssignments) {
+      if (assignment.source !== CourseAssignmentSource.ELECTIVE) {
+        continue;
+      }
+
+      const groupId = toId(assignment.group);
+      const enrolledStudents = this.normalizeObjectIds(
+        assignment.enrolledStudents ?? [],
+      );
+      if (!Types.ObjectId.isValid(groupId) || enrolledStudents.length === 0) {
+        continue;
+      }
+
+      rosterFilters.push({
+        _id: { $in: enrolledStudents },
+        'studentProfile.group': new Types.ObjectId(groupId),
+      });
+    }
+    if (rosterFilters.length === 0) {
+      return [];
+    }
+
+    const students = await this.userModel
+      .find({
+        role: Role.STUDENT,
+        status: 'active',
+        $or: rosterFilters,
+      } as never)
+      .select('_id')
+      .lean()
+      .exec();
+
+    return [...new Set(students.map((student) => toId(student._id)))];
   }
 
   private buildStudentCourseAssignmentFilter(
@@ -450,6 +519,16 @@ export class CoursesService {
         },
       ],
     };
+  }
+
+  private normalizeObjectIds(values: unknown[]): Types.ObjectId[] {
+    return [
+      ...new Set(
+        values
+          .map((value) => toId(value))
+          .filter((id) => Types.ObjectId.isValid(id)),
+      ),
+    ].map((id) => new Types.ObjectId(id));
   }
 
   private assertValidObjectId(value: string, entity: string): void {

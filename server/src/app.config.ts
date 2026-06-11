@@ -104,7 +104,10 @@ function buildCorsOptions() {
         return;
       }
 
-      callback(new Error('Not allowed by CORS'));
+      // The browser enforces CORS when the allow-origin header is absent.
+      // Returning an application error here would turn untrusted origins into
+      // noisy HTTP 500 responses and provide an easy server-log flooding path.
+      callback(null, false);
     },
     credentials: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',

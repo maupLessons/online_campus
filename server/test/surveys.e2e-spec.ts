@@ -309,6 +309,11 @@ describe('Surveys (e2e)', () => {
     expect(deanBList.body).toEqual([]);
 
     await request(app.getHttpServer())
+      .get(`/api/surveys/${draft.id}`)
+      .set('Authorization', `Bearer ${fixture.deanB.token}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
       .get(`/api/surveys/${draft.id}/results`)
       .set('Authorization', `Bearer ${fixture.deanB.token}`)
       .expect(403);

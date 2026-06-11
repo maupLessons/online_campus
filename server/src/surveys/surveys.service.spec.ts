@@ -9,6 +9,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { Role } from '../common/types/roles.enum';
 import { CoursesService } from '../courses/courses/courses.service';
 import { UsersService } from '../users/users.service';
+import { SurveyAccessPolicy } from './survey-access.policy';
+import { SurveyAudienceService } from './survey-audience.service';
 import { SurveyQuestionType, SurveyStatus, SurveyTargetType } from './schemas';
 import { SurveysService } from './surveys.service';
 
@@ -188,8 +190,12 @@ describe('SurveysService', () => {
       responseModel as never,
       completionModel as never,
       usersService as unknown as UsersService,
-      coursesService as unknown as CoursesService,
-      notificationsService as unknown as NotificationsService,
+      new SurveyAudienceService(
+        usersService as unknown as UsersService,
+        coursesService as unknown as CoursesService,
+        notificationsService as unknown as NotificationsService,
+      ),
+      new SurveyAccessPolicy(),
     );
   });
 

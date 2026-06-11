@@ -9,23 +9,34 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
-import { Role } from '../common/types/roles.enum';
-import { CoursesService } from '../courses/courses/courses.service';
-import { NotificationType } from '../notifications/dto/create-notification.dto';
-import { NotificationsService } from '../notifications/notifications.service';
-import { UserDto } from '../users/dto/user.dto';
+import { toId } from '../common/utils/to-id.util';
 import { UsersService } from '../users/users.service';
 import {
   CreateSurveyDto,
-  CreateSurveyQuestionDto,
-} from './dto/create-survey.dto';
-import { SubmitSurveyResponseDto } from './dto/submit-survey-response.dto';
-import { SurveyQueryDto } from './dto/survey-query.dto';
-import { UpdateSurveyDto } from './dto/update-survey.dto';
+  SubmitSurveyResponseDto,
+  SurveyDeleteResultDto,
+  SurveyDto,
+  SurveyResponseStateDto,
+  SurveyResultsDto,
+  SurveySubmissionResultDto,
+  SurveyQueryDto,
+  UpdateSurveyDto,
+} from './dto';
+import {
+  normalizeSurveyQuestions,
+  validateAndNormalizeSurveyAnswers,
+} from './survey-answer.validator';
+import { SurveyAccessPolicy } from './survey-access.policy';
+import { SurveyAudienceService } from './survey-audience.service';
+import { mapSurveyResponseToDto, mapSurveyToDto } from './survey.mapper';
 import {
   buildSurveyResultsCsv,
   buildSurveyResultsXlsx,
 } from './survey-results-exporter';
+import {
+  aggregateSurveyQuestionResults,
+  percentage,
+} from './survey-results.aggregator';
 import {
   Survey,
   SurveyCompletion,
@@ -33,12 +44,12 @@ import {
   SurveyDocument,
   SurveyQuestion,
   SurveyQuestionDocument,
-  SurveyQuestionType,
   SurveyResponse,
   SurveyResponseDocument,
   SurveyStatus,
   SurveyTargetType,
 } from './schemas';
+import { SurveyDraftSnapshot } from './types';
 
 const surveyTargetTypesWithoutIds = new Set<SurveyTargetType>([
   SurveyTargetType.ALL,
@@ -46,125 +57,9 @@ const surveyTargetTypesWithoutIds = new Set<SurveyTargetType>([
   SurveyTargetType.STUDENTS_TEACHERS,
 ]);
 
-export interface SurveyQuestionView {
-  id: string;
-  type: SurveyQuestionType;
-  text: string;
-  options: string[];
-  required: boolean;
-  order: number;
-}
-
-export interface SurveyView {
-  id: string;
-  title: string;
-  description?: string;
-  status: SurveyStatus;
-  anonymous: boolean;
-  targetType: SurveyTargetType;
-  targetIds: string[];
-  createdBy: string;
-  startDate?: string;
-  endDate?: string;
-  publishedAt?: string;
-  closedAt?: string;
-  expectedRecipients?: number;
-  createdAt?: string;
-  updatedAt?: string;
-  completed?: boolean;
-  questions?: SurveyQuestionView[];
-}
-
-export interface SurveyAnswerView {
-  questionId: string;
-  value: unknown;
-}
-
-export interface SurveyResponseView {
-  id: string;
-  surveyId: string;
-  answers: SurveyAnswerView[];
-  submittedAt: string;
-}
-
-export interface ChoiceOptionResult {
-  value: string;
-  count: number;
-  percentage: number;
-}
-
-export interface RatingDistributionResult {
-  rating: number;
-  count: number;
-  percentage: number;
-}
-
-export interface BaseQuestionResult {
-  questionId: string;
-  type: SurveyQuestionType;
-  text: string;
-  required: boolean;
-  order: number;
-  totalAnswers: number;
-}
-
-export interface ChoiceQuestionResult extends BaseQuestionResult {
-  type: SurveyQuestionType.SINGLE | SurveyQuestionType.MULTIPLE;
-  options: ChoiceOptionResult[];
-}
-
-export interface RatingQuestionResult extends BaseQuestionResult {
-  type: SurveyQuestionType.RATING;
-  average: number | null;
-  min: number | null;
-  max: number | null;
-  distribution: RatingDistributionResult[];
-}
-
-export interface TextQuestionResult extends BaseQuestionResult {
-  type: SurveyQuestionType.TEXT;
-  answers: string[];
-}
-
-export type QuestionResult =
-  | ChoiceQuestionResult
-  | RatingQuestionResult
-  | TextQuestionResult;
-
-export interface SurveyResultsView {
-  survey: SurveyView;
-  anonymous: boolean;
-  totalResponses: number;
-  totalCompletions: number;
-  expectedRecipients: number;
-  completionRate: number;
-  questions: QuestionResult[];
-}
-
-type NormalizedSurveyQuestion = {
-  type: SurveyQuestionType;
-  text: string;
-  options: string[];
-  required: boolean;
-  order: number;
-};
-
-type NormalizedAnswerValue = string | string[] | number | undefined;
-
 @Injectable()
 export class SurveysService {
   private readonly logger = new Logger(SurveysService.name);
-  private readonly manageableRoles = new Set<Role>([
-    Role.ADMIN,
-    Role.RECTOR,
-    Role.PRESIDENT,
-  ]);
-  private readonly resultRoles = new Set<Role>([
-    Role.ADMIN,
-    Role.DEAN,
-    Role.RECTOR,
-    Role.PRESIDENT,
-  ]);
 
   constructor(
     @InjectModel(Survey.name)
@@ -176,17 +71,18 @@ export class SurveysService {
     @InjectModel(SurveyCompletion.name)
     private readonly completionModel: Model<SurveyCompletionDocument>,
     private readonly usersService: UsersService,
-    private readonly coursesService: CoursesService,
-    private readonly notificationsService: NotificationsService,
+    private readonly audienceService: SurveyAudienceService,
+    private readonly accessPolicy: SurveyAccessPolicy,
   ) {}
 
   async create(
     dto: CreateSurveyDto,
     user: AuthenticatedUser,
-  ): Promise<SurveyView> {
+  ): Promise<SurveyDto> {
+    this.ensureCanCreateSurvey(user);
     const dates = this.normalizeSurveyDates(dto.startDate, dto.endDate);
     const createdBy = this.toObjectId(user.sub);
-    const questionPayload = this.normalizeQuestions(dto.questions);
+    const questionPayload = normalizeSurveyQuestions(dto.questions);
     const targetType = dto.targetType ?? SurveyTargetType.ALL;
 
     const survey = await this.surveyModel.create({
@@ -210,7 +106,7 @@ export class SurveysService {
         { ordered: true },
       );
 
-      return this.formatSurvey(survey, questions);
+      return mapSurveyToDto(survey, questions);
     } catch (error) {
       await this.surveyModel.deleteOne({ _id: survey._id }).exec();
       throw error;
@@ -220,7 +116,8 @@ export class SurveysService {
   async findAll(
     query: SurveyQueryDto,
     user: AuthenticatedUser,
-  ): Promise<SurveyView[]> {
+  ): Promise<SurveyDto[]> {
+    this.ensureCanListManagedSurveys(user);
     await this.closeExpiredSurveys();
 
     const filter: Record<string, unknown> = {};
@@ -233,7 +130,7 @@ export class SurveysService {
     }
     if (query.status) filter.status = query.status;
     if (query.targetType) filter.targetType = query.targetType;
-    if (user.role === Role.DEAN) {
+    if (!this.accessPolicy.hasGlobalManagementScope(user)) {
       filter.createdBy = this.toObjectId(user.sub);
     }
 
@@ -244,14 +141,11 @@ export class SurveysService {
     const questionsBySurvey = await this.loadQuestionsForSurveys(surveys);
 
     return surveys.map((survey) =>
-      this.formatSurvey(
-        survey,
-        questionsBySurvey.get(this.idToString(survey._id)) ?? [],
-      ),
+      mapSurveyToDto(survey, questionsBySurvey.get(toId(survey._id)) ?? []),
     );
   }
 
-  async findActiveForUser(user: AuthenticatedUser): Promise<SurveyView[]> {
+  async findActiveForUser(user: AuthenticatedUser): Promise<SurveyDto[]> {
     await this.closeExpiredSurveys();
 
     const profile = await this.usersService.findOne(user.sub);
@@ -276,7 +170,7 @@ export class SurveysService {
 
     const visibleSurveys: SurveyDocument[] = [];
     for (const survey of surveys) {
-      if (await this.isSurveyTargetedToUser(survey, user, profile)) {
+      if (await this.audienceService.isTargetedToUser(survey, user, profile)) {
         visibleSurveys.push(survey);
       }
     }
@@ -292,20 +186,20 @@ export class SurveysService {
         .select('survey')
         .exec();
       completions.forEach((completion) => {
-        completedSurveyIds.add(this.idToString(completion.survey));
+        completedSurveyIds.add(toId(completion.survey));
       });
     }
 
     return visibleSurveys.map((survey) =>
-      this.formatSurvey(
+      mapSurveyToDto(
         survey,
-        questionsBySurvey.get(this.idToString(survey._id)) ?? [],
-        completedSurveyIds.has(this.idToString(survey._id)),
+        questionsBySurvey.get(toId(survey._id)) ?? [],
+        completedSurveyIds.has(toId(survey._id)),
       ),
     );
   }
 
-  async findOne(id: string, user: AuthenticatedUser): Promise<SurveyView> {
+  async findOne(id: string, user: AuthenticatedUser): Promise<SurveyDto> {
     await this.closeExpiredSurveys();
 
     const survey = await this.getSurveyOrThrow(id);
@@ -315,14 +209,14 @@ export class SurveysService {
     }
 
     const questions = await this.getQuestionsForSurvey(survey._id);
-    return this.formatSurvey(survey, questions);
+    return mapSurveyToDto(survey, questions);
   }
 
   async update(
     id: string,
     dto: UpdateSurveyDto,
     user: AuthenticatedUser,
-  ): Promise<SurveyView> {
+  ): Promise<SurveyDto> {
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanManageSurvey(survey, user);
     this.ensureDraftSurvey(survey);
@@ -330,8 +224,8 @@ export class SurveysService {
     const normalizedQuestions =
       dto.questions === undefined
         ? undefined
-        : this.normalizeQuestions(dto.questions);
-    const previousSurveyState = {
+        : normalizeSurveyQuestions(dto.questions);
+    const previousSurveyState: SurveyDraftSnapshot = {
       title: survey.title,
       description: survey.description,
       anonymous: survey.anonymous,
@@ -398,10 +292,10 @@ export class SurveysService {
       }
     }
 
-    return this.formatSurvey(savedSurvey, questions);
+    return mapSurveyToDto(savedSurvey, questions);
   }
 
-  async publish(id: string, user: AuthenticatedUser): Promise<SurveyView> {
+  async publish(id: string, user: AuthenticatedUser): Promise<SurveyDto> {
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanManageSurvey(survey, user);
 
@@ -428,7 +322,8 @@ export class SurveysService {
     if (survey.endDate <= now) {
       throw new BadRequestException('Дата завершення вже минула');
     }
-    const expectedRecipients = await this.countExpectedRecipients(survey);
+    const expectedRecipients =
+      await this.audienceService.countExpectedRecipients(survey);
     if (expectedRecipients === 0) {
       throw new BadRequestException(
         'Для вибраної аудиторії не знайдено активних отримувачів',
@@ -460,12 +355,12 @@ export class SurveysService {
       );
     }
 
-    await this.notifySurveyPublished(savedSurvey);
+    await this.audienceService.notifyPublished(savedSurvey);
 
-    return this.formatSurvey(savedSurvey, questions);
+    return mapSurveyToDto(savedSurvey, questions);
   }
 
-  async close(id: string, user: AuthenticatedUser): Promise<SurveyView> {
+  async close(id: string, user: AuthenticatedUser): Promise<SurveyDto> {
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanManageSurvey(survey, user);
 
@@ -497,14 +392,14 @@ export class SurveysService {
 
     const questions = await this.getQuestionsForSurvey(savedSurvey._id);
 
-    return this.formatSurvey(savedSurvey, questions);
+    return mapSurveyToDto(savedSurvey, questions);
   }
 
   async remove(
     id: string,
     user: AuthenticatedUser,
-  ): Promise<{ success: true }> {
-    if (user.role !== Role.ADMIN) {
+  ): Promise<SurveyDeleteResultDto> {
+    if (!this.accessPolicy.canDelete(user)) {
       throw new ForbiddenException(
         'Видаляти опитування може лише адміністратор',
       );
@@ -527,18 +422,14 @@ export class SurveysService {
     id: string,
     dto: SubmitSurveyResponseDto,
     user: AuthenticatedUser,
-  ): Promise<{
-    success: true;
-    anonymous: boolean;
-    submittedAt: string;
-  }> {
+  ): Promise<SurveySubmissionResultDto> {
     await this.closeExpiredSurveys();
 
     const survey = await this.getSurveyOrThrow(id);
     await this.ensureCanRespond(survey, user);
 
     const questions = await this.getQuestionsForSurvey(survey._id);
-    const answers = this.validateAndNormalizeAnswers(questions, dto);
+    const answers = validateAndNormalizeSurveyAnswers(questions, dto);
     const userId = this.toObjectId(user.sub);
     const submittedAt = new Date();
 
@@ -583,11 +474,7 @@ export class SurveysService {
   async getMyResponse(
     id: string,
     user: AuthenticatedUser,
-  ): Promise<{
-    completed: boolean;
-    anonymous: boolean;
-    response: SurveyResponseView | null;
-  }> {
+  ): Promise<SurveyResponseStateDto> {
     await this.closeExpiredSurveys();
 
     const survey = await this.getSurveyOrThrow(id);
@@ -621,14 +508,14 @@ export class SurveysService {
     return {
       completed: true,
       anonymous: false,
-      response: response ? this.formatResponse(response) : null,
+      response: response ? mapSurveyResponseToDto(response) : null,
     };
   }
 
   async getResults(
     id: string,
     user: AuthenticatedUser,
-  ): Promise<SurveyResultsView> {
+  ): Promise<SurveyResultsDto> {
     await this.closeExpiredSurveys();
 
     const survey = await this.getSurveyOrThrow(id);
@@ -653,7 +540,7 @@ export class SurveysService {
 
   private async buildResults(
     survey: SurveyDocument,
-  ): Promise<SurveyResultsView> {
+  ): Promise<SurveyResultsDto> {
     const questions = await this.getQuestionsForSurvey(survey._id);
     const [responses, totalCompletions] = await Promise.all([
       this.responseModel
@@ -663,23 +550,24 @@ export class SurveysService {
       this.completionModel.countDocuments({ survey: survey._id }).exec(),
     ]);
     const expectedRecipients =
-      survey.expectedRecipients ?? (await this.countExpectedRecipients(survey));
+      survey.expectedRecipients ??
+      (await this.audienceService.countExpectedRecipients(survey));
 
     return {
-      survey: this.formatSurvey(survey, questions),
+      survey: mapSurveyToDto(survey, questions),
       anonymous: survey.anonymous,
       totalResponses: responses.length,
       totalCompletions,
       expectedRecipients,
-      completionRate: this.percentage(totalCompletions, expectedRecipients),
-      questions: this.aggregateQuestionResults(questions, responses),
+      completionRate: percentage(totalCompletions, expectedRecipients),
+      questions: aggregateSurveyQuestionResults(questions, responses),
     };
   }
 
   private async getExportableResults(
     id: string,
     user: AuthenticatedUser,
-  ): Promise<SurveyResultsView> {
+  ): Promise<SurveyResultsDto> {
     await this.closeExpiredSurveys();
 
     const survey = await this.getSurveyOrThrow(id);
@@ -707,7 +595,7 @@ export class SurveysService {
     }
 
     const profile = await this.usersService.findOne(user.sub);
-    if (!(await this.isSurveyTargetedToUser(survey, user, profile))) {
+    if (!(await this.audienceService.isTargetedToUser(survey, user, profile))) {
       throw new ForbiddenException(
         'Опитування недоступне для цього користувача',
       );
@@ -719,7 +607,7 @@ export class SurveysService {
     user: AuthenticatedUser,
   ): Promise<void> {
     const profile = await this.usersService.findOne(user.sub);
-    if (!(await this.isSurveyTargetedToUser(survey, user, profile))) {
+    if (!(await this.audienceService.isTargetedToUser(survey, user, profile))) {
       throw new ForbiddenException(
         'Опитування недоступне для цього користувача',
       );
@@ -730,7 +618,7 @@ export class SurveysService {
     survey: SurveyDocument,
     user: AuthenticatedUser,
   ): Promise<boolean> {
-    if (this.canManageSurvey(survey, user) || this.resultRoles.has(user.role)) {
+    if (this.accessPolicy.canManage(survey, user)) {
       return true;
     }
 
@@ -739,43 +627,36 @@ export class SurveysService {
     }
 
     const profile = await this.usersService.findOne(user.sub);
-    return this.isSurveyTargetedToUser(survey, user, profile);
+    return this.audienceService.isTargetedToUser(survey, user, profile);
   }
 
   private ensureCanManageSurvey(
     survey: SurveyDocument,
     user: AuthenticatedUser,
   ): void {
-    if (!this.canManageSurvey(survey, user)) {
+    if (!this.accessPolicy.canManage(survey, user)) {
       throw new ForbiddenException('Немає прав для керування цим опитуванням');
     }
   }
 
-  private canManageSurvey(
-    survey: SurveyDocument,
-    user: AuthenticatedUser,
-  ): boolean {
-    if (this.manageableRoles.has(user.role)) {
-      return true;
+  private ensureCanCreateSurvey(user: AuthenticatedUser): void {
+    if (!this.accessPolicy.canCreate(user)) {
+      throw new ForbiddenException('Немає прав для створення опитувань');
     }
+  }
 
-    return (
-      user.role === Role.DEAN && this.idToString(survey.createdBy) === user.sub
-    );
+  private ensureCanListManagedSurveys(user: AuthenticatedUser): void {
+    if (!this.accessPolicy.canListManagedSurveys(user)) {
+      throw new ForbiddenException('Немає прав для перегляду опитувань');
+    }
   }
 
   private ensureCanViewResults(
     survey: SurveyDocument,
     user: AuthenticatedUser,
   ): void {
-    if (!this.resultRoles.has(user.role)) {
+    if (!this.accessPolicy.canViewResults(survey, user)) {
       throw new ForbiddenException('Немає прав для перегляду результатів');
-    }
-
-    if (user.role === Role.DEAN && !this.canManageSurvey(survey, user)) {
-      throw new ForbiddenException(
-        'Декан може переглядати результати лише власних опитувань',
-      );
     }
   }
 
@@ -836,274 +717,16 @@ export class SurveysService {
 
     const grouped = new Map<string, SurveyQuestionDocument[]>();
     for (const question of questions) {
-      const surveyId = this.idToString(question.survey);
-      grouped.set(surveyId, [...(grouped.get(surveyId) ?? []), question]);
+      const surveyId = toId(question.survey);
+      const surveyQuestions = grouped.get(surveyId);
+      if (surveyQuestions) {
+        surveyQuestions.push(question);
+      } else {
+        grouped.set(surveyId, [question]);
+      }
     }
 
     return grouped;
-  }
-
-  private normalizeQuestions(
-    questions: CreateSurveyQuestionDto[],
-  ): NormalizedSurveyQuestion[] {
-    const usedOrders = new Set<number>();
-
-    return questions.map((question, index) => {
-      const order = question.order ?? index;
-      if (usedOrders.has(order)) {
-        throw new BadRequestException('Порядок питань не може повторюватися');
-      }
-      usedOrders.add(order);
-
-      const text = this.trimRequired(
-        question.text,
-        'Текст питання обовʼязковий',
-      );
-      const options = (question.options ?? [])
-        .map((option) => option.trim())
-        .filter(Boolean);
-      const uniqueOptions = [...new Set(options)];
-
-      if (uniqueOptions.length !== options.length) {
-        throw new BadRequestException(
-          'Варіанти відповіді не можуть повторюватися',
-        );
-      }
-
-      if (
-        question.type === SurveyQuestionType.SINGLE ||
-        question.type === SurveyQuestionType.MULTIPLE
-      ) {
-        if (uniqueOptions.length < 2) {
-          throw new BadRequestException(
-            'Питання з варіантами повинно мати щонайменше два варіанти',
-          );
-        }
-      } else if (uniqueOptions.length > 0) {
-        throw new BadRequestException(
-          'Питання типу rating/text не повинні містити варіанти відповіді',
-        );
-      }
-
-      return {
-        type: question.type,
-        text,
-        options: uniqueOptions,
-        required: question.required ?? true,
-        order,
-      };
-    });
-  }
-
-  private validateAndNormalizeAnswers(
-    questions: SurveyQuestionDocument[],
-    dto: SubmitSurveyResponseDto,
-  ): { question: Types.ObjectId; value: unknown }[] {
-    const questionById = new Map(
-      questions.map((question) => [this.idToString(question._id), question]),
-    );
-    const answerByQuestion = new Map<string, unknown>();
-
-    for (const answer of dto.answers) {
-      if (answerByQuestion.has(answer.questionId)) {
-        throw new BadRequestException(
-          'Питання не може мати декілька відповідей',
-        );
-      }
-      if (!questionById.has(answer.questionId)) {
-        throw new BadRequestException('Відповідь містить невідоме питання');
-      }
-      answerByQuestion.set(answer.questionId, answer.value);
-    }
-
-    const normalizedAnswers: { question: Types.ObjectId; value: unknown }[] =
-      [];
-    for (const question of questions) {
-      const questionId = this.idToString(question._id);
-      const hasAnswer = answerByQuestion.has(questionId);
-      const normalized = hasAnswer
-        ? this.normalizeAnswerValue(question, answerByQuestion.get(questionId))
-        : undefined;
-
-      if (normalized === undefined) {
-        if (question.required) {
-          throw new BadRequestException('Заповніть усі обовʼязкові питання');
-        }
-        continue;
-      }
-
-      normalizedAnswers.push({
-        question: this.toObjectId(questionId),
-        value: normalized,
-      });
-    }
-
-    return normalizedAnswers;
-  }
-
-  private normalizeAnswerValue(
-    question: SurveyQuestionDocument,
-    value: unknown,
-  ): NormalizedAnswerValue {
-    if (value === null || value === undefined) {
-      return undefined;
-    }
-
-    if (question.type === SurveyQuestionType.SINGLE) {
-      if (typeof value !== 'string') {
-        throw new BadRequestException('Оберіть один варіант відповіді');
-      }
-      const normalized = value.trim();
-      if (!normalized) return undefined;
-      if (!question.options.includes(normalized)) {
-        throw new BadRequestException('Некоректний варіант відповіді');
-      }
-      return normalized;
-    }
-
-    if (question.type === SurveyQuestionType.MULTIPLE) {
-      if (!Array.isArray(value)) {
-        throw new BadRequestException('Оберіть один або декілька варіантів');
-      }
-
-      const normalized = value
-        .filter((item): item is string => typeof item === 'string')
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-      if (normalized.length === 0) return undefined;
-      if (normalized.length !== value.length) {
-        throw new BadRequestException('Некоректний формат відповіді');
-      }
-      if (new Set(normalized).size !== normalized.length) {
-        throw new BadRequestException(
-          'Варіанти відповіді не можуть повторюватися',
-        );
-      }
-      if (!normalized.every((item) => question.options.includes(item))) {
-        throw new BadRequestException('Некоректний варіант відповіді');
-      }
-
-      return normalized;
-    }
-
-    if (question.type === SurveyQuestionType.RATING) {
-      if (typeof value !== 'number' || !Number.isInteger(value)) {
-        throw new BadRequestException('Оцінка повинна бути цілим числом');
-      }
-      if (value < 1 || value > 5) {
-        throw new BadRequestException('Оцінка повинна бути від 1 до 5');
-      }
-      return value;
-    }
-
-    if (typeof value !== 'string') {
-      throw new BadRequestException('Текстова відповідь повинна бути рядком');
-    }
-
-    const normalized = value.trim();
-    if (!normalized) return undefined;
-    if (normalized.length > 5000) {
-      throw new BadRequestException('Текстова відповідь занадто довга');
-    }
-    return normalized;
-  }
-
-  private aggregateQuestionResults(
-    questions: SurveyQuestionDocument[],
-    responses: SurveyResponseDocument[],
-  ): QuestionResult[] {
-    const answerValuesByQuestion = new Map<string, unknown[]>();
-
-    for (const response of responses) {
-      for (const answer of response.answers) {
-        const questionId = this.idToString(answer.question);
-        answerValuesByQuestion.set(questionId, [
-          ...(answerValuesByQuestion.get(questionId) ?? []),
-          answer.value,
-        ]);
-      }
-    }
-
-    return questions.map((question) => {
-      const questionId = this.idToString(question._id);
-      const values = answerValuesByQuestion.get(questionId) ?? [];
-      const base = {
-        questionId,
-        text: question.text,
-        required: question.required,
-        order: question.order,
-        totalAnswers: values.length,
-      };
-
-      if (
-        question.type === SurveyQuestionType.SINGLE ||
-        question.type === SurveyQuestionType.MULTIPLE
-      ) {
-        const counts = new Map(question.options.map((option) => [option, 0]));
-        for (const value of values) {
-          if (Array.isArray(value)) {
-            for (const item of value) {
-              if (typeof item === 'string') {
-                counts.set(item, (counts.get(item) ?? 0) + 1);
-              }
-            }
-          } else if (typeof value === 'string') {
-            counts.set(value, (counts.get(value) ?? 0) + 1);
-          }
-        }
-
-        const result: ChoiceQuestionResult = {
-          ...base,
-          type: question.type,
-          options: question.options.map((option) => {
-            const count = counts.get(option) ?? 0;
-            return {
-              value: option,
-              count,
-              percentage: this.percentage(count, values.length),
-            };
-          }),
-        };
-        return result;
-      }
-
-      if (question.type === SurveyQuestionType.RATING) {
-        const ratings = values.filter(
-          (value): value is number => typeof value === 'number',
-        );
-        const sum = ratings.reduce((acc, rating) => acc + rating, 0);
-
-        const result: RatingQuestionResult = {
-          ...base,
-          type: SurveyQuestionType.RATING,
-          average:
-            ratings.length === 0
-              ? null
-              : Number((sum / ratings.length).toFixed(2)),
-          min: ratings.length === 0 ? null : Math.min(...ratings),
-          max: ratings.length === 0 ? null : Math.max(...ratings),
-          distribution: [1, 2, 3, 4, 5].map((rating) => {
-            const count = ratings.filter((value) => value === rating).length;
-            return {
-              rating,
-              count,
-              percentage: this.percentage(count, ratings.length),
-            };
-          }),
-        };
-        return result;
-      }
-
-      const result: TextQuestionResult = {
-        ...base,
-        type: SurveyQuestionType.TEXT,
-        answers: values.filter(
-          (value): value is string => typeof value === 'string',
-        ),
-      };
-      return result;
-    });
   }
 
   private normalizeSurveyDates(
@@ -1170,44 +793,6 @@ export class SurveysService {
     return normalized;
   }
 
-  private async isSurveyTargetedToUser(
-    survey: SurveyDocument,
-    user: AuthenticatedUser,
-    profile: UserDto,
-  ): Promise<boolean> {
-    if (survey.targetType === SurveyTargetType.ALL) {
-      return user.role === Role.STUDENT;
-    }
-
-    if (survey.targetType === SurveyTargetType.TEACHERS) {
-      return user.role === Role.TEACHER;
-    }
-
-    if (survey.targetType === SurveyTargetType.STUDENTS_TEACHERS) {
-      return user.role === Role.STUDENT || user.role === Role.TEACHER;
-    }
-
-    if (survey.targetType === SurveyTargetType.GROUPS) {
-      return (
-        user.role === Role.STUDENT &&
-        profile.studentProfile?.group !== undefined &&
-        profile.studentProfile.group !== null &&
-        survey.targetIds.includes(profile.studentProfile.group)
-      );
-    }
-
-    if (user.role !== Role.STUDENT) {
-      return false;
-    }
-
-    return this.coursesService.isUserAssignedToCourseTargets({
-      userId: user.sub,
-      role: user.role,
-      targetIds: survey.targetIds,
-      groupId: profile.studentProfile?.group,
-    });
-  }
-
   private async closeExpiredSurveys(now = new Date()): Promise<void> {
     await this.surveyModel
       .updateMany(
@@ -1225,92 +810,9 @@ export class SurveysService {
       .exec();
   }
 
-  private async notifySurveyPublished(survey: SurveyDocument): Promise<void> {
-    try {
-      const surveyId = this.idToString(survey._id);
-      const payload = {
-        title: 'Нове опитування',
-        message: survey.title,
-        type: NotificationType.NEW_SURVEY,
-        actionUrl: `/surveys/${surveyId}`,
-        entityType: 'survey',
-        entityId: surveyId,
-        important: true,
-      };
-
-      if (survey.targetType === SurveyTargetType.ALL) {
-        await this.notificationsService.create({
-          ...payload,
-          targetType: 'students',
-        });
-        return;
-      }
-
-      if (survey.targetType === SurveyTargetType.TEACHERS) {
-        await this.notificationsService.create({
-          ...payload,
-          targetType: 'teachers',
-        });
-        return;
-      }
-
-      if (survey.targetType === SurveyTargetType.STUDENTS_TEACHERS) {
-        await this.notificationsService.create({
-          ...payload,
-          targetType: 'students_teachers',
-        });
-        return;
-      }
-
-      if (survey.targetType === SurveyTargetType.GROUPS) {
-        await this.notificationsService.createMany(
-          survey.targetIds.map((groupId) => ({
-            ...payload,
-            targetType: 'group',
-            groupId,
-          })),
-        );
-        return;
-      }
-
-      const recipients = await this.resolveNotificationRecipients(survey);
-      if (recipients.length === 0) {
-        this.logger.warn(
-          `Survey notification skipped: no recipients for survey ${this.idToString(survey._id)}`,
-        );
-        return;
-      }
-
-      await this.notificationsService.createMany(
-        recipients.map((userId) => ({
-          ...payload,
-          userId,
-        })),
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown error';
-      this.logger.warn(`Survey notification was not created: ${message}`);
-    }
-  }
-
-  private async countExpectedRecipients(
-    survey: SurveyDocument,
-  ): Promise<number> {
-    const recipients = await this.resolveNotificationRecipients(survey);
-    return new Set(recipients).size;
-  }
-
   private async restoreSurveyDraft(
     survey: SurveyDocument,
-    previousSurveyState: {
-      title: string;
-      description?: string;
-      anonymous: boolean;
-      targetType: SurveyTargetType;
-      targetIds: string[];
-      startDate?: Date;
-      endDate?: Date;
-    },
+    previousSurveyState: SurveyDraftSnapshot,
     previousQuestions: SurveyQuestionDocument[],
   ): Promise<void> {
     try {
@@ -1337,110 +839,9 @@ export class SurveysService {
           ? rollbackError.message
           : 'unknown rollback error';
       this.logger.error(
-        `Failed to restore survey draft ${this.idToString(survey._id)}: ${message}`,
+        `Failed to restore survey draft ${toId(survey._id)}: ${message}`,
       );
     }
-  }
-
-  private async resolveNotificationRecipients(
-    survey: SurveyDocument,
-  ): Promise<string[]> {
-    if (survey.targetType === SurveyTargetType.ALL) {
-      return this.usersService.findActiveUserIdsByRoles([Role.STUDENT]);
-    }
-
-    if (survey.targetType === SurveyTargetType.TEACHERS) {
-      return this.usersService.findActiveUserIdsByRoles([Role.TEACHER]);
-    }
-
-    if (survey.targetType === SurveyTargetType.STUDENTS_TEACHERS) {
-      return this.usersService.findActiveUserIdsByRoles([
-        Role.STUDENT,
-        Role.TEACHER,
-      ]);
-    }
-
-    if (survey.targetType === SurveyTargetType.GROUPS) {
-      const studentsByGroup = await Promise.all(
-        survey.targetIds.map((groupId) =>
-          this.usersService.getStudentsByGroup(groupId),
-        ),
-      );
-      return [
-        ...new Set(
-          studentsByGroup
-            .flat()
-            .filter(
-              (student) =>
-                student.role === Role.STUDENT && student.status === 'active',
-            )
-            .map((student) => student.id)
-            .filter(Boolean),
-        ),
-      ];
-    }
-
-    return this.coursesService.findStudentIdsByCourseTargets(survey.targetIds);
-  }
-
-  private formatSurvey(
-    survey: SurveyDocument,
-    questions: SurveyQuestionDocument[] = [],
-    completed?: boolean,
-  ): SurveyView {
-    const description = this.trimOptional(survey.description);
-    return {
-      id: this.idToString(survey._id),
-      title: survey.title,
-      ...(description ? { description } : {}),
-      status: survey.status,
-      anonymous: survey.anonymous,
-      targetType: survey.targetType,
-      targetIds: survey.targetIds,
-      createdBy: this.idToString(survey.createdBy),
-      ...(survey.startDate
-        ? { startDate: survey.startDate.toISOString() }
-        : {}),
-      ...(survey.endDate ? { endDate: survey.endDate.toISOString() } : {}),
-      ...(survey.publishedAt
-        ? { publishedAt: survey.publishedAt.toISOString() }
-        : {}),
-      ...(survey.closedAt ? { closedAt: survey.closedAt.toISOString() } : {}),
-      ...(survey.expectedRecipients === undefined
-        ? {}
-        : { expectedRecipients: survey.expectedRecipients }),
-      ...(survey.createdAt
-        ? { createdAt: survey.createdAt.toISOString() }
-        : {}),
-      ...(survey.updatedAt
-        ? { updatedAt: survey.updatedAt.toISOString() }
-        : {}),
-      ...(completed === undefined ? {} : { completed }),
-      questions: questions.map((question) => this.formatQuestion(question)),
-    };
-  }
-
-  private formatQuestion(question: SurveyQuestionDocument): SurveyQuestionView {
-    return {
-      id: this.idToString(question._id),
-      type: question.type,
-      text: question.text,
-      options: question.options,
-      required: question.required,
-      order: question.order,
-    };
-  }
-
-  private formatResponse(response: SurveyResponseDocument): SurveyResponseView {
-    return {
-      id: this.idToString(response._id),
-      surveyId: this.idToString(response.survey),
-      answers: response.answers.map((answer) => ({
-        questionId: this.idToString(answer.question),
-        value: answer.value,
-      })),
-      submittedAt: response.submittedAt.toISOString(),
-    };
   }
 
   private trimRequired(value: string, message: string): string {
@@ -1456,29 +857,11 @@ export class SurveysService {
     return normalized || undefined;
   }
 
-  private percentage(count: number, total: number): number {
-    if (total === 0) return 0;
-    return Number(((count / total) * 100).toFixed(2));
-  }
-
   private toObjectId(id: string): Types.ObjectId {
     if (!Types.ObjectId.isValid(id)) {
       throw new BadRequestException('Некоректний ID');
     }
     return new Types.ObjectId(id);
-  }
-
-  private idToString(value: unknown): string {
-    if (value instanceof Types.ObjectId) {
-      return value.toHexString();
-    }
-    if (typeof value === 'string') {
-      return value;
-    }
-    if (value && typeof value === 'object' && '_id' in value) {
-      return this.idToString((value as { _id?: unknown })._id);
-    }
-    return '';
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

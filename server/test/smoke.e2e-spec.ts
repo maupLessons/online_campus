@@ -26,8 +26,12 @@ class SmokeModule {}
 
 describe('Application configuration (e2e smoke)', () => {
   let app: NestExpressApplication;
+  let previousClientUrl: string | undefined;
 
   beforeAll(async () => {
+    previousClientUrl = process.env.CLIENT_URL;
+    process.env.CLIENT_URL = 'http://localhost:5173';
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [SmokeModule],
     }).compile();
@@ -39,6 +43,11 @@ describe('Application configuration (e2e smoke)', () => {
 
   afterAll(async () => {
     await app.close();
+    if (previousClientUrl === undefined) {
+      delete process.env.CLIENT_URL;
+    } else {
+      process.env.CLIENT_URL = previousClientUrl;
+    }
   });
 
   it('returns a deterministic API health payload', async () => {
@@ -60,6 +69,28 @@ describe('Application configuration (e2e smoke)', () => {
         expect(responseBody.message).toContain(
           'property role should not exist',
         );
+      });
+  });
+
+  it('allows the configured browser origin with credentials', async () => {
+    await request(app.getHttpServer())
+      .post('/api/smoke')
+      .set('Origin', 'http://localhost:5173')
+      .send({ name: 'Campus' })
+      .expect(200)
+      .expect('Access-Control-Allow-Origin', 'http://localhost:5173')
+      .expect('Access-Control-Allow-Credentials', 'true');
+  });
+
+  it('silently omits CORS headers for an untrusted origin', async () => {
+    await request(app.getHttpServer())
+      .post('/api/smoke')
+      .set('Origin', 'https://evil.example')
+      .send({ name: 'Campus' })
+      .expect(200)
+      .expect(({ headers }) => {
+        expect(headers['access-control-allow-origin']).toBeUndefined();
+        expect(headers['access-control-allow-credentials']).toBeUndefined();
       });
   });
 });

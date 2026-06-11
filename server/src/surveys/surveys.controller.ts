@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiProduces,
@@ -24,14 +25,19 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
-import { CreateSurveyDto } from './dto/create-survey.dto';
-import { SubmitSurveyResponseDto } from './dto/submit-survey-response.dto';
 import {
+  CreateSurveyDto,
+  SubmitSurveyResponseDto,
+  SurveyDeleteResultDto,
+  SurveyDto,
   SurveyExportFormat,
   SurveyExportQueryDto,
-} from './dto/survey-export-query.dto';
-import { SurveyQueryDto } from './dto/survey-query.dto';
-import { UpdateSurveyDto } from './dto/update-survey.dto';
+  SurveyQueryDto,
+  SurveyResponseStateDto,
+  SurveyResultsDto,
+  SurveySubmissionResultDto,
+  UpdateSurveyDto,
+} from './dto';
 import { SurveysService } from './surveys.service';
 
 @ApiTags('surveys')
@@ -44,6 +50,7 @@ export class SurveysController {
   @Post()
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'Create a survey draft' })
+  @ApiCreatedResponse({ type: SurveyDto })
   create(@Body() dto: CreateSurveyDto, @Request() req: AuthenticatedRequest) {
     return this.surveysService.create(dto, req.user);
   }
@@ -51,6 +58,7 @@ export class SurveysController {
   @Get()
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'List surveys for managers' })
+  @ApiOkResponse({ type: SurveyDto, isArray: true })
   findAll(
     @Query() query: SurveyQueryDto,
     @Request() req: AuthenticatedRequest,
@@ -61,12 +69,14 @@ export class SurveysController {
   @Get('active')
   @Roles(Role.STUDENT, Role.TEACHER)
   @ApiOperation({ summary: 'List active surveys available to current user' })
+  @ApiOkResponse({ type: SurveyDto, isArray: true })
   findActive(@Request() req: AuthenticatedRequest) {
     return this.surveysService.findActiveForUser(req.user);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get survey details' })
+  @ApiOkResponse({ type: SurveyDto })
   findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.surveysService.findOne(id, req.user);
   }
@@ -74,6 +84,7 @@ export class SurveysController {
   @Put(':id')
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'Update a draft survey' })
+  @ApiOkResponse({ type: SurveyDto })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateSurveyDto,
@@ -85,6 +96,7 @@ export class SurveysController {
   @Patch(':id/publish')
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'Publish a survey' })
+  @ApiOkResponse({ type: SurveyDto })
   publish(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.surveysService.publish(id, req.user);
   }
@@ -92,6 +104,7 @@ export class SurveysController {
   @Patch(':id/close')
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'Close a survey' })
+  @ApiOkResponse({ type: SurveyDto })
   close(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.surveysService.close(id, req.user);
   }
@@ -99,6 +112,7 @@ export class SurveysController {
   @Delete(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete a draft survey' })
+  @ApiOkResponse({ type: SurveyDeleteResultDto })
   remove(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.surveysService.remove(id, req.user);
   }
@@ -106,6 +120,7 @@ export class SurveysController {
   @Post(':id/respond')
   @Roles(Role.STUDENT, Role.TEACHER)
   @ApiOperation({ summary: 'Submit a survey response' })
+  @ApiCreatedResponse({ type: SurveySubmissionResultDto })
   respond(
     @Param('id') id: string,
     @Body() dto: SubmitSurveyResponseDto,
@@ -117,6 +132,7 @@ export class SurveysController {
   @Get(':id/my-response')
   @Roles(Role.STUDENT, Role.TEACHER)
   @ApiOperation({ summary: 'Get current user response state' })
+  @ApiOkResponse({ type: SurveyResponseStateDto })
   getMyResponse(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.surveysService.getMyResponse(id, req.user);
   }
@@ -124,6 +140,7 @@ export class SurveysController {
   @Get(':id/results')
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR, Role.PRESIDENT)
   @ApiOperation({ summary: 'Get aggregated survey results' })
+  @ApiOkResponse({ type: SurveyResultsDto })
   getResults(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
     return this.surveysService.getResults(id, req.user);
   }

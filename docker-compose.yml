@@ -9,10 +9,10 @@ services:
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
     depends_on:
-      mongodb:
-        condition: service_healthy
+      mongodb-init:
+        condition: service_completed_successfully
     healthcheck:
       test: "node -e \"fetch('http://127.0.0.1:3000/api').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""
       interval: 10s
@@ -45,17 +45,85 @@ services:
       - '27017'
     restart: unless-stopped
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_ROOT_USERNAME}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD}
-      - MONGO_INITDB_DATABASE=${MONGO_DATABASE}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE}
+      MONGO_REPLICA_SET_NAME: ${MONGO_REPLICA_SET_NAME:-rs0}
+      MONGO_REPLICA_SET_KEY: ${MONGO_REPLICA_SET_KEY:?MONGO_REPLICA_SET_KEY is required}
+    entrypoint:
+      - /bin/bash
+      - -c
+    command:
+      - |
+        set -euo pipefail
+        keyfile=/data/configdb/replica-set.key
+        printf '%s' "$$MONGO_REPLICA_SET_KEY" > "$$keyfile"
+        chown mongodb:mongodb "$$keyfile"
+        chmod 400 "$$keyfile"
+        exec /usr/local/bin/docker-entrypoint.sh mongod \
+          --replSet "$$MONGO_REPLICA_SET_NAME" \
+          --bind_ip_all \
+          --keyFile "$$keyfile"
     volumes:
       - ./data/db:/data/db
     healthcheck:
-      test: ['CMD-SHELL', 'mongosh --quiet --host localhost --port 27017 -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok" | grep 1']
+      test: ['CMD-SHELL', 'mongosh --quiet "mongodb://localhost:27017/admin?directConnection=true" -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok" | grep 1']
       interval: 5s
       timeout: 10s
-      retries: 12
-      start_period: 30s
+      retries: 20
+      start_period: 40s
+    stop_grace_period: 30s
+    networks:
+      - campus
+
+  mongodb-init:
+    image: mongo:7.0
+    restart: 'no'
+    environment:
+      MONGO_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_REPLICA_SET_NAME: ${MONGO_REPLICA_SET_NAME:-rs0}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    entrypoint:
+      - /bin/bash
+      - -c
+    command:
+      - |
+        set -euo pipefail
+        mongosh --quiet "mongodb://mongodb:27017/admin?directConnection=true" \
+          -u "$$MONGO_ROOT_USERNAME" \
+          -p "$$MONGO_ROOT_PASSWORD" \
+          --authenticationDatabase admin \
+          --eval '
+            try {
+              const status = rs.status();
+              if (status.set !== process.env.MONGO_REPLICA_SET_NAME) {
+                throw new Error("MongoDB belongs to an unexpected replica set");
+              }
+            } catch (error) {
+              if (error.codeName !== "NotYetInitialized") {
+                throw error;
+              }
+              rs.initiate({
+                _id: process.env.MONGO_REPLICA_SET_NAME,
+                members: [{ _id: 0, host: "mongodb:27017" }]
+              });
+            }
+            let primary = false;
+            for (let attempt = 0; attempt < 60; attempt += 1) {
+              const hello = db.adminCommand({ hello: 1 });
+              if (hello.isWritablePrimary) {
+                primary = true;
+                break;
+              }
+              sleep(1000);
+            }
+            if (!primary) {
+              throw new Error("Replica set did not elect a primary");
+            }
+          '
     networks:
       - campus
 

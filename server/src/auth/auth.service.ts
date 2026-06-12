@@ -126,7 +126,7 @@ export class AuthService {
     )) as unknown as AuthUser | null;
 
     if (!user) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: login,
         action: 'auth.login',
@@ -140,7 +140,7 @@ export class AuthService {
     }
 
     if (user.status === 'blocked') {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: user.id,
         userLogin: login,
         action: 'auth.login',
@@ -154,7 +154,7 @@ export class AuthService {
     }
 
     if (!(await bcrypt.compare(pass, user.passwordHash))) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: user.id,
         userLogin: login,
         action: 'auth.login',
@@ -184,7 +184,7 @@ export class AuthService {
       hashToken(refreshToken),
     );
 
-    this.auditLogService.logAction({
+    await this.auditLogService.logAction({
       userId: user.id,
       userLogin: user.login,
       action: 'auth.login',
@@ -220,7 +220,7 @@ export class AuthService {
       await this.usersService.findPasswordResetCandidate(identifier);
 
     if (!candidate || candidate.status !== 'active') {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: candidate?.id ?? null,
         userLogin: candidate?.login ?? identifier,
         userRole: candidate?.role,
@@ -248,7 +248,7 @@ export class AuthService {
       expiresAt,
     );
 
-    this.auditLogService.logAction({
+    await this.auditLogService.logAction({
       userId: candidate.id,
       userLogin: candidate.login,
       userRole: candidate.role,
@@ -288,7 +288,7 @@ export class AuthService {
     );
 
     if (!user) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: 'unknown',
         action: 'auth.password_reset.confirm',
@@ -304,7 +304,7 @@ export class AuthService {
       );
     }
 
-    this.auditLogService.logAction({
+    await this.auditLogService.logAction({
       userId: user.id,
       userLogin: user.login,
       userRole: user.role,
@@ -331,7 +331,7 @@ export class AuthService {
     try {
       decoded = this.jwtService.verify(refreshToken);
     } catch (err: unknown) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: 'unknown',
         action: 'auth.refresh',
@@ -345,7 +345,7 @@ export class AuthService {
     }
 
     if (!isJwtPayload(decoded)) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: 'unknown',
         action: 'auth.refresh',
@@ -363,7 +363,7 @@ export class AuthService {
     )) as unknown as AuthUser | null;
 
     if (!user) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: decoded.login,
         action: 'auth.refresh',
@@ -377,7 +377,7 @@ export class AuthService {
     }
 
     if (user.status === 'blocked') {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: user.id,
         userLogin: user.login,
         action: 'auth.refresh',
@@ -396,7 +396,7 @@ export class AuthService {
       : [];
 
     if (!hashes.includes(tokenHash)) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: user.id,
         userLogin: user.login,
         action: 'auth.refresh',
@@ -428,7 +428,7 @@ export class AuthService {
       hashToken(newRefreshToken),
     );
 
-    this.auditLogService.logAction({
+    await this.auditLogService.logAction({
       userId: user.id,
       userLogin: user.login,
       action: 'auth.refresh',
@@ -452,7 +452,7 @@ export class AuthService {
     try {
       decoded = this.jwtService.verify(refreshToken);
     } catch (err: unknown) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: 'unknown',
         action: 'auth.logout',
@@ -466,7 +466,7 @@ export class AuthService {
     }
 
     if (!isJwtPayload(decoded)) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: 'unknown',
         action: 'auth.logout',
@@ -484,7 +484,7 @@ export class AuthService {
     )) as unknown as AuthUser | null;
 
     if (!user) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: null,
         userLogin: decoded.login,
         action: 'auth.logout',
@@ -498,7 +498,7 @@ export class AuthService {
     }
 
     if (user.status === 'blocked') {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: user.id,
         userLogin: user.login,
         action: 'auth.logout',
@@ -516,7 +516,7 @@ export class AuthService {
       hashToken(refreshToken),
     );
 
-    this.auditLogService.logAction({
+    await this.auditLogService.logAction({
       userId: user.id,
       userLogin: user.login,
       action: 'auth.logout',
@@ -548,7 +548,7 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      this.auditLogService.logAction({
+      await this.auditLogService.logAction({
         userId: user.id,
         userLogin: user.login,
         action: 'auth.change_password',
@@ -565,7 +565,7 @@ export class AuthService {
     await this.usersService.updatePassword(userId, newPasswordHash);
     await this.usersService.removeAllRefreshTokenHashes(user.id);
 
-    this.auditLogService.logAction({
+    await this.auditLogService.logAction({
       userId: user.id,
       userLogin: user.login,
       action: 'auth.change_password',

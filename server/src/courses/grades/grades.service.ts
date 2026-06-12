@@ -37,6 +37,8 @@ import { PaginatedDto } from '../../common/dto/paginated.dto';
 import { User, UserDocument } from '../../users/schemas';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { NotificationType } from '../../notifications/dto/create-notification.dto';
+import { DomainAuditContext } from '../../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../../audit-log/audit-actions';
 
 @Injectable()
 export class GradesService {
@@ -58,6 +60,7 @@ export class GradesService {
     dto: GradeSubmissionDto,
     userId: string,
     role: Role,
+    audit?: DomainAuditContext,
   ): Promise<SubmissionDto> {
     const submission = await this.submissionModel
       .findById(submissionId)
@@ -111,6 +114,28 @@ export class GradesService {
     }
 
     const populated = await saved.populate('files');
+    await audit?.record({
+      action: AUDIT_ACTIONS.GRADE_SUBMISSION,
+      targetEntity: 'grade',
+      targetId: toId(grade._id),
+      details: {
+        submissionId,
+        assignmentId: toId(assignment._id),
+        studentId: toId(submission.student),
+        courseAssignmentId: toId(assignment.courseAssignment),
+        before: previousGrade
+          ? {
+              value: previousGrade.value,
+              status: previousGrade.status,
+            }
+          : null,
+        after: {
+          value: grade.value,
+          type: grade.type,
+          status: grade.status,
+        },
+      },
+    });
     return transformToDto(SubmissionDto, populated.toObject());
   }
 
@@ -118,6 +143,7 @@ export class GradesService {
     dto: CreateGradeDto,
     userId: string,
     role: Role,
+    audit?: DomainAuditContext,
   ): Promise<GradeResponseDto> {
     const courseAssignment = await this.coursesService.validateOwnership(
       dto.courseAssignmentId,
@@ -145,6 +171,20 @@ export class GradesService {
     });
 
     await this.notifyGradeCreated(populated.toObject() as GradeDocument);
+    await audit?.record({
+      action: AUDIT_ACTIONS.GRADE_CREATE,
+      targetEntity: 'grade',
+      targetId: toId(populated._id),
+      details: {
+        studentId: dto.studentId,
+        courseAssignmentId: dto.courseAssignmentId,
+        after: {
+          type: populated.type,
+          value: populated.value,
+          status: populated.status,
+        },
+      },
+    });
     return transformToDto(GradeResponseDto, populated.toObject());
   }
 
@@ -153,6 +193,7 @@ export class GradesService {
     dto: UpdateGradeDto,
     userId: string,
     role: Role,
+    audit?: DomainAuditContext,
   ): Promise<GradeResponseDto> {
     const grade = await this.gradeModel
       .findOne({ _id: id, status: { $ne: 'withdrawn' } })
@@ -176,9 +217,16 @@ export class GradesService {
       this.assertGradeFitsAssignmentMaxScore(dto.value, linkedAssignment);
     }
 
-    const previousGradeSnapshot = {
+    const previousGradeNotificationSnapshot = {
+      type: grade.type,
       value: grade.value,
+      status: grade.status,
       comment: grade.comment,
+    };
+    const previousGradeSnapshot = {
+      type: previousGradeNotificationSnapshot.type,
+      value: previousGradeNotificationSnapshot.value,
+      status: previousGradeNotificationSnapshot.status,
     };
 
     if (dto.type) grade.type = dto.type;
@@ -200,7 +248,10 @@ export class GradesService {
 
     if (
       linkedAssignment &&
-      this.shouldNotifySubmissionGrade(previousGradeSnapshot, populated)
+      this.shouldNotifySubmissionGrade(
+        previousGradeNotificationSnapshot,
+        populated,
+      )
     ) {
       await this.notifySubmissionGraded(
         populated,
@@ -208,6 +259,25 @@ export class GradesService {
         populated.value,
       );
     }
+
+    await audit?.record({
+      action: AUDIT_ACTIONS.GRADE_UPDATE,
+      targetEntity: 'grade',
+      targetId: id,
+      details: {
+        studentId: toId(populated.student),
+        courseAssignmentId: toId(populated.courseAssignment),
+        assignmentId: populated.assignment
+          ? toId(populated.assignment)
+          : undefined,
+        before: previousGradeSnapshot,
+        after: {
+          type: populated.type,
+          value: populated.value,
+          status: populated.status,
+        },
+      },
+    });
 
     return transformToDto(GradeResponseDto, populated.toObject());
   }

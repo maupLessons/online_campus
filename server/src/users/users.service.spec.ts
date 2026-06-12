@@ -105,7 +105,7 @@ describe('UsersService', () => {
           studentProfile: '',
         },
       },
-      { returnDocument: 'after' },
+      { returnDocument: 'after', runValidators: true },
     );
     expect(removeAllRefreshTokenHashesSpy).toHaveBeenCalledWith(userId);
     expect(result.role).toBe(Role.TEACHER);
@@ -173,7 +173,7 @@ describe('UsersService', () => {
           role: Role.ADMIN,
         },
       },
-      { returnDocument: 'after' },
+      { returnDocument: 'after', runValidators: true },
     );
     expect(removeAllRefreshTokenHashesSpy).not.toHaveBeenCalled();
     expect(result.firstName).toBe('Олег');
@@ -255,5 +255,63 @@ describe('UsersService', () => {
     });
     expect(model.findByIdAndUpdate).not.toHaveBeenCalled();
     expect(removeAllRefreshTokenHashesSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects self blocking before loading the target user', async () => {
+    const userId = objectId();
+
+    await expect(service.toggleBlock(userId, userId)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    expect(model.findById).not.toHaveBeenCalled();
+    expect(model.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('protects the last active admin from blocking', async () => {
+    const userId = objectId();
+
+    model.findById.mockReturnValue(
+      query({
+        role: Role.ADMIN,
+        status: 'active',
+      }),
+    );
+    model.countDocuments.mockReturnValue(query(0));
+
+    await expect(
+      service.toggleBlock(userId, objectId()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(model.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('revokes refresh sessions when the general update blocks a user', async () => {
+    const userId = objectId();
+
+    model.findById.mockReturnValue(
+      query({
+        login: 'teacher1',
+        role: Role.TEACHER,
+        status: 'active',
+      }),
+    );
+    model.findByIdAndUpdate.mockReturnValue(
+      query(
+        userResponse({
+          _id: userId,
+          status: 'blocked',
+        }),
+      ),
+    );
+
+    await service.update(userId, { status: 'blocked' }, objectId());
+
+    expect(removeAllRefreshTokenHashesSpy).toHaveBeenCalledWith(userId);
+    expect(model.findByIdAndUpdate).toHaveBeenCalledWith(
+      userId,
+      { $set: { status: 'blocked' } },
+      { returnDocument: 'after', runValidators: true },
+    );
   });
 });

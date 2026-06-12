@@ -3,6 +3,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import mongoose from 'mongoose';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditInterceptor } from './audit-log/audit.interceptor';
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware';
@@ -19,6 +20,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { FilesModule } from './files/files.module';
 import { SurveysModule } from './surveys/surveys.module';
 import { ElectiveDisciplinesModule } from './elective-disciplines/elective-disciplines.module';
+import { TransactionInterceptor } from './audit-log/transaction.interceptor';
+
+mongoose.set('transactionAsyncLocalStorage', true);
 
 function readPositiveNumber(
   config: ConfigService,
@@ -27,6 +31,32 @@ function readPositiveNumber(
 ): number {
   const value = Number(config.get<string>(key));
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function buildMongoUri(config: ConfigService): string {
+  const username = encodeURIComponent(
+    config.getOrThrow<string>('MONGO_ROOT_USERNAME'),
+  );
+  const password = encodeURIComponent(
+    config.getOrThrow<string>('MONGO_ROOT_PASSWORD'),
+  );
+  const host = config.getOrThrow<string>('MONGO_HOST');
+  const port = config.getOrThrow<string>('MONGO_PORT');
+  const database = encodeURIComponent(
+    config.getOrThrow<string>('MONGO_DATABASE'),
+  );
+  const replicaSet = config.get<string>('MONGO_REPLICA_SET_NAME')?.trim();
+  const query = new URLSearchParams({
+    authSource: 'admin',
+  });
+
+  if (replicaSet) {
+    query.set('replicaSet', replicaSet);
+    query.set('retryWrites', 'true');
+    query.set('w', 'majority');
+  }
+
+  return `mongodb://${username}:${password}@${host}:${port}/${database}?${query.toString()}`;
 }
 
 @Module({
@@ -56,13 +86,7 @@ function readPositiveNumber(
         }
 
         return {
-          uri: `mongodb://${config.get<string>(
-            'MONGO_ROOT_USERNAME',
-          )}:${config.get<string>('MONGO_ROOT_PASSWORD')}@${config.get<string>(
-            'MONGO_HOST',
-          )}:${config.get<string>('MONGO_PORT')}/${config.get<string>(
-            'MONGO_DATABASE',
-          )}?authSource=admin`,
+          uri: buildMongoUri(config),
           ...connectionOptions,
         };
       },
@@ -82,6 +106,7 @@ function readPositiveNumber(
   providers: [
     { provide: APP_GUARD, useClass: CsrfGuard },
     { provide: APP_GUARD, useClass: UserAwareThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: TransactionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     ExistsInDatabaseConstraint,
   ],

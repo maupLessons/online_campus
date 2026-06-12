@@ -14,6 +14,7 @@ import { LessonJournalController } from './journal/lesson-journal.controller';
 import { LessonJournalService } from './journal/lesson-journal.service';
 import { FilesModule } from '../files/files.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 import { ScheduleEntry, ScheduleEntrySchema } from '../schedule/schemas';
 import { User, UserSchema } from '../users/schemas';
 import {
@@ -37,6 +38,7 @@ import {
   imports: [
     FilesModule,
     NotificationsModule,
+    AuditLogModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Course.name, schema: CourseSchema },

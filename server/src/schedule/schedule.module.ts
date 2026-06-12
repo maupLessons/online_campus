@@ -17,6 +17,7 @@ import { User, UserSchema } from '../users/schemas';
 import { ScheduleController } from './schedule.controller';
 import { ScheduleService } from './schedule.service';
 import { ScheduleEntry, ScheduleEntrySchema } from './schemas';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ScheduleEntry, ScheduleEntrySchema } from './schemas';
       { name: User.name, schema: UserSchema },
     ]),
     NotificationsModule,
+    AuditLogModule,
   ],
   controllers: [ScheduleController],
   providers: [ScheduleService],

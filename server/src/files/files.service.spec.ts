@@ -69,6 +69,10 @@ function createService(
     assignmentModel as never,
     submissionModel as never,
     courseAssignmentModel as never,
+    {
+      onRollback: jest.fn().mockReturnValue(false),
+      onCommit: jest.fn().mockReturnValue(false),
+    } as never,
   );
 }
 

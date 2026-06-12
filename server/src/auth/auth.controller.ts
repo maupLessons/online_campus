@@ -39,6 +39,10 @@ import {
   readCookie,
   readConfiguredSecret,
 } from './auth-cookie.util';
+import { AuditEvent } from '../audit-log/audit.decorator';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { markDomainAuditRecorded } from '../audit-log/audit-context';
 
 interface RequestWithUser extends RequestWithId {
   user: { sub: string; login: string; role?: string };
@@ -115,6 +119,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     configService: ConfigService,
+    private readonly auditLogService: AuditLogService,
   ) {
     this.accessCookieName =
       configService.get<string>('AUTH_ACCESS_COOKIE_NAME') ??
@@ -163,6 +168,7 @@ export class AuthController {
 
   @Throttle({ default: { limit: 10, ttl: 900000 } })
   @Post('login')
+  @AuditEvent(AUDIT_ACTIONS.AUTH_LOGIN, 'auth')
   @ApiOperation({ summary: 'Login user' })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 201, type: AuthResponseDto })
@@ -174,6 +180,7 @@ export class AuthController {
     @Req() req: RequestWithId,
     @Res({ passthrough: true }) res: Response,
   ) {
+    markDomainAuditRecorded(req);
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const userAgent = req.get('user-agent') || 'unknown';
     const auth = await this.authService.login(
@@ -189,6 +196,7 @@ export class AuthController {
 
   @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('password-reset/request')
+  @AuditEvent(AUDIT_ACTIONS.AUTH_PASSWORD_RESET_REQUEST, 'auth')
   @HttpCode(200)
   @ApiOperation({ summary: 'Request password reset token' })
   @ApiBody({ type: RequestPasswordResetDto })
@@ -201,6 +209,7 @@ export class AuthController {
     @Body() body: RequestPasswordResetDto,
     @Req() req: RequestWithId,
   ) {
+    markDomainAuditRecorded(req);
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const userAgent = req.get('user-agent') || 'unknown';
     return this.authService.requestPasswordReset(
@@ -213,6 +222,7 @@ export class AuthController {
 
   @Throttle({ default: { limit: 5, ttl: 900000 } })
   @Post('password-reset/confirm')
+  @AuditEvent(AUDIT_ACTIONS.AUTH_PASSWORD_RESET_CONFIRM, 'auth')
   @HttpCode(200)
   @ApiOperation({ summary: 'Confirm password reset with token' })
   @ApiBody({ type: ConfirmPasswordResetDto })
@@ -223,6 +233,7 @@ export class AuthController {
     @Body() body: ConfirmPasswordResetDto,
     @Req() req: RequestWithId,
   ) {
+    markDomainAuditRecorded(req);
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const userAgent = req.get('user-agent') || 'unknown';
     return this.authService.confirmPasswordReset(
@@ -235,6 +246,7 @@ export class AuthController {
 
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('refresh')
+  @AuditEvent(AUDIT_ACTIONS.AUTH_REFRESH, 'auth')
   @ApiOperation({ summary: 'Refresh JWT token' })
   @ApiBody({ type: RefreshDto })
   @ApiResponse({ status: 200, description: 'Session cookies refreshed' })
@@ -244,11 +256,15 @@ export class AuthController {
     @Req() req: RequestWithId,
     @Res({ passthrough: true }) res: Response,
   ) {
+    markDomainAuditRecorded(req);
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const userAgent = req.get('user-agent') || 'unknown';
     const refreshToken = this.getRefreshToken(req, body.refreshToken);
 
     if (!refreshToken) {
+      await this.logControllerAuthEvent(req, 'auth.refresh', 'failure', {
+        reason: 'missing_refresh_token',
+      });
       this.clearAuthCookies(res);
       throw new UnauthorizedException('Невірний refresh token');
     }
@@ -270,21 +286,26 @@ export class AuthController {
 
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @Post('logout')
+  @AuditEvent(AUDIT_ACTIONS.AUTH_LOGOUT, 'auth')
   @ApiOperation({ summary: 'Logout (revoke refresh token)' })
   @ApiBody({ type: LogoutDto })
   @ApiResponse({ status: 200, description: 'Logged out' })
   @ApiResponse({ status: 401, description: 'Невірний refresh token' })
-  logout(
+  async logout(
     @Body() body: LogoutDto,
     @Req() req: RequestWithId,
     @Res({ passthrough: true }) res: Response,
   ) {
+    markDomainAuditRecorded(req);
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const userAgent = req.get('user-agent') || 'unknown';
     const refreshToken = this.getRefreshToken(req, body.refreshToken);
     this.clearAuthCookies(res);
 
     if (!refreshToken) {
+      await this.logControllerAuthEvent(req, 'auth.logout', 'success', {
+        refreshTokenPresent: false,
+      });
       return { message: 'Logged out' };
     }
 
@@ -294,6 +315,7 @@ export class AuthController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @Post('change-password')
+  @AuditEvent(AUDIT_ACTIONS.AUTH_CHANGE_PASSWORD, 'auth')
   @ApiOperation({ summary: 'Change user password' })
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({ status: 200, description: 'Пароль успішно змінено' })
@@ -303,6 +325,7 @@ export class AuthController {
     @Body() body: ChangePasswordDto,
     @Req() req: RequestWithUser,
   ) {
+    markDomainAuditRecorded(req);
     const ip = req.ip || req.socket?.remoteAddress || 'unknown';
     const userAgent = req.get('user-agent') || 'unknown';
     return this.authService.changePassword(
@@ -397,5 +420,23 @@ export class AuthController {
       readCookie(req, this.refreshCookieName) ??
       (typeof fallback === 'string' && fallback.trim() ? fallback.trim() : null)
     );
+  }
+
+  private async logControllerAuthEvent(
+    req: RequestWithId,
+    action: string,
+    result: 'success' | 'failure',
+    details: Record<string, unknown>,
+  ): Promise<void> {
+    await this.auditLogService.logAction({
+      userId: null,
+      userLogin: 'Guest',
+      action,
+      details,
+      ipAddress: req.ip || req.socket?.remoteAddress || 'unknown',
+      userAgent: req.get('user-agent') || 'unknown',
+      result,
+      requestId: req.requestId,
+    });
   }
 }

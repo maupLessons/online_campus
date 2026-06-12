@@ -28,27 +28,41 @@ import { RequestWithUser } from '../../common/types/request-with-user.interface'
 import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
+import { AuditLogService } from '../../audit-log/audit-log.service';
+import { createAuditContext } from '../../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../../audit-log/audit-actions';
+import { AuditEvent } from '../../audit-log/audit.decorator';
 
 @ApiTags('courses')
 @ApiBearerAuth()
 @Controller('courses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class GradesController {
-  constructor(private gradesService: GradesService) {}
+  constructor(
+    private gradesService: GradesService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Post('grades')
   @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.GRADE_CREATE, 'grade')
   @ApiResponse({ type: GradeResponseDto })
   async createGrade(
     @Body() dto: CreateGradeDto,
     @Request() req: RequestWithUser,
   ): Promise<GradeResponseDto> {
     const { sub, role } = req.user;
-    return this.gradesService.create(dto, sub, role);
+    return this.gradesService.create(
+      dto,
+      sub,
+      role,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Patch('grades/:id')
   @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.GRADE_UPDATE, 'grade')
   @ApiResponse({ type: GradeResponseDto })
   async updateGrade(
     @Param('id') id: string,
@@ -56,11 +70,18 @@ export class GradesController {
     @Request() req: RequestWithUser,
   ): Promise<GradeResponseDto> {
     const { sub, role } = req.user;
-    return this.gradesService.update(id, dto, sub, role);
+    return this.gradesService.update(
+      id,
+      dto,
+      sub,
+      role,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Post('submissions/:id/grade')
   @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.GRADE_SUBMISSION, 'grade')
   @ApiResponse({ type: SubmissionDto })
   async gradeSubmission(
     @Param('id') id: string,
@@ -68,7 +89,13 @@ export class GradesController {
     @Request() req: RequestWithUser,
   ): Promise<SubmissionDto> {
     const { sub, role } = req.user;
-    return this.gradesService.gradeSubmission(id, dto, sub, role);
+    return this.gradesService.gradeSubmission(
+      id,
+      dto,
+      sub,
+      role,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Get(':courseAssignmentId/grades')

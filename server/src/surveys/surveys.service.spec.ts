@@ -13,6 +13,7 @@ import { SurveyAccessPolicy } from './survey-access.policy';
 import { SurveyAudienceService } from './survey-audience.service';
 import { SurveyQuestionType, SurveyStatus, SurveyTargetType } from './schemas';
 import { SurveysService } from './surveys.service';
+import { DomainAuditEvent } from '../audit-log/audit-context';
 
 type QueryMock<T> = {
   exec: jest.Mock<Promise<T>, []>;
@@ -378,6 +379,10 @@ describe('SurveysService', () => {
   });
 
   it('preserves a scheduled start and creates a student notification on publish', async () => {
+    const record = jest
+      .fn<Promise<void>, [DomainAuditEvent]>()
+      .mockResolvedValue(undefined);
+    const audit = { record };
     const draftSurvey = createSurveyDoc({
       status: SurveyStatus.DRAFT,
       startDate: new Date('2099-01-01T00:00:00.000Z'),
@@ -395,11 +400,15 @@ describe('SurveysService', () => {
     surveyModel.findOneAndUpdate.mockReturnValueOnce(
       execQuery(createPublishedSurveyDoc(draftSurvey)),
     );
-    await service.publish(draftSurvey._id.toString(), {
-      sub: draftSurvey.createdBy.toString(),
-      login: 'dean',
-      role: Role.DEAN,
-    });
+    await service.publish(
+      draftSurvey._id.toString(),
+      {
+        sub: draftSurvey.createdBy.toString(),
+        login: 'dean',
+        role: Role.DEAN,
+      },
+      audit,
+    );
 
     expect(draftSurvey.startDate?.toISOString()).toBe(
       '2099-01-01T00:00:00.000Z',
@@ -415,6 +424,17 @@ describe('SurveysService', () => {
       }),
     );
     expect(notificationsService.createMany).not.toHaveBeenCalled();
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'survey.publish',
+        targetEntity: 'survey',
+        targetId: draftSurvey._id.toString(),
+      }),
+    );
+    expect(record.mock.calls[0][0].details).toMatchObject({
+      before: { status: SurveyStatus.DRAFT },
+      after: { status: SurveyStatus.ACTIVE },
+    });
   });
 
   it('rejects publishing a legacy draft without lifecycle dates', async () => {

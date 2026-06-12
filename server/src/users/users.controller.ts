@@ -28,13 +28,20 @@ import { ChangeUserRoleDto } from './dto/change-user-role.dto';
 import { UserQueryDto } from './dto/user-query.dto';
 import { UserSearchQueryDto } from './dto/user-search-query.dto';
 import { ApiPaginatedResponse } from '../common/swagger/api-paginated.response';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { createAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AuditEvent } from '../audit-log/audit.decorator';
 
 @ApiTags('users')
 @ApiBearerAuth()
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Post()
   @Roles(Role.ADMIN)
@@ -44,16 +51,23 @@ export class UsersController {
 
   @Patch(':id')
   @Roles(Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.USER_UPDATE, 'user')
   update(
     @Param('id') id: string,
     @Body() updateUserDto: UpdateUserDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.usersService.update(id, updateUserDto, req.user.sub);
+    return this.usersService.update(
+      id,
+      updateUserDto,
+      req.user.sub,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Patch(':id/role')
   @Roles(Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.USER_ROLE_CHANGE, 'user')
   @ApiOperation({ summary: 'Change user role' })
   @ApiResponse({ status: 200, type: UserDto })
   @ApiResponse({ status: 400, description: 'Invalid role transition payload' })
@@ -64,13 +78,23 @@ export class UsersController {
     @Body() changeUserRoleDto: ChangeUserRoleDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.usersService.changeRole(id, changeUserRoleDto, req.user.sub);
+    return this.usersService.changeRole(
+      id,
+      changeUserRoleDto,
+      req.user.sub,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Patch(':id/block')
   @Roles(Role.ADMIN)
-  toggleBlock(@Param('id') id: string) {
-    return this.usersService.toggleBlock(id);
+  @AuditEvent(AUDIT_ACTIONS.USER_STATUS_CHANGE, 'user')
+  toggleBlock(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.usersService.toggleBlock(
+      id,
+      req.user.sub,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Get()

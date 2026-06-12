@@ -12,6 +12,7 @@ import {
   ElectiveDisciplineStatus,
   ElectiveSelectionPeriodStatus,
 } from './schemas';
+import { DomainAuditEvent } from '../audit-log/audit-context';
 
 type QueryChain<T> = {
   populate: jest.Mock<QueryChain<T>, [unknown?]>;
@@ -247,6 +248,10 @@ describe('ElectiveDisciplinesService', () => {
   });
 
   it('selects a discipline and reserves capacity atomically', async () => {
+    const record = jest
+      .fn<Promise<void>, [DomainAuditEvent]>()
+      .mockResolvedValue(undefined);
+    const audit = { record };
     const result = await service.selectDiscipline(
       period._id.toString(),
       { disciplineId: discipline._id.toString() },
@@ -255,6 +260,7 @@ describe('ElectiveDisciplinesService', () => {
         login: 'student1',
         role: Role.STUDENT,
       },
+      audit,
     );
 
     expect(disciplineModel.findOneAndUpdate).toHaveBeenCalledWith(
@@ -274,6 +280,16 @@ describe('ElectiveDisciplinesService', () => {
       }),
     );
     expect(result.discipline.id).toBe(discipline._id.toString());
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'elective.selection.select',
+        targetEntity: 'elective_selection',
+      }),
+    );
+    expect(record.mock.calls[0][0].details).toMatchObject({
+      periodId: period._id.toString(),
+      disciplineId: discipline._id.toString(),
+    });
   });
 
   it('keeps the reserved seat when selection creation committed but reload fails', async () => {
@@ -386,6 +402,10 @@ describe('ElectiveDisciplinesService', () => {
   });
 
   it('finalizes a closed period into course assignments', async () => {
+    const record = jest
+      .fn<Promise<void>, [DomainAuditEvent]>()
+      .mockResolvedValue(undefined);
+    const audit = { record };
     const closedPeriod = createPeriod({
       status: ElectiveSelectionPeriodStatus.CLOSED,
       closedAt: new Date('2026-01-10T00:00:00.000Z'),
@@ -427,11 +447,15 @@ describe('ElectiveDisciplinesService', () => {
       ]),
     );
 
-    const result = await service.finalizePeriod(closedPeriod._id.toString(), {
-      sub: '6622b2a00f3a22d5b625d182',
-      login: 'dean1',
-      role: Role.DEAN,
-    });
+    const result = await service.finalizePeriod(
+      closedPeriod._id.toString(),
+      {
+        sub: '6622b2a00f3a22d5b625d182',
+        login: 'dean1',
+        role: Role.DEAN,
+      },
+      audit,
+    );
 
     const courseCall = courseModel.findOneAndUpdate.mock.calls[0] as [
       Record<string, unknown>,
@@ -444,6 +468,17 @@ describe('ElectiveDisciplinesService', () => {
       code: finalizedDiscipline.code,
     });
     expect(courseCall[2]).toMatchObject({ upsert: true });
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'elective.period.finalize',
+        targetEntity: 'elective_period',
+        targetId: closedPeriod._id.toString(),
+      }),
+    );
+    expect(record.mock.calls[0][0].details).toMatchObject({
+      before: { status: ElectiveSelectionPeriodStatus.CLOSED },
+      after: { status: ElectiveSelectionPeriodStatus.FINALIZED },
+    });
 
     const assignmentCall = courseAssignmentModel.findOneAndUpdate.mock
       .calls[0] as [

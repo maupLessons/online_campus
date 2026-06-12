@@ -19,12 +19,16 @@ import * as path from 'path';
 import { ApiConsumes, ApiBody, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AuditInterceptor } from '../audit-log/audit.interceptor';
 import { Role } from '../common/types/roles.enum';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { createAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AuditEvent } from '../audit-log/audit.decorator';
+import { RequestWithId } from '../common/middleware/request-id.middleware';
 
 const MAX_UPLOAD_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
-interface AuthenticatedFileRequest {
+interface AuthenticatedFileRequest extends RequestWithId {
   user: {
     sub: string;
     login: string;
@@ -36,11 +40,14 @@ interface AuthenticatedFileRequest {
 @ApiBearerAuth()
 @Controller('files')
 @UseGuards(JwtAuthGuard)
-@UseInterceptors(AuditInterceptor)
 export class FilesController {
-  constructor(private readonly filesService: FilesService) {}
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Post('upload')
+  @AuditEvent(AUDIT_ACTIONS.FILE_UPLOAD, 'file')
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES },
@@ -73,7 +80,11 @@ export class FilesController {
     file: Express.Multer.File,
     @Req() req: AuthenticatedFileRequest,
   ) {
-    return this.filesService.saveFile(file, req.user.sub);
+    return this.filesService.saveFile(
+      file,
+      req.user.sub,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Get('download/:id')
@@ -114,10 +125,16 @@ export class FilesController {
   }
 
   @Delete(':id')
+  @AuditEvent(AUDIT_ACTIONS.FILE_DELETE, 'file')
   async removeFile(
     @Param('id') id: string,
     @Req() req: AuthenticatedFileRequest,
   ) {
-    return this.filesService.deleteFile(id, req.user.sub, req.user.role);
+    return this.filesService.deleteFile(
+      id,
+      req.user.sub,
+      req.user.role,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 }

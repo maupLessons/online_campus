@@ -528,17 +528,73 @@ interface ElectiveSelection {
 **Що логується:**
 
 - Всі входи (успішні та невдалі) з IP та user-agent
-- Зміни ролей та блокування акаунтів
-- CRUD-операції над розкладом
-- Виставлення та редагування оцінок
-- Публікація та закриття опитувань
-- Завантаження файлів
+- Зміни ролей та блокування акаунтів із попереднім/новим станом і ознакою відкликання сесій
+- CRUD-операції над розкладом із компактними знімками `before`/`after`
+- Виставлення та редагування оцінок із прив'язкою до студента, курсу, завдання та значення
+- Публікація та закриття опитувань із назвою, аудиторією та переходом статусу
+- Завантаження та видалення файлів із безпечними метаданими без внутрішнього шляху зберігання
+- Публікація, закриття й фіналізація періодів вибіркових дисциплін, а також вибір і скасування вибору студентом
+
+**Стабільні доменні назви подій:**
+
+| Домен | Події |
+|---|---|
+| Користувачі | `user.role.change`, `user.status.change` |
+| Розклад | `schedule.create`, `schedule.update`, `schedule.delete` |
+| Оцінки | `grade.create`, `grade.update`, `grade.submission.grade` |
+| Опитування | `survey.publish`, `survey.close` |
+| Файли | `file.upload`, `file.delete` |
+| Вибіркові дисципліни | `elective.period.publish`, `elective.period.close`, `elective.period.finalize`, `elective.selection.select`, `elective.selection.cancel` |
+
+Глобальний interceptor зберігає резервний HTTP-аудит для непокритих
+мутацій і помилок. Якщо сервіс уже записав доменну подію, дубль HTTP-події
+не створюється. Для помилок зберігаються лише тип і HTTP-статус без тексту
+винятку або тіла запиту.
+
+**Transactional outbox і append-only sink:**
+
+- усі HTTP-мутації за замовчуванням виконуються в MongoDB-транзакції;
+- доменна операція та запис у `audit_outbox` комітяться або відкочуються
+  разом, тому успішна зміна не може залишитися без журналу;
+- фоновий processor атомарно захоплює події, переносить їх до append-only
+  колекції `auditlogs` і використовує унікальний `eventId` для ідемпотентності;
+- startup readiness check зупиняє застосунок, якщо транзакційний режим
+  увімкнений на MongoDB без replica set;
+- тимчасові помилки обробляються exponential backoff, завислі lock-и
+  відновлюються, а вичерпані події переходять у стан `dead`;
+- записи фінального журналу незмінні на рівні Mongoose schema; update,
+  replace і delete операції відхиляються;
+- оброблені outbox-події зберігаються 7 днів для діагностики, після чого
+  видаляються TTL-індексом; фінальний аудит не має TTL.
+
+Транзакційний режим потребує MongoDB replica set. Локальний
+`docker-compose.yml` запускає single-node `rs0` із keyfile-аутентифікацією та
+ідемпотентним init-контейнером. Для кожного середовища потрібно один раз
+створити окремий секрет:
+
+```bash
+openssl rand -hex 48
+```
+
+Значення зберігається як `MONGO_REPLICA_SET_KEY` у локальному `.env` або
+GitHub Actions secret. Воно не повинно потрапляти до Git.
+
+Автоматичне закриття прострочених опитувань і періодів вибору фіксується
+системною агрегованою подією (`userLogin: system`) із кількістю закритих
+сутностей, граничним часом і переходом статусу.
+
+`details` проходить централізовану санітизацію: секрети й токени
+редагуються, небезпечні ключі прототипу відкидаються, а глибина, довжина
+рядків, кількість ключів, елементів і загальний обсяг структури обмежуються.
+Коментарі до оцінок, паролі, cookie, JWT і внутрішні шляхи файлів до журналу
+не потрапляють.
 
 **Структура запису:**
 
 ```typescript
 interface AuditLogEntry {
   id: string;
+  eventId: string;
   timestamp: Date;
   userId: string | null;
   userLogin: string;
@@ -550,6 +606,7 @@ interface AuditLogEntry {
   ipAddress: string;
   userAgent: string;
   result: "success" | "failure";
+  requestId?: string;
 }
 ```
 
@@ -945,6 +1002,8 @@ Student        (базовий доступ)
 
 - Phase 1: in-memory mock data — завершено як історичний MVP-етап
 - Phase 2: MongoDB через Mongoose — завершено для runtime-модулів
+- MongoDB запускається як single-node replica set для транзакцій і
+  transactional audit outbox
 - `server/src/common/mock-data` використовується тільки як fixture-source для контрольованих demo seeders, не як runtime data layer
 
 ### Нові типи сповіщень
@@ -1146,14 +1205,19 @@ online_campus/
 │       │   ├── files.controller.ts
 │       │   └── files.service.ts
 │       │
-│       ├── audit-log/         # audit persistence and admin listing
+│       ├── audit-log/         # transactional outbox, append-only audit, admin listing
 │       │   ├── dto/
 │       │   ├── schemas/
+│       │   ├── audit-actions.ts
+│       │   ├── audit-context.ts
+│       │   ├── audit-outbox.processor.ts
 │       │   ├── audit-log.module.ts
 │       │   ├── audit-log.controller.ts
 │       │   ├── audit-log.service.ts
 │       │   ├── audit-log.service.spec.ts
-│       │   └── audit.interceptor.ts
+│       │   ├── audit.interceptor.ts
+│       │   ├── transaction.interceptor.ts
+│       │   └── transaction-lifecycle.service.ts
 │       │
 │       ├── seed-data/         # optional demo data seeders for local fixtures
 │       │   ├── seed.module.ts
@@ -1286,9 +1350,17 @@ MONGO_ROOT_PASSWORD=your-strong-mongo-root-password
 MONGO_DATABASE=campus_db
 MONGO_HOST=mongodb
 MONGO_PORT=27017
+MONGO_REPLICA_SET_NAME=rs0
+MONGO_REPLICA_SET_KEY=generate-with-openssl-rand-hex-48
 MONGO_RETRY_ATTEMPTS=20
 MONGO_RETRY_DELAY_MS=3000
 MONGO_SERVER_SELECTION_TIMEOUT_MS=5000
+
+# Transactional audit outbox
+AUDIT_TRANSACTIONAL_OUTBOX=true
+AUDIT_OUTBOX_POLL_INTERVAL_MS=500
+AUDIT_OUTBOX_LOCK_TIMEOUT_MS=30000
+AUDIT_OUTBOX_MAX_ATTEMPTS=10
 
 # Demo fixtures
 SEED_DEMO_DATA=false
@@ -1419,7 +1491,13 @@ Backend `npm run test:e2e` запускає швидкі smoke-перевірк�
 
 Запускається після push у `master`. Workflow підключається до VPS через SSH, виконує `git pull origin master`, записує `.env` із GitHub Secrets і запускає `docker compose up --build -d`.
 
-Deploy workflow передає обов'язкові `MONGO_*`, `JWT_SECRET`, `PORT`, `CLIENT_URL` та optional `AUTH_*` secrets. Порожні optional `AUTH_*` secrets не записуються в `.env`, тому застосунок використовує кодові defaults; `AUTH_COOKIE_SECURE` для deploy за замовчуванням записується як `true`.
+Deploy workflow передає обов'язкові `MONGO_*`, `JWT_SECRET`, `PORT`,
+`CLIENT_URL`, `AUTH_CSRF_SECRET` та optional `AUTH_*`/`AUDIT_*` secrets.
+`MONGO_REPLICA_SET_KEY` є обов'язковим і має бути окремим випадковим секретом
+для кожного середовища. Порожні optional secrets не записуються в `.env`,
+тому застосунок використовує кодові defaults; `AUTH_COOKIE_SECURE` та
+`AUDIT_TRANSACTIONAL_OUTBOX` для deploy за замовчуванням записуються як
+`true`.
 
 ```yaml
 name: Deploy
@@ -1459,6 +1537,8 @@ jobs:
 | `MONGO_DATABASE` | назва MongoDB database |
 | `MONGO_HOST` | hostname MongoDB у Docker network |
 | `MONGO_PORT` | порт MongoDB |
+| `MONGO_REPLICA_SET_NAME` | optional; назва replica set (`rs0` за замовчуванням) |
+| `MONGO_REPLICA_SET_KEY` | обов'язковий keyfile secret; згенерувати `openssl rand -hex 48` |
 | `JWT_SECRET` | секрет для JWT |
 | `PORT` | порт backend |
 | `CLIENT_URL` | URL frontend для CORS і reset links |
@@ -1474,6 +1554,10 @@ jobs:
 | `AUTH_CSRF_BINDING_COOKIE_NAME` | назва HttpOnly binding cookie, до якої прив'язано CSRF token |
 | `AUTH_CSRF_BINDING_COOKIE_PATH` | path HttpOnly CSRF binding cookie (`/api` за замовчуванням) |
 | `AUTH_CSRF_HEADER_NAME` | header, який frontend надсилає для unsafe методів (`x-csrf-token`) |
+| `AUDIT_TRANSACTIONAL_OUTBOX` | `true` для атомарного доменного запису та аудиту |
+| `AUDIT_OUTBOX_POLL_INTERVAL_MS` | optional; інтервал доставки audit-подій |
+| `AUDIT_OUTBOX_LOCK_TIMEOUT_MS` | optional; timeout відновлення завислого worker lock |
+| `AUDIT_OUTBOX_MAX_ATTEMPTS` | optional; кількість спроб до dead-letter state |
 | `SWAGGER_ENABLED` | `true` для dev, `false`/unset у production; Swagger вимкнений у production за замовчуванням |
 | `SEED_DEMO_DATA` | optional; `true` тільки для локальних fixture-даних, `false`/unset для shared dev/prod |
 | `SEED_DEMO_DATA_IN_PRODUCTION` | emergency/demo-only override; не додавати у production secrets |

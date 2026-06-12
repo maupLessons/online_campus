@@ -7,6 +7,7 @@ import {
   IsNumber,
   MinLength,
   Matches,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Role } from '../../common/types/roles.enum';
@@ -61,8 +62,8 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({ example: 'active', enum: ['active', 'blocked'] })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsIn(['active', 'blocked'])
+  status?: 'active' | 'blocked';
 
   @ApiPropertyOptional({ example: 'https://example.com/avatar.jpg' })
   @IsOptional()

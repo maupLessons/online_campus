@@ -22,6 +22,8 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangeUserRoleDto } from './dto/change-user-role.dto';
 import { toId } from '../common/utils/to-id.util';
+import { DomainAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -285,6 +287,7 @@ export class UsersService {
     id: string,
     updateUserDto: UpdateUserDto,
     actorId?: string,
+    audit?: DomainAuditContext,
   ): Promise<UserDto> {
     const {
       login,
@@ -336,9 +339,17 @@ export class UsersService {
     }
 
     const roleChanged = role !== undefined && role !== existingUser.role;
+    const statusChanged =
+      rest.status !== undefined && rest.status !== existingUser.status;
 
     if (roleChanged && actorId === id) {
       throw new ForbiddenException('Неможливо змінити власну роль');
+    }
+    if (statusChanged && rest.status === 'blocked' && actorId === id) {
+      throw new ForbiddenException('Неможливо заблокувати власний акаунт');
+    }
+    if (statusChanged && rest.status === 'blocked') {
+      await this.assertAnotherActiveAdminExists(existingUser, id);
     }
 
     if (roleChanged) {
@@ -364,14 +375,24 @@ export class UsersService {
         updateData.role = role;
       }
 
-      if (existingUser.role === Role.STUDENT) {
+      const hasStudentProfileUpdates =
+        groupId !== undefined ||
+        recordBookNumber !== undefined ||
+        year !== undefined;
+      const hasTeacherProfileUpdates =
+        departmentId !== undefined || position !== undefined;
+
+      if (existingUser.role === Role.STUDENT && hasStudentProfileUpdates) {
         updateData.studentProfile = {
           group: groupId ?? existingUser.studentProfile?.group,
           recordBookNumber:
             recordBookNumber ?? existingUser.studentProfile?.recordBookNumber,
           year: year !== undefined ? year : existingUser.studentProfile?.year,
         };
-      } else if (existingUser.role === Role.TEACHER) {
+      } else if (
+        existingUser.role === Role.TEACHER &&
+        hasTeacherProfileUpdates
+      ) {
         updateData.teacherProfile = {
           department: departmentId ?? existingUser.teacherProfile?.department,
           position: position ?? existingUser.teacherProfile?.position,
@@ -385,7 +406,10 @@ export class UsersService {
     }
 
     const updatedUser = await this.userModel
-      .findByIdAndUpdate(id, updateOperation, { returnDocument: 'after' })
+      .findByIdAndUpdate(id, updateOperation, {
+        returnDocument: 'after',
+        runValidators: true,
+      })
       .lean()
       .exec();
 
@@ -393,10 +417,15 @@ export class UsersService {
       throw new NotFoundException('Користувача не знайдено');
     }
 
-    if (roleChanged || password) {
+    if (
+      roleChanged ||
+      password ||
+      (statusChanged && updatedUser.status === 'blocked')
+    ) {
       await this.removeAllRefreshTokenHashes(id);
     }
 
+    await this.recordUserSecurityChanges(existingUser, updatedUser, id, audit);
     return transformToDto(UserDto, updatedUser);
   }
 
@@ -404,6 +433,7 @@ export class UsersService {
     id: string,
     changeUserRoleDto: ChangeUserRoleDto,
     actorId?: string,
+    audit?: DomainAuditContext,
   ): Promise<UserDto> {
     this.assertValidUserId(id);
 
@@ -429,7 +459,10 @@ export class UsersService {
     );
 
     const updatedUser = await this.userModel
-      .findByIdAndUpdate(id, roleUpdate, { returnDocument: 'after' })
+      .findByIdAndUpdate(id, roleUpdate, {
+        returnDocument: 'after',
+        runValidators: true,
+      })
       .lean()
       .exec();
 
@@ -441,14 +474,38 @@ export class UsersService {
       await this.removeAllRefreshTokenHashes(id);
     }
 
+    await audit?.record({
+      action: AUDIT_ACTIONS.USER_ROLE_CHANGE,
+      targetEntity: 'user',
+      targetId: id,
+      details: {
+        targetLogin: updatedUser.login,
+        before: { role: existingUser.role },
+        after: { role: updatedUser.role },
+        changed: roleChanged,
+        sessionsRevoked: roleChanged,
+      },
+    });
+
     return transformToDto(UserDto, updatedUser);
   }
 
-  async toggleBlock(id: string): Promise<UserDto> {
+  async toggleBlock(
+    id: string,
+    actorId?: string,
+    audit?: DomainAuditContext,
+  ): Promise<UserDto> {
+    if (actorId === id) {
+      throw new ForbiddenException('Неможливо заблокувати власний акаунт');
+    }
+
     const user = await this.userModel.findById(id).lean().exec();
     if (!user) throw new NotFoundException('Користувача не знайдено');
 
     const newStatus = user.status === 'active' ? 'blocked' : 'active';
+    if (newStatus === 'blocked') {
+      await this.assertAnotherActiveAdminExists(user, id);
+    }
     const statusUpdate =
       newStatus === 'blocked'
         ? {
@@ -464,11 +521,27 @@ export class UsersService {
         : { $set: { status: newStatus } };
 
     const updated = await this.userModel
-      .findByIdAndUpdate(id, statusUpdate, { returnDocument: 'after' })
+      .findByIdAndUpdate(id, statusUpdate, {
+        returnDocument: 'after',
+        runValidators: true,
+      })
       .lean()
       .exec();
 
     if (!updated) throw new NotFoundException('Користувача не знайдено');
+
+    await audit?.record({
+      action: AUDIT_ACTIONS.USER_STATUS_CHANGE,
+      targetEntity: 'user',
+      targetId: id,
+      details: {
+        targetLogin: updated.login,
+        before: { status: user.status },
+        after: { status: updated.status },
+        sessionsRevoked: newStatus === 'blocked',
+      },
+    });
+
     return transformToDto(UserDto, updated);
   }
 
@@ -748,6 +821,17 @@ export class UsersService {
       return;
     }
 
+    await this.assertAnotherActiveAdminExists(existingUser, id);
+  }
+
+  private async assertAnotherActiveAdminExists(
+    existingUser: UserRoleState,
+    id: string,
+  ): Promise<void> {
+    if (existingUser.role !== Role.ADMIN || existingUser.status !== 'active') {
+      return;
+    }
+
     const activeAdminsLeft = await this.userModel
       .countDocuments({
         role: Role.ADMIN,
@@ -758,8 +842,43 @@ export class UsersService {
 
     if (activeAdminsLeft === 0) {
       throw new BadRequestException(
-        'Неможливо змінити роль останнього активного адміністратора',
+        'Неможливо змінити або заблокувати останнього активного адміністратора',
       );
+    }
+  }
+
+  private async recordUserSecurityChanges(
+    previous: { role: Role; status: string; login: string },
+    next: { role: Role; status: string; login: string },
+    targetId: string,
+    audit?: DomainAuditContext,
+  ): Promise<void> {
+    if (previous.role !== next.role) {
+      await audit?.record({
+        action: AUDIT_ACTIONS.USER_ROLE_CHANGE,
+        targetEntity: 'user',
+        targetId,
+        details: {
+          targetLogin: next.login,
+          before: { role: previous.role },
+          after: { role: next.role },
+          sessionsRevoked: true,
+        },
+      });
+    }
+
+    if (previous.status !== next.status) {
+      await audit?.record({
+        action: AUDIT_ACTIONS.USER_STATUS_CHANGE,
+        targetEntity: 'user',
+        targetId,
+        details: {
+          targetLogin: next.login,
+          before: { status: previous.status },
+          after: { status: next.status },
+          sessionsRevoked: next.status === 'blocked',
+        },
+      });
     }
   }
 }

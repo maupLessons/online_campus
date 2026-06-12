@@ -659,7 +659,12 @@ describe('Elective disciplines (e2e)', () => {
       )
       .set('Authorization', `Bearer ${fixture.studentA.token}`)
       .expect(400);
-    await expectAuditEntry('electives-finalize-success', 'success');
+    await expectAuditEntry(
+      'electives-finalize-success',
+      'success',
+      'elective_period',
+      'elective.period.finalize',
+    );
   });
 
   it('releases the finalization lock after validation failure and allows retry', async () => {
@@ -908,11 +913,16 @@ describe('Elective disciplines (e2e)', () => {
   async function expectAuditEntry(
     requestId: string,
     result: 'success' | 'failure',
+    targetEntity = 'electives',
+    action?: string,
   ): Promise<void> {
     for (let attempt = 0; attempt < 20; attempt += 1) {
       const entry = await collection('AuditLog').findOne({ requestId, result });
       if (entry) {
-        expect(entry.targetEntity).toBe('electives');
+        expect(entry.targetEntity).toBe(targetEntity);
+        if (action) {
+          expect(entry.action).toBe(action);
+        }
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, 25));

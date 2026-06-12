@@ -48,6 +48,9 @@ import {
   ElectiveSelectionPeriodDocument,
   ElectiveSelectionPeriodStatus,
 } from './schemas';
+import { DomainAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 type ReferenceView = {
   id: string;
@@ -195,6 +198,7 @@ export class ElectiveDisciplinesService {
     private readonly userModel: Model<UserDocument>,
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
+    private readonly auditLogService?: AuditLogService,
   ) {}
 
   async createDiscipline(
@@ -418,6 +422,7 @@ export class ElectiveDisciplinesService {
     id: string,
     dto: SetElectivePeriodStatusDto,
     user: AuthenticatedUser,
+    audit?: DomainAuditContext,
   ): Promise<ElectivePeriodView> {
     this.ensurePeriodManager(user);
 
@@ -468,7 +473,21 @@ export class ElectiveDisciplinesService {
       }
 
       await this.notifyPeriodPublished(activated);
-      return this.findPeriodView(activated._id);
+      const view = await this.findPeriodView(activated._id);
+      await audit?.record({
+        action: AUDIT_ACTIONS.ELECTIVE_PERIOD_PUBLISH,
+        targetEntity: 'elective_period',
+        targetId: view.id,
+        details: {
+          title: view.title,
+          academicYear: view.academicYear,
+          semester: view.semester,
+          targetGroupCount: view.targetGroups.length,
+          before: { status: ElectiveSelectionPeriodStatus.DRAFT },
+          after: { status: view.status },
+        },
+      });
+      return view;
     }
 
     if (dto.status === ElectiveSelectionPeriodStatus.CLOSED) {
@@ -499,7 +518,20 @@ export class ElectiveDisciplinesService {
         );
       }
 
-      return this.findPeriodView(closed._id);
+      const view = await this.findPeriodView(closed._id);
+      await audit?.record({
+        action: AUDIT_ACTIONS.ELECTIVE_PERIOD_CLOSE,
+        targetEntity: 'elective_period',
+        targetId: view.id,
+        details: {
+          title: view.title,
+          academicYear: view.academicYear,
+          semester: view.semester,
+          before: { status: ElectiveSelectionPeriodStatus.ACTIVE },
+          after: { status: view.status },
+        },
+      });
+      return view;
     }
 
     throw new BadRequestException('Недопустимий перехід стану періоду вибору');
@@ -508,6 +540,7 @@ export class ElectiveDisciplinesService {
   async finalizePeriod(
     periodId: string,
     user: AuthenticatedUser,
+    audit?: DomainAuditContext,
   ): Promise<ElectivePeriodFinalizationView> {
     this.ensurePeriodManager(user);
     await this.closeExpiredPeriods();
@@ -545,7 +578,21 @@ export class ElectiveDisciplinesService {
     if (!period) {
       const currentPeriod = await this.getPeriodOrThrow(periodId);
       if (currentPeriod.status === ElectiveSelectionPeriodStatus.FINALIZED) {
-        return this.getFinalizationSummary(currentPeriod);
+        const summary = await this.getFinalizationSummary(currentPeriod);
+        await audit?.record({
+          action: AUDIT_ACTIONS.ELECTIVE_PERIOD_FINALIZE,
+          targetEntity: 'elective_period',
+          targetId: summary.period.id,
+          details: {
+            title: summary.period.title,
+            before: { status: ElectiveSelectionPeriodStatus.FINALIZED },
+            after: { status: ElectiveSelectionPeriodStatus.FINALIZED },
+            idempotentReplay: true,
+            totalSelections: summary.totalSelections,
+            courseAssignmentCount: summary.courseAssignments.length,
+          },
+        });
+        return summary;
       }
       if (
         currentPeriod.status === ElectiveSelectionPeriodStatus.CLOSED &&
@@ -672,11 +719,26 @@ export class ElectiveDisciplinesService {
 
       await this.notifyPeriodFinalized(finalizedPeriod, selections);
 
-      return {
+      const result = {
         period: await this.findPeriodView(finalizedPeriod._id),
         totalSelections: selections.length,
         courseAssignments,
       };
+      await audit?.record({
+        action: AUDIT_ACTIONS.ELECTIVE_PERIOD_FINALIZE,
+        targetEntity: 'elective_period',
+        targetId: result.period.id,
+        details: {
+          title: result.period.title,
+          academicYear: result.period.academicYear,
+          semester: result.period.semester,
+          before: { status: ElectiveSelectionPeriodStatus.CLOSED },
+          after: { status: result.period.status },
+          totalSelections: result.totalSelections,
+          courseAssignmentCount: result.courseAssignments.length,
+        },
+      });
+      return result;
     } catch (error) {
       await this.releaseFinalizationLock(period._id, finalizationToken);
       throw error;
@@ -803,6 +865,7 @@ export class ElectiveDisciplinesService {
     periodId: string,
     dto: SelectElectiveDto,
     user: AuthenticatedUser,
+    audit?: DomainAuditContext,
   ): Promise<ElectiveSelectionView> {
     if (user.role !== Role.STUDENT) {
       throw new ForbiddenException('Вибір дисциплін доступний лише студентам');
@@ -915,13 +978,29 @@ export class ElectiveDisciplinesService {
       throw new NotFoundException('Вибір не знайдено після створення');
     }
 
-    return this.formatSelection(populated);
+    const view = this.formatSelection(populated);
+    await audit?.record({
+      action: AUDIT_ACTIONS.ELECTIVE_SELECTION_SELECT,
+      targetEntity: 'elective_selection',
+      targetId: view.id,
+      details: {
+        periodId: view.periodId,
+        periodTitle: period.title,
+        disciplineId: view.discipline.id,
+        disciplineCode: view.discipline.code,
+        disciplineTitle: view.discipline.title,
+        groupId: view.group.id,
+        choiceSlot: selection.choiceSlot,
+      },
+    });
+    return view;
   }
 
   async cancelSelection(
     periodId: string,
     selectionId: string,
     user: AuthenticatedUser,
+    audit?: DomainAuditContext,
   ): Promise<{ success: true }> {
     if (user.role !== Role.STUDENT) {
       throw new ForbiddenException('Вибір дисциплін доступний лише студентам');
@@ -949,6 +1028,19 @@ export class ElectiveDisciplinesService {
         { $inc: { enrolledCount: -1 } },
       )
       .exec();
+
+    await audit?.record({
+      action: AUDIT_ACTIONS.ELECTIVE_SELECTION_CANCEL,
+      targetEntity: 'elective_selection',
+      targetId: selectionId,
+      details: {
+        periodId,
+        periodTitle: period.title,
+        disciplineId: this.idToString(selection.discipline),
+        groupId: this.idToString(selection.group),
+        choiceSlot: selection.choiceSlot,
+      },
+    });
 
     return { success: true };
   }
@@ -1345,7 +1437,7 @@ export class ElectiveDisciplinesService {
   }
 
   private async closeExpiredPeriods(now = new Date()): Promise<void> {
-    await this.periodModel
+    const result = await this.periodModel
       .updateMany(
         {
           status: ElectiveSelectionPeriodStatus.ACTIVE,
@@ -1359,6 +1451,25 @@ export class ElectiveDisciplinesService {
         },
       )
       .exec();
+
+    if (result.modifiedCount > 0) {
+      await this.auditLogService?.logAction({
+        userId: null,
+        userLogin: 'system',
+        action: AUDIT_ACTIONS.ELECTIVE_PERIOD_CLOSE,
+        targetEntity: 'elective_period',
+        details: {
+          automated: true,
+          closedCount: result.modifiedCount,
+          before: { status: ElectiveSelectionPeriodStatus.ACTIVE },
+          after: { status: ElectiveSelectionPeriodStatus.CLOSED },
+          cutoff: now,
+        },
+        ipAddress: 'internal',
+        userAgent: 'elective-lifecycle',
+        result: 'success',
+      });
+    }
   }
 
   private async notifyPeriodPublished(

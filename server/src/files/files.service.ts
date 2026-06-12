@@ -24,6 +24,9 @@ import {
 import { User, UserDocument } from '../users/schemas';
 import { Role } from '../common/types/roles.enum';
 import { toId } from '../common/utils/to-id.util';
+import { DomainAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { TransactionLifecycleService } from '../audit-log/transaction-lifecycle.service';
 
 const ALLOWED_FILE_TYPES = new Map<string, Set<string>>([
   ['.png', new Set(['image/png'])],
@@ -52,9 +55,16 @@ export class FilesService {
     private submissionModel: Model<SubmissionDocument>,
     @InjectModel(CourseAssignment.name)
     private courseAssignmentModel: Model<CourseAssignmentDocument>,
+    private readonly transactionLifecycle: TransactionLifecycleService,
   ) {}
 
-  async saveFile(file: Express.Multer.File, userId: string) {
+  async saveFile(
+    file: Express.Multer.File,
+    userId: string,
+    audit?: DomainAuditContext,
+  ) {
+    let writtenFilePath: string | undefined;
+
     try {
       const correctOriginalName = Buffer.from(
         file.originalname,
@@ -68,13 +78,20 @@ export class FilesService {
         throw new BadRequestException('Недопустимий тип файлу');
       }
 
-      const safeFileName = `${randomUUID()}${fileExtension}`;
+      const safeFileName = this.transactionLifecycle.getOrCreate(
+        'files.upload.storage-name',
+        () => `${randomUUID()}${fileExtension}`,
+      );
       const uploadPath = path.join(__dirname, '..', '..', 'uploads');
 
       await fs.promises.mkdir(uploadPath, { recursive: true });
 
       const filePath = path.join(uploadPath, safeFileName);
       await fs.promises.writeFile(filePath, file.buffer);
+      writtenFilePath = filePath;
+      this.transactionLifecycle.onRollback(() =>
+        this.removePhysicalFile(filePath),
+      );
 
       const savedFile = await this.fileModel.create({
         originalName: correctOriginalName,
@@ -84,12 +101,27 @@ export class FilesService {
         uploadedBy: new Types.ObjectId(userId),
       });
 
+      await audit?.record({
+        action: AUDIT_ACTIONS.FILE_UPLOAD,
+        targetEntity: 'file',
+        targetId: toId(savedFile._id),
+        details: {
+          originalName: correctOriginalName,
+          extension: fileExtension,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+        },
+      });
+
       return {
         message: 'Файл успішно завантажено',
         fileId: savedFile._id,
         fileLink: `/api/files/download/${savedFile._id.toString()}`,
       };
     } catch (error) {
+      if (writtenFilePath) {
+        await fs.promises.unlink(writtenFilePath).catch(() => undefined);
+      }
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -153,7 +185,12 @@ export class FilesService {
     }
   }
 
-  async deleteFile(fileId: string, userId: string, role: Role) {
+  async deleteFile(
+    fileId: string,
+    userId: string,
+    role: Role,
+    audit?: DomainAuditContext,
+  ) {
     const file = await this.getFileById(fileId);
 
     if (role !== Role.ADMIN && file.uploadedBy.toString() !== userId) {
@@ -169,16 +206,26 @@ export class FilesService {
     );
 
     try {
-      try {
-        await fs.promises.unlink(filePath);
-      } catch (error: unknown) {
-        const code = (error as { code?: unknown }).code;
-        if (code !== 'ENOENT') {
-          throw error;
-        }
+      await this.fileModel.findByIdAndDelete(fileId);
+      await audit?.record({
+        action: AUDIT_ACTIONS.FILE_DELETE,
+        targetEntity: 'file',
+        targetId: fileId,
+        details: {
+          originalName: file.originalName,
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          uploadedBy: toId(file.uploadedBy),
+        },
+      });
+
+      const deferred = this.transactionLifecycle.onCommit(() =>
+        this.removePhysicalFile(filePath),
+      );
+      if (!deferred) {
+        await this.removePhysicalFile(filePath);
       }
 
-      await this.fileModel.findByIdAndDelete(fileId);
       return { message: 'Файл видалено' };
     } catch {
       throw new BadRequestException('Помилка при видаленні файлу');
@@ -259,6 +306,17 @@ export class FilesService {
     }
 
     return false;
+  }
+
+  private async removePhysicalFile(filePath: string): Promise<void> {
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (error: unknown) {
+      const code = (error as { code?: unknown }).code;
+      if (code !== 'ENOENT') {
+        throw error;
+      }
+    }
   }
 
   private async canAccessCourseAssignment(

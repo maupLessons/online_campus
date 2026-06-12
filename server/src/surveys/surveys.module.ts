@@ -17,6 +17,7 @@ import {
   SurveyResponseSchema,
   SurveySchema,
 } from './schemas';
+import { AuditLogModule } from '../audit-log/audit-log.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import {
     CoursesModule,
     UsersModule,
     NotificationsModule,
+    AuditLogModule,
   ],
   controllers: [SurveysController],
   providers: [SurveysService, SurveyAccessPolicy, SurveyAudienceService],

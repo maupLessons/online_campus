@@ -39,13 +39,20 @@ import {
   UpdateSurveyDto,
 } from './dto';
 import { SurveysService } from './surveys.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { createAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AuditEvent } from '../audit-log/audit.decorator';
 
 @ApiTags('surveys')
 @ApiBearerAuth()
 @Controller('surveys')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SurveysController {
-  constructor(private readonly surveysService: SurveysService) {}
+  constructor(
+    private readonly surveysService: SurveysService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Post()
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
@@ -95,18 +102,28 @@ export class SurveysController {
 
   @Patch(':id/publish')
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @AuditEvent(AUDIT_ACTIONS.SURVEY_PUBLISH, 'survey')
   @ApiOperation({ summary: 'Publish a survey' })
   @ApiOkResponse({ type: SurveyDto })
   publish(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
-    return this.surveysService.publish(id, req.user);
+    return this.surveysService.publish(
+      id,
+      req.user,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Patch(':id/close')
   @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @AuditEvent(AUDIT_ACTIONS.SURVEY_CLOSE, 'survey')
   @ApiOperation({ summary: 'Close a survey' })
   @ApiOkResponse({ type: SurveyDto })
   close(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
-    return this.surveysService.close(id, req.user);
+    return this.surveysService.close(
+      id,
+      req.user,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Delete(':id')

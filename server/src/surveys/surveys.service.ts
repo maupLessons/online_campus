@@ -50,6 +50,9 @@ import {
   SurveyTargetType,
 } from './schemas';
 import { SurveyDraftSnapshot } from './types';
+import { DomainAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AuditLogService } from '../audit-log/audit-log.service';
 
 const surveyTargetTypesWithoutIds = new Set<SurveyTargetType>([
   SurveyTargetType.ALL,
@@ -73,6 +76,7 @@ export class SurveysService {
     private readonly usersService: UsersService,
     private readonly audienceService: SurveyAudienceService,
     private readonly accessPolicy: SurveyAccessPolicy,
+    private readonly auditLogService?: AuditLogService,
   ) {}
 
   async create(
@@ -295,7 +299,11 @@ export class SurveysService {
     return mapSurveyToDto(savedSurvey, questions);
   }
 
-  async publish(id: string, user: AuthenticatedUser): Promise<SurveyDto> {
+  async publish(
+    id: string,
+    user: AuthenticatedUser,
+    audit?: DomainAuditContext,
+  ): Promise<SurveyDto> {
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanManageSurvey(survey, user);
 
@@ -356,11 +364,28 @@ export class SurveysService {
     }
 
     await this.audienceService.notifyPublished(savedSurvey);
+    await audit?.record({
+      action: AUDIT_ACTIONS.SURVEY_PUBLISH,
+      targetEntity: 'survey',
+      targetId: toId(savedSurvey._id),
+      details: {
+        title: savedSurvey.title,
+        before: { status: SurveyStatus.DRAFT },
+        after: { status: savedSurvey.status },
+        targetType: savedSurvey.targetType,
+        targetCount: savedSurvey.targetIds.length,
+        expectedRecipients: savedSurvey.expectedRecipients,
+      },
+    });
 
     return mapSurveyToDto(savedSurvey, questions);
   }
 
-  async close(id: string, user: AuthenticatedUser): Promise<SurveyDto> {
+  async close(
+    id: string,
+    user: AuthenticatedUser,
+    audit?: DomainAuditContext,
+  ): Promise<SurveyDto> {
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanManageSurvey(survey, user);
 
@@ -391,6 +416,18 @@ export class SurveysService {
     }
 
     const questions = await this.getQuestionsForSurvey(savedSurvey._id);
+    await audit?.record({
+      action: AUDIT_ACTIONS.SURVEY_CLOSE,
+      targetEntity: 'survey',
+      targetId: toId(savedSurvey._id),
+      details: {
+        title: savedSurvey.title,
+        before: { status: SurveyStatus.ACTIVE },
+        after: { status: savedSurvey.status },
+        targetType: savedSurvey.targetType,
+        expectedRecipients: savedSurvey.expectedRecipients,
+      },
+    });
 
     return mapSurveyToDto(savedSurvey, questions);
   }
@@ -794,7 +831,7 @@ export class SurveysService {
   }
 
   private async closeExpiredSurveys(now = new Date()): Promise<void> {
-    await this.surveyModel
+    const result = await this.surveyModel
       .updateMany(
         {
           status: SurveyStatus.ACTIVE,
@@ -808,6 +845,25 @@ export class SurveysService {
         },
       )
       .exec();
+
+    if (result.modifiedCount > 0) {
+      await this.auditLogService?.logAction({
+        userId: null,
+        userLogin: 'system',
+        action: AUDIT_ACTIONS.SURVEY_CLOSE,
+        targetEntity: 'survey',
+        details: {
+          automated: true,
+          closedCount: result.modifiedCount,
+          before: { status: SurveyStatus.ACTIVE },
+          after: { status: SurveyStatus.CLOSED },
+          cutoff: now,
+        },
+        ipAddress: 'internal',
+        userAgent: 'survey-lifecycle',
+        result: 'success',
+      });
+    }
   }
 
   private async restoreSurveyDraft(

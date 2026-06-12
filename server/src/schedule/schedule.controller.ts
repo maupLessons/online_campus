@@ -30,13 +30,20 @@ import {
   UpdateScheduleEntryDto,
 } from './dto';
 import { ScheduleService } from './schedule.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { createAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AuditEvent } from '../audit-log/audit.decorator';
 
 @ApiTags('schedule')
 @ApiBearerAuth()
 @Controller('schedule')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ScheduleController {
-  constructor(private readonly scheduleService: ScheduleService) {}
+  constructor(
+    private readonly scheduleService: ScheduleService,
+    private readonly auditLogService: AuditLogService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List schedule entries visible to current user' })
@@ -80,24 +87,44 @@ export class ScheduleController {
 
   @Post()
   @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_CREATE, 'schedule')
   @ApiOperation({ summary: 'Create schedule entry with conflict checks' })
   @ApiResponse({ status: 201, type: ScheduleEntryDto })
-  create(@Body() body: CreateScheduleEntryDto) {
-    return this.scheduleService.create(body);
+  create(
+    @Body() body: CreateScheduleEntryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.create(
+      body,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Put(':id')
   @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_UPDATE, 'schedule')
   @ApiOperation({ summary: 'Update schedule entry with conflict checks' })
   @ApiResponse({ status: 200, type: ScheduleEntryDto })
-  update(@Param('id') id: string, @Body() body: UpdateScheduleEntryDto) {
-    return this.scheduleService.update(id, body);
+  update(
+    @Param('id') id: string,
+    @Body() body: UpdateScheduleEntryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.update(
+      id,
+      body,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Delete(':id')
   @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_DELETE, 'schedule')
   @ApiOperation({ summary: 'Delete schedule entry' })
-  delete(@Param('id') id: string) {
-    return this.scheduleService.delete(id);
+  delete(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
+    return this.scheduleService.delete(
+      id,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 }

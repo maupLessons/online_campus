@@ -28,6 +28,8 @@ import {
   ScheduleEntryStatus,
   ScheduleEntryType,
 } from './schemas';
+import { DomainAuditContext } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 
 type EntityObject = { _id?: unknown; id?: unknown };
 type EntityRef = Types.ObjectId | string | EntityObject;
@@ -205,7 +207,10 @@ export class ScheduleService {
     return this.findAll({ date });
   }
 
-  async create(dto: CreateScheduleEntryDto): Promise<ScheduleEntryDto> {
+  async create(
+    dto: CreateScheduleEntryDto,
+    audit?: DomainAuditContext,
+  ): Promise<ScheduleEntryDto> {
     const payload = await this.normalizeCreatePayload(dto);
     await this.assertNoConflicts(payload);
 
@@ -223,12 +228,19 @@ export class ScheduleService {
 
     const entry = await this.getPopulatedEntryOrThrow(toId(created._id));
     await this.notifyScheduleChanged('created', entry);
+    await audit?.record({
+      action: AUDIT_ACTIONS.SCHEDULE_CREATE,
+      targetEntity: 'schedule',
+      targetId: entry.id,
+      details: { after: this.toAuditSnapshot(entry) },
+    });
     return entry;
   }
 
   async update(
     id: string,
     dto: UpdateScheduleEntryDto,
+    audit?: DomainAuditContext,
   ): Promise<ScheduleEntryDto> {
     const entryId = this.toObjectId(id);
     const [currentEntry, currentView] = await Promise.all([
@@ -259,10 +271,22 @@ export class ScheduleService {
 
     const updatedEntry = await this.getPopulatedEntryOrThrow(id);
     await this.notifyScheduleChanged('updated', updatedEntry, currentView);
+    await audit?.record({
+      action: AUDIT_ACTIONS.SCHEDULE_UPDATE,
+      targetEntity: 'schedule',
+      targetId: id,
+      details: {
+        before: this.toAuditSnapshot(currentView),
+        after: this.toAuditSnapshot(updatedEntry),
+      },
+    });
     return updatedEntry;
   }
 
-  async delete(id: string): Promise<{ deleted: true }> {
+  async delete(
+    id: string,
+    audit?: DomainAuditContext,
+  ): Promise<{ deleted: true }> {
     const entryId = this.toObjectId(id);
     const currentView = await this.getPopulatedEntryOrThrow(id);
     const result = await this.scheduleEntryModel
@@ -274,6 +298,12 @@ export class ScheduleService {
     }
 
     await this.notifyScheduleChanged('deleted', currentView);
+    await audit?.record({
+      action: AUDIT_ACTIONS.SCHEDULE_DELETE,
+      targetEntity: 'schedule',
+      targetId: id,
+      details: { before: this.toAuditSnapshot(currentView) },
+    });
     return { deleted: true };
   }
 
@@ -854,6 +884,22 @@ export class ScheduleService {
       startDate: query.startDate,
       endDate: query.endDate,
       status: query.status,
+    };
+  }
+
+  private toAuditSnapshot(entry: ScheduleEntryDto): Record<string, unknown> {
+    return {
+      courseAssignmentId: entry.courseAssignmentId,
+      courseCode: entry.courseCode,
+      courseName: entry.courseName,
+      groupCode: entry.groupCode,
+      teacherId: entry.teacherId,
+      classroomId: entry.classroomId,
+      date: entry.date,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      type: entry.type,
+      status: entry.status,
     };
   }
 

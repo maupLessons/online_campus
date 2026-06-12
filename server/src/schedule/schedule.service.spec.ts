@@ -5,6 +5,7 @@ import { Role } from '../common/types/roles.enum';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { ScheduleService } from './schedule.service';
 import { ScheduleEntryStatus, ScheduleEntryType } from './schemas';
+import { DomainAuditEvent } from '../audit-log/audit-context';
 
 type QueryChain<T> = {
   populate: jest.Mock<QueryChain<T>, [unknown?]>;
@@ -165,6 +166,10 @@ describe('ScheduleService', () => {
   });
 
   it('creates targeted notifications after schedule creation', async () => {
+    const record = jest
+      .fn<Promise<void>, [DomainAuditEvent]>()
+      .mockResolvedValue(undefined);
+    const audit = { record };
     courseAssignmentModel.findById.mockReturnValue(query(assignment));
     courseAssignmentModel.find.mockReturnValue(
       query([
@@ -183,14 +188,17 @@ describe('ScheduleService', () => {
     });
     userModel.find.mockReturnValue(query([{ _id: objectId(ids.student) }]));
 
-    await service.create({
-      courseAssignmentId: ids.assignment,
-      classroomId: ids.classroom,
-      date: '2026-09-01',
-      startTime: '08:30',
-      endTime: '10:05',
-      type: ScheduleEntryType.LECTURE,
-    });
+    await service.create(
+      {
+        courseAssignmentId: ids.assignment,
+        classroomId: ids.classroom,
+        date: '2026-09-01',
+        startTime: '08:30',
+        endTime: '10:05',
+        type: ScheduleEntryType.LECTURE,
+      },
+      audit,
+    );
 
     expect(notificationsService.createMany).toHaveBeenCalledWith(
       expect.arrayContaining([
@@ -204,6 +212,21 @@ describe('ScheduleService', () => {
         }),
       ]),
     );
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'schedule.create',
+        targetEntity: 'schedule',
+        targetId: ids.schedule,
+      }),
+    );
+    expect(record.mock.calls[0][0].details).toMatchObject({
+      after: {
+        courseAssignmentId: ids.assignment,
+        date: '2026-09-01',
+        startTime: '08:30',
+        endTime: '10:05',
+      },
+    });
   });
 
   it('exports scoped schedule CSV and neutralizes spreadsheet formulas', async () => {

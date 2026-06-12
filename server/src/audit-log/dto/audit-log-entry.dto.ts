@@ -22,6 +22,12 @@ export class AuditLogEntryDto {
   @Transform(({ obj }: { obj: AuditLogLike }) => toId(obj._id ?? obj.id))
   id: string;
 
+  @ApiPropertyOptional({
+    description: 'Stable idempotency identifier for outbox-delivered events',
+  })
+  @Expose()
+  eventId?: string;
+
   @ApiProperty()
   @Expose()
   @Transform(({ value }: { value?: Date | string }) => dateToIso(value))

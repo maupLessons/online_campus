@@ -1,10 +1,15 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter } from 'mongoose';
+import { randomUUID } from 'crypto';
 import { PaginatedDto } from '../common/dto/paginated.dto';
 import { transformToDtoArray } from '../common/utils/transform.util';
 import { AuditLogEntryDto, AuditLogQueryDto } from './dto';
 import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
+import {
+  AuditOutbox,
+  AuditOutboxDocument,
+} from './schemas/audit-outbox.schema';
 
 export interface AuditLogEntry {
   id?: string;
@@ -28,6 +33,13 @@ const MAX_DETAIL_DEPTH = 4;
 const MAX_DETAIL_STRING_LENGTH = 500;
 const MAX_DETAIL_ARRAY_ITEMS = 25;
 const MAX_DETAIL_OBJECT_KEYS = 60;
+const MAX_DETAIL_NODES = 500;
+const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+type SanitizeState = {
+  seen: WeakSet<object>;
+  nodes: number;
+};
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -44,8 +56,13 @@ function truncateString(value: string): string {
 function sanitizeAuditValue(
   value: unknown,
   depth: number,
-  seen: WeakSet<object>,
+  state: SanitizeState,
 ): unknown {
+  state.nodes += 1;
+  if (state.nodes > MAX_DETAIL_NODES) {
+    return '[Truncated]';
+  }
+
   if (
     value === null ||
     typeof value === 'number' ||
@@ -74,32 +91,36 @@ function sanitizeAuditValue(
     return '[Truncated]';
   }
 
-  if (seen.has(value)) {
+  if (state.seen.has(value)) {
     return '[Circular]';
   }
 
-  seen.add(value);
+  state.seen.add(value);
 
   if (Array.isArray(value)) {
     const sanitizedArray = value
       .slice(0, MAX_DETAIL_ARRAY_ITEMS)
-      .map((item) => sanitizeAuditValue(item, depth + 1, seen));
+      .map((item) => sanitizeAuditValue(item, depth + 1, state));
 
-    seen.delete(value);
+    state.seen.delete(value);
     return sanitizedArray;
   }
 
   const sanitized: Record<string, unknown> = {};
 
-  Object.entries(value as Record<string, unknown>)
-    .slice(0, MAX_DETAIL_OBJECT_KEYS)
-    .forEach(([key, item]) => {
-      sanitized[key] = SENSITIVE_KEY_PATTERN.test(key)
-        ? '[REDACTED]'
-        : sanitizeAuditValue(item, depth + 1, seen);
-    });
+  for (const [key, item] of Object.entries(
+    value as Record<string, unknown>,
+  ).slice(0, MAX_DETAIL_OBJECT_KEYS)) {
+    if (UNSAFE_OBJECT_KEYS.has(key)) {
+      continue;
+    }
 
-  seen.delete(value);
+    sanitized[key] = SENSITIVE_KEY_PATTERN.test(key)
+      ? '[REDACTED]'
+      : sanitizeAuditValue(item, depth + 1, state);
+  }
+
+  state.seen.delete(value);
   return sanitized;
 }
 
@@ -110,7 +131,10 @@ function sanitizeAuditDetails(
     return undefined;
   }
 
-  const sanitized = sanitizeAuditValue(details, 0, new WeakSet<object>());
+  const sanitized = sanitizeAuditValue(details, 0, {
+    seen: new WeakSet<object>(),
+    nodes: 0,
+  });
   return sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
     ? (sanitized as Record<string, unknown>)
     : undefined;
@@ -123,6 +147,8 @@ export class AuditLogService {
   constructor(
     @InjectModel(AuditLog.name)
     private readonly auditModel: Model<AuditLogDocument>,
+    @InjectModel(AuditOutbox.name)
+    private readonly outboxModel: Model<AuditOutboxDocument>,
   ) {}
 
   async findAll(
@@ -159,46 +185,39 @@ export class AuditLogService {
     };
   }
 
-  logAction(entry: AuditLogEntry): void {
-    const logMessage = `[AUDIT] [ReqID: ${entry.requestId || '-'}] Action: ${entry.action} | User: ${
-      entry.userLogin || 'Guest'
-    } | IP: ${entry.ipAddress} | Result: ${entry.result}`;
+  async logAction(entry: AuditLogEntry): Promise<void> {
+    const eventId = entry.id ?? randomUUID();
+    const persistedEntry = {
+      eventId,
+      timestamp: entry.timestamp ?? new Date(),
+      userId: normalizeOptionalString(entry.userId, 100) ?? null,
+      userLogin: normalizeString(entry.userLogin || 'unknown', 100),
+      userRole: normalizeOptionalString(entry.userRole, 50),
+      action: normalizeString(entry.action, 120),
+      targetEntity: normalizeOptionalString(entry.targetEntity, 80),
+      targetId: normalizeOptionalString(entry.targetId, 100),
+      details: sanitizeAuditDetails(entry.details),
+      ipAddress: normalizeString(entry.ipAddress, 64),
+      userAgent: normalizeString(entry.userAgent, 500),
+      result: entry.result,
+      requestId: normalizeOptionalString(entry.requestId, 100),
+    };
+    const logMessage = `[AUDIT] [ReqID: ${
+      persistedEntry.requestId || '-'
+    }] Action: ${persistedEntry.action} | User: ${
+      persistedEntry.userLogin
+    } | IP: ${persistedEntry.ipAddress} | Result: ${persistedEntry.result}`;
+
+    await this.outboxModel.create({
+      eventId,
+      payload: persistedEntry,
+    });
 
     if (entry.result === 'success') {
-      this.logger.log(logMessage);
+      this.logger.log(`${logMessage} | Queued: ${eventId}`);
     } else {
-      this.logger.warn(logMessage);
+      this.logger.warn(`${logMessage} | Queued: ${eventId}`);
     }
-
-    void this.auditModel
-      .create({
-        timestamp: entry.timestamp ?? new Date(),
-        userId: entry.userId,
-        userLogin: entry.userLogin || 'unknown',
-        userRole: entry.userRole,
-        action: entry.action,
-        targetEntity: entry.targetEntity,
-        targetId: entry.targetId,
-        details: sanitizeAuditDetails(entry.details),
-        ipAddress: entry.ipAddress,
-        userAgent: entry.userAgent,
-        result: entry.result,
-        requestId: entry.requestId,
-      })
-      .catch((err: unknown) => {
-        if (this.isMongoClientClosedError(err)) {
-          return;
-        }
-
-        this.logger.error(
-          '[AUDIT] Failed to persist audit log to DB',
-          err as object,
-        );
-      });
-  }
-
-  private isMongoClientClosedError(error: unknown): boolean {
-    return error instanceof Error && error.name === 'MongoClientClosedError';
   }
 
   private buildFilter(query: AuditLogQueryDto): QueryFilter<AuditLogDocument> {
@@ -257,4 +276,20 @@ export class AuditLogService {
 
     return filter;
   }
+}
+
+function normalizeString(value: string, maxLength: number): string {
+  return value.trim().slice(0, maxLength) || 'unknown';
+}
+
+function normalizeOptionalString(
+  value: string | null | undefined,
+  maxLength: number,
+): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const normalized = value.trim().slice(0, maxLength);
+  return normalized || undefined;
 }

@@ -4,16 +4,26 @@ import { getModelToken } from '@nestjs/mongoose';
 import { AuditLogService } from './audit-log.service';
 import { AuditLogResult } from './dto';
 import { AuditLog } from './schemas/audit-log.schema';
+import { AuditOutbox } from './schemas/audit-outbox.schema';
 
 describe('AuditLogService', () => {
+  type OutboxCreateInput = {
+    eventId: string;
+    payload: Record<string, unknown>;
+  };
+
   let service: AuditLogService;
   let loggerErrorSpy: jest.SpyInstance;
   let loggerLogSpy: jest.SpyInstance;
   let loggerWarnSpy: jest.SpyInstance;
   const auditModel = {
-    create: jest.fn().mockResolvedValue({}),
     find: jest.fn(),
     countDocuments: jest.fn(),
+  };
+  const outboxModel = {
+    create: jest
+      .fn<Promise<Record<string, never>>, [OutboxCreateInput]>()
+      .mockResolvedValue({}),
   };
 
   beforeEach(async () => {
@@ -28,6 +38,10 @@ describe('AuditLogService', () => {
         {
           provide: getModelToken(AuditLog.name),
           useValue: auditModel,
+        },
+        {
+          provide: getModelToken(AuditOutbox.name),
+          useValue: outboxModel,
         },
       ],
     }).compile();
@@ -45,8 +59,8 @@ describe('AuditLogService', () => {
     expect(service).toBeDefined();
   });
 
-  it('should persist audit entries asynchronously', async () => {
-    service.logAction({
+  it('should durably enqueue audit entries', async () => {
+    await service.logAction({
       userId: null,
       userLogin: 'Guest',
       action: 'POST /auth/login',
@@ -56,9 +70,9 @@ describe('AuditLogService', () => {
       requestId: 'req-1',
     });
 
-    await Promise.resolve();
-
-    expect(auditModel.create).toHaveBeenCalledWith(
+    const queued = outboxModel.create.mock.calls[0][0];
+    expect(typeof queued.eventId).toBe('string');
+    expect(queued.payload).toEqual(
       expect.objectContaining({
         action: 'POST /auth/login',
         ipAddress: '127.0.0.1',
@@ -73,7 +87,7 @@ describe('AuditLogService', () => {
   });
 
   it('should redact sensitive audit details before persisting', async () => {
-    service.logAction({
+    await service.logAction({
       userId: 'user-1',
       userLogin: 'admin',
       action: 'auth.change_password',
@@ -89,9 +103,8 @@ describe('AuditLogService', () => {
       },
     });
 
-    await Promise.resolve();
-
-    expect(auditModel.create).toHaveBeenCalledWith(
+    const queued = outboxModel.create.mock.calls[0][0];
+    expect(queued.payload).toEqual(
       expect.objectContaining({
         details: {
           reason: 'Password changed',
@@ -102,6 +115,32 @@ describe('AuditLogService', () => {
         },
       }),
     );
+  });
+
+  it('should bound audit metadata and ignore unsafe object keys', async () => {
+    const details = JSON.parse(
+      '{"safe":"value","__proto__":{"polluted":true},"constructor":"unsafe"}',
+    ) as Record<string, unknown>;
+
+    await service.logAction({
+      userId: 'user-1',
+      userLogin: ' admin ',
+      action: `audit.${'x'.repeat(200)}`,
+      ipAddress: '127.0.0.1',
+      userAgent: `agent-${'x'.repeat(600)}`,
+      result: 'success',
+      details,
+    });
+
+    const queued = outboxModel.create.mock.calls[0][0];
+    expect(queued.payload).toEqual(
+      expect.objectContaining({
+        action: `audit.${'x'.repeat(200)}`.slice(0, 120),
+        userAgent: `agent-${'x'.repeat(600)}`.slice(0, 500),
+        details: { safe: 'value' },
+      }),
+    );
+    expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
   });
 
   it('should return paginated audit entries with safe regex filters', async () => {

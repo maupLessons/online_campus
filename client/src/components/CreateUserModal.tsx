@@ -115,8 +115,10 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
 
   const validatePassword = (pwd: string) => {
     if (!pwd) return '';
-    if (pwd.length < 8) return 'Пароль має містити мінімум 8 символів';
-    if (!PASSWORD_REGEX.test(pwd)) return 'Пароль має містити лише англійські літери та цифри (мінімум одна літера і одна цифра)';
+    if (pwd.length < 8) return t('users.form.validation.passwordMin');
+    if (!PASSWORD_REGEX.test(pwd)) {
+      return t('users.form.validation.passwordFormat');
+    }
     return '';
   };
 
@@ -217,7 +219,14 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
       setFormData(buildInitialFormData());
     } catch (err: unknown) {
       const errorObj = err as { response?: { data?: { message?: string } } };
-      setError(errorObj.response?.data?.message || 'Помилка при створенні користувача');
+      setError(
+        errorObj.response?.data?.message ||
+          t(
+            userToEdit
+              ? 'users.form.errors.update'
+              : 'users.form.errors.create',
+          ),
+      );
     } finally {
       setLoading(false);
     }
@@ -227,8 +236,19 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] flex flex-col">
           <div className="flex justify-between items-center p-4 border-b">
-            <h2 className="text-xl font-semibold">{userToEdit ? 'Редагувати користувача' : 'Створити користувача'}</h2>
-            <button onClick={onClose} className="text-gray-500 hover:text-gray-700 p-1">
+            <h2 className="text-xl font-semibold">
+              {t(
+                userToEdit
+                  ? 'users.form.editTitle'
+                  : 'users.form.createTitle',
+              )}
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label={t('users.form.close')}
+              className="text-gray-500 hover:text-gray-700 p-1"
+            >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -244,7 +264,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
 
             <form id="createUserForm" onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Роль *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('users.form.role')} *
+                </label>
                 <select
                     name="role"
                     value={formData.role}
@@ -262,7 +284,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Прізвище *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('users.form.lastName')} *
+                  </label>
                   <input
                       type="text"
                       name="lastName"
@@ -273,7 +297,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ім'я *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('users.form.firstName')} *
+                  </label>
                   <input
                       type="text"
                       name="firstName"
@@ -286,7 +312,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">По батькові</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('users.form.middleName')}
+                </label>
                 <input
                     type="text"
                     name="middleName"
@@ -298,7 +326,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Логін *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('users.form.login')} *
+                  </label>
                   <input
                       type="text"
                       name="login"
@@ -308,10 +338,14 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                       minLength={2}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                   />
-                  <p className="mt-1 text-xs text-gray-400">Мінімум 2 символи</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    {t('users.form.loginHint')}
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Пароль {!userToEdit && '*'}</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('users.form.password')} {!userToEdit && '*'}
+                  </label>
                   <input
                       type="password"
                       name="password"
@@ -319,7 +353,11 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                       onChange={handleChange}
                       required={!userToEdit}
                       minLength={8}
-                      placeholder={userToEdit ? 'Залиште порожнім, щоб не змінювати' : ''}
+                      placeholder={
+                        userToEdit
+                          ? t('users.form.passwordUnchangedPlaceholder')
+                          : ''
+                      }
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none ${
                           passwordError ? 'border-red-400' : 'border-gray-300'
                       }`}
@@ -327,14 +365,18 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                   {passwordError ? (
                       <p className="mt-1 text-xs text-red-500">{passwordError}</p>
                   ) : (
-                      <p className="mt-1 text-xs text-gray-400">Мінімум 8 символів, літери + цифри</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {t('users.form.passwordHint')}
+                      </p>
                   )}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('users.form.email')} *
+                  </label>
                   <input
                       type="email"
                       name="email"
@@ -345,7 +387,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Телефон</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('users.form.phone')}
+                  </label>
                   <input
                       type="tel"
                       name="phone"
@@ -358,10 +402,14 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
 
               {formData.role === Role.STUDENT && (
                   <div className="p-4 border border-blue-100 bg-blue-50/50 rounded-lg space-y-4">
-                    <h3 className="font-medium text-blue-900">Дані студента</h3>
+                    <h3 className="font-medium text-blue-900">
+                      {t('users.form.studentData')}
+                    </h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Група *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t('users.form.group')} *
+                        </label>
                         <select
                             name="groupId"
                             value={formData.groupId}
@@ -369,7 +417,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                             required
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                         >
-                          <option value="">Оберіть групу</option>
+                          <option value="">{t('users.form.selectGroup')}</option>
                           {groups.map((g) => (
                               <option key={g.id || g._id} value={g.id || g._id}>
                                 {g.code}
@@ -378,7 +426,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Номер заліковки *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t('users.form.recordBookNumber')} *
+                        </label>
                         <input
                             type="text"
                             name="recordBookNumber"
@@ -390,7 +440,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                       </div>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Курс *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {t('users.form.studyYear')} *
+                      </label>
                       <input
                           type="number"
                           name="year"
@@ -407,10 +459,14 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
 
               {formData.role === Role.TEACHER && (
                   <div className="p-4 border border-blue-100 bg-blue-50/50 rounded-lg space-y-4">
-                    <h3 className="font-medium text-blue-900">Дані викладача</h3>
+                    <h3 className="font-medium text-blue-900">
+                      {t('users.form.teacherData')}
+                    </h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Кафедра *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t('users.form.department')} *
+                        </label>
                         <select
                             name="departmentId"
                             value={formData.departmentId}
@@ -418,7 +474,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                             required
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                         >
-                          <option value="">Оберіть кафедру</option>
+                          <option value="">
+                            {t('users.form.selectDepartment')}
+                          </option>
                           {departments.map((d) => (
                               <option key={d.id || d._id} value={d.id || d._id}>
                                 {d.name}
@@ -427,7 +485,9 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Посада *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          {t('users.form.position')} *
+                        </label>
                         <input
                             type="text"
                             name="position"
@@ -450,7 +510,7 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                 onClick={onClose}
                 className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
             >
-              Скасувати
+              {t('users.form.cancel')}
             </button>
             <button
                 type="submit"
@@ -458,7 +518,13 @@ export default function CreateUserModal({ isOpen, onClose, onSuccess, userToEdit
                 disabled={loading}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Збереження...' : 'Зберегти'}
+              {loading
+                ? t('users.form.saving')
+                : t(
+                    userToEdit
+                      ? 'users.form.saveChanges'
+                      : 'users.form.create',
+                  )}
             </button>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { Navigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Role } from '../types';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   children: ReactNode;
@@ -9,12 +10,13 @@ interface Props {
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: Props) {
+  const { t } = useTranslation();
   const { isAuthenticated, user, isAuthChecked } = useAuthStore();
 
   if (!isAuthChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Завантаження...</p>
+        <p className="text-gray-500">{t('common.loading')}</p>
       </div>
     );
   }

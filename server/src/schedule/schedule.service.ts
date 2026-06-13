@@ -15,7 +15,6 @@ import { CourseAssignment, CourseAssignmentDocument } from '../courses/schemas';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Classroom } from '../references/schemas';
-import { User, UserDocument } from '../users/schemas';
 import {
   CreateScheduleEntryDto,
   ScheduleEntryDto,
@@ -30,6 +29,7 @@ import {
 } from './schemas';
 import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AcademicAccessService } from '../common/access/academic-access.service';
 
 type EntityObject = { _id?: unknown; id?: unknown };
 type EntityRef = Types.ObjectId | string | EntityObject;
@@ -106,7 +106,6 @@ export class ScheduleService {
   private readonly privilegedScheduleRoles = new Set<Role>([
     Role.ADMIN,
     Role.DISPATCHER,
-    Role.DEAN,
     Role.RECTOR,
     Role.PRESIDENT,
   ]);
@@ -118,9 +117,8 @@ export class ScheduleService {
     private readonly courseAssignmentModel: Model<CourseAssignmentDocument>,
     @InjectModel(Classroom.name)
     private readonly classroomModel: Model<Classroom>,
-    @InjectModel(User.name)
-    private readonly userModel: Model<UserDocument>,
     private readonly notificationsService: NotificationsService,
+    private readonly academicAccessService: AcademicAccessService,
   ) {}
 
   async findAll(query: ScheduleQueryDto = {}): Promise<ScheduleEntryDto[]> {
@@ -136,15 +134,12 @@ export class ScheduleService {
       return this.findAll(query);
     }
 
-    const scopedQuery = this.omitUserScopeQuery(query);
-    if (user.role === Role.STUDENT) {
-      return this.findByStudent(user.sub, scopedQuery);
-    }
-    if (user.role === Role.TEACHER || user.role === Role.DEPARTMENT_HEAD) {
-      return this.findByTeacher(user.sub, scopedQuery);
-    }
-
-    return [];
+    const assignmentIds =
+      await this.academicAccessService.findVisibleCourseAssignmentIds(user);
+    return this.findByCourseAssignmentIds(
+      assignmentIds,
+      this.omitUserScopeQuery(query),
+    );
   }
 
   async findOne(id: string): Promise<ScheduleEntryDto> {
@@ -160,8 +155,12 @@ export class ScheduleService {
       return entry;
     }
 
-    const visibleEntries = await this.findForUser(user, { date: entry.date });
-    if (visibleEntries.some((visibleEntry) => visibleEntry.id === entry.id)) {
+    if (
+      await this.academicAccessService.canAccessCourseAssignment(
+        entry.courseAssignmentId,
+        user,
+      )
+    ) {
       return entry;
     }
 
@@ -186,21 +185,13 @@ export class ScheduleService {
     studentId: string,
     query: ScheduleQueryDto = {},
   ): Promise<ScheduleEntryDto[]> {
-    const student = await this.userModel
-      .findById(this.toObjectId(studentId))
-      .select('studentProfile.group')
-      .lean<{ studentProfile?: { group?: unknown } }>()
-      .exec();
-
-    const groupId = student?.studentProfile?.group
-      ? toId(student.studentProfile.group)
-      : undefined;
-
-    if (!groupId || !Types.ObjectId.isValid(groupId)) {
-      return [];
-    }
-
-    return this.findByGroup(groupId, query);
+    const assignmentIds =
+      await this.academicAccessService.findVisibleCourseAssignmentIds({
+        sub: studentId,
+        login: '',
+        role: Role.STUDENT,
+      });
+    return this.findByCourseAssignmentIds(assignmentIds, query);
   }
 
   async findByDate(date: string): Promise<ScheduleEntryDto[]> {
@@ -367,6 +358,19 @@ export class ScheduleService {
       .exec();
 
     return entries.map((entry) => this.formatEntry(entry));
+  }
+
+  private async findByCourseAssignmentIds(
+    assignmentIds: Types.ObjectId[],
+    query: ScheduleQueryDto,
+  ): Promise<ScheduleEntryDto[]> {
+    if (assignmentIds.length === 0) {
+      return [];
+    }
+
+    const filter = await this.buildScheduleFilter(query);
+    filter.courseAssignment = { $in: assignmentIds };
+    return this.findEntries(filter);
   }
 
   private async getPopulatedEntryOrThrow(
@@ -663,38 +667,9 @@ export class ScheduleService {
       return [];
     }
 
-    const assignments = await this.courseAssignmentModel
-      .find({ _id: { $in: objectIds } } as never)
-      .select('teacher group')
-      .lean<CourseAssignmentLean[]>()
-      .exec();
-
-    const teacherIds = assignments
-      .map((assignment) => this.idToString(assignment.teacher))
-      .filter(Boolean);
-    const groupIds = [
-      ...new Set(
-        assignments
-          .map((assignment) => this.idToString(assignment.group))
-          .filter((id) => Types.ObjectId.isValid(id)),
-      ),
-    ].map((id) => new Types.ObjectId(id));
-
-    if (groupIds.length === 0) {
-      return [...new Set(teacherIds)];
-    }
-
-    const students = await this.userModel
-      .find({
-        status: 'active',
-        'studentProfile.group': { $in: groupIds },
-      } as never)
-      .select('_id')
-      .lean<Array<{ _id: unknown }>>()
-      .exec();
-
-    const studentIds = students.map((student) => toId(student._id));
-    return [...new Set([...teacherIds, ...studentIds])];
+    return this.academicAccessService.findCourseAssignmentRecipientIds(
+      objectIds.map((id) => id.toHexString()),
+    );
   }
 
   private getNotificationTitle(action: ScheduleChangeAction): string {

@@ -15,6 +15,7 @@ import { LessonJournalService } from './journal/lesson-journal.service';
 import { FilesModule } from '../files/files.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { AcademicAccessModule } from '../common/access/academic-access.module';
 import { ScheduleEntry, ScheduleEntrySchema } from '../schedule/schemas';
 import { User, UserSchema } from '../users/schemas';
 import {
@@ -39,6 +40,7 @@ import {
     FilesModule,
     NotificationsModule,
     AuditLogModule,
+    AcademicAccessModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Course.name, schema: CourseSchema },

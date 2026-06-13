@@ -26,14 +26,8 @@ import {
 } from '../../common/utils/transform.util';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
-
-const COURSE_OVERSIGHT_ROLES = new Set<Role>([
-  Role.DISPATCHER,
-  Role.DEAN,
-  Role.RECTOR,
-  Role.PRESIDENT,
-  Role.ADMIN,
-]);
+import { AcademicAccessService } from '../../common/access/academic-access.service';
+import { AuthenticatedUser } from '../../common/types/authenticated-request';
 
 @Injectable()
 export class CoursesService {
@@ -43,6 +37,7 @@ export class CoursesService {
     private courseModel: PaginateModel<CourseDocument>,
     @InjectModel(CourseAssignment.name)
     private courseAssignmentModel: PaginateModel<CourseAssignmentDocument>,
+    private readonly academicAccessService: AcademicAccessService,
   ) {}
 
   async validateOwnership(
@@ -83,37 +78,13 @@ export class CoursesService {
       throw new NotFoundException('Призначення курсу не знайдено');
     }
 
-    if (COURSE_OVERSIGHT_ROLES.has(role)) {
-      return courseAssignment;
-    }
-
-    if (role !== Role.STUDENT) {
-      if (toId(courseAssignment.teacher) !== userId) {
-        throw new ForbiddenException('Немає доступу до цього курсу');
-      }
-      return courseAssignment;
-    }
-
-    const student = await this.userModel
-      .findById(userId)
-      .select('studentProfile.group')
-      .lean()
-      .exec();
-
-    if (
-      !student?.studentProfile?.group ||
-      toId(student.studentProfile.group) !== toId(courseAssignment.group)
-    ) {
+    const canAccess =
+      await this.academicAccessService.canAccessCourseAssignment(
+        courseAssignmentId,
+        { sub: userId, login: '', role },
+      );
+    if (!canAccess) {
       throw new ForbiddenException('Немає доступу до цього курсу');
-    }
-
-    if (
-      courseAssignment.source === CourseAssignmentSource.ELECTIVE &&
-      !(courseAssignment.enrolledStudents ?? []).some(
-        (enrolledStudent) => toId(enrolledStudent) === userId,
-      )
-    ) {
-      throw new ForbiddenException('Ви не зараховані на цю дисципліну');
     }
 
     return courseAssignment;
@@ -121,6 +92,7 @@ export class CoursesService {
 
   async findAllCourses(
     pagination: PaginationDto,
+    user: AuthenticatedUser,
   ): Promise<PaginatedDto<CourseDto>> {
     const options = {
       page: pagination.page || 1,
@@ -129,12 +101,21 @@ export class CoursesService {
       lean: true,
     };
 
-    const result = await this.courseModel.paginate({}, options as any);
+    const filter = await this.academicAccessService.buildCourseFilter(user);
+    const result = await this.courseModel.paginate(filter, options as any);
     return transformToPaginatedDto(CourseDto, result);
   }
 
-  async findCourseById(id: string): Promise<CourseDto> {
-    const course = await this.courseModel.findById(id).lean().exec();
+  async findCourseById(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<CourseDto> {
+    this.assertValidObjectId(id, 'курсу');
+    const filter = await this.academicAccessService.buildCourseFilter(user);
+    const course = await this.courseModel
+      .findOne({ $and: [{ _id: new Types.ObjectId(id) }, filter] })
+      .lean()
+      .exec();
     if (!course) {
       throw new NotFoundException('Курс не знайдено');
     }
@@ -242,10 +223,6 @@ export class CoursesService {
     if (role === Role.STUDENT) {
       return this.findCoursesByStudent(userId, pagination);
     }
-    if (role === Role.TEACHER || role === Role.DEPARTMENT_HEAD) {
-      return this.findCoursesByTeacher(userId, pagination);
-    }
-
     const options = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
@@ -253,8 +230,15 @@ export class CoursesService {
       lean: true,
     };
 
+    const filter = await this.academicAccessService.buildCourseAssignmentFilter(
+      {
+        sub: userId,
+        login: '',
+        role,
+      },
+    );
     const result = await this.courseAssignmentModel.paginate(
-      {},
+      filter,
       options as any,
     );
     return transformToPaginatedDto(CourseAssignmentDto, result);

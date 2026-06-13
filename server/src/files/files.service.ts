@@ -14,19 +14,17 @@ import { File, FileDocument } from './file.schema';
 import {
   Assignment,
   AssignmentDocument,
-  CourseAssignment,
-  CourseAssignmentDocument,
   Material,
   MaterialDocument,
   Submission,
   SubmissionDocument,
 } from '../courses/schemas';
-import { User, UserDocument } from '../users/schemas';
 import { Role } from '../common/types/roles.enum';
 import { toId } from '../common/utils/to-id.util';
 import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { TransactionLifecycleService } from '../audit-log/transaction-lifecycle.service';
+import { AcademicAccessService } from '../common/access/academic-access.service';
 
 const ALLOWED_FILE_TYPES = new Map<string, Set<string>>([
   ['.png', new Set(['image/png'])],
@@ -47,15 +45,13 @@ const ALLOWED_FILE_TYPES = new Map<string, Set<string>>([
 export class FilesService {
   constructor(
     @InjectModel(File.name) private fileModel: Model<FileDocument>,
-    @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(Material.name) private materialModel: Model<MaterialDocument>,
     @InjectModel(Assignment.name)
     private assignmentModel: Model<AssignmentDocument>,
     @InjectModel(Submission.name)
     private submissionModel: Model<SubmissionDocument>,
-    @InjectModel(CourseAssignment.name)
-    private courseAssignmentModel: Model<CourseAssignmentDocument>,
     private readonly transactionLifecycle: TransactionLifecycleService,
+    private readonly academicAccessService: AcademicAccessService,
   ) {}
 
   async saveFile(
@@ -324,47 +320,26 @@ export class FilesService {
     userId: string,
     role: Role,
   ) {
-    if (role === Role.ADMIN) {
-      return true;
-    }
-
-    if (
-      !Types.ObjectId.isValid(courseAssignmentId) ||
-      !Types.ObjectId.isValid(userId)
-    ) {
-      return false;
-    }
-
-    const courseAssignment = await this.courseAssignmentModel
-      .findById(courseAssignmentId)
-      .select('teacher group')
-      .lean()
-      .exec();
-
-    if (!courseAssignment) {
+    if (!Types.ObjectId.isValid(userId)) {
       return false;
     }
 
     if (
-      (role === Role.TEACHER || role === Role.DEPARTMENT_HEAD) &&
-      toId(courseAssignment.teacher) === userId
+      role !== Role.ADMIN &&
+      role !== Role.STUDENT &&
+      role !== Role.TEACHER &&
+      role !== Role.DEPARTMENT_HEAD
     ) {
-      return true;
-    }
-
-    if (role !== Role.STUDENT) {
       return false;
     }
 
-    const user = await this.userModel
-      .findById(userId)
-      .select('studentProfile.group')
-      .lean()
-      .exec();
-
-    return Boolean(
-      user?.studentProfile &&
-      toId(user.studentProfile.group) === toId(courseAssignment.group),
+    return this.academicAccessService.canAccessCourseAssignment(
+      courseAssignmentId,
+      {
+        sub: userId,
+        login: '',
+        role,
+      },
     );
   }
 }

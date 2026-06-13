@@ -6,6 +6,7 @@
   "testMatch": [
     "<rootDir>/app.e2e-spec.ts",
     "<rootDir>/assignments.e2e-spec.ts",
+    "<rootDir>/academic-access.e2e-spec.ts",
     "<rootDir>/courses.e2e-spec.ts",
     "<rootDir>/electives.e2e-spec.ts",
     "<rootDir>/grades.e2e-spec.ts",

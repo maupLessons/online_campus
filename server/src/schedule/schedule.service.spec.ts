@@ -32,13 +32,14 @@ type ClassroomModelMock = {
   exists: jest.Mock;
 };
 
-type UserModelMock = {
-  find: jest.Mock;
-  findById: jest.Mock;
-};
-
 type NotificationsServiceMock = {
   createMany: jest.Mock;
+};
+
+type AcademicAccessServiceMock = {
+  findVisibleCourseAssignmentIds: jest.Mock;
+  canAccessCourseAssignment: jest.Mock;
+  findCourseAssignmentRecipientIds: jest.Mock;
 };
 
 function query<T>(result: T): QueryChain<T> {
@@ -103,8 +104,8 @@ describe('ScheduleService', () => {
   let scheduleEntryModel: ScheduleEntryModelMock;
   let courseAssignmentModel: CourseAssignmentModelMock;
   let classroomModel: ClassroomModelMock;
-  let userModel: UserModelMock;
   let notificationsService: NotificationsServiceMock;
+  let academicAccessService: AcademicAccessServiceMock;
   let service: ScheduleService;
 
   beforeEach(() => {
@@ -122,20 +123,21 @@ describe('ScheduleService', () => {
     classroomModel = {
       exists: jest.fn(),
     };
-    userModel = {
-      find: jest.fn(),
-      findById: jest.fn(),
-    };
     notificationsService = {
       createMany: jest.fn().mockResolvedValue([]),
+    };
+    academicAccessService = {
+      findVisibleCourseAssignmentIds: jest.fn().mockResolvedValue([]),
+      canAccessCourseAssignment: jest.fn().mockResolvedValue(false),
+      findCourseAssignmentRecipientIds: jest.fn().mockResolvedValue([]),
     };
 
     service = new ScheduleService(
       scheduleEntryModel as never,
       courseAssignmentModel as never,
       classroomModel as never,
-      userModel as never,
       notificationsService as never,
+      academicAccessService as never,
     );
   });
 
@@ -171,22 +173,16 @@ describe('ScheduleService', () => {
       .mockResolvedValue(undefined);
     const audit = { record };
     courseAssignmentModel.findById.mockReturnValue(query(assignment));
-    courseAssignmentModel.find.mockReturnValue(
-      query([
-        {
-          _id: objectId(ids.assignment),
-          teacher: objectId(ids.teacher),
-          group: objectId(ids.group),
-        },
-      ]),
-    );
+    academicAccessService.findCourseAssignmentRecipientIds.mockResolvedValue([
+      ids.teacher,
+      ids.student,
+    ]);
     classroomModel.exists.mockReturnValue(query({ _id: ids.classroom }));
     scheduleEntryModel.find.mockReturnValue(query([]));
     scheduleEntryModel.findById.mockReturnValue(query(scheduleEntry));
     scheduleEntryModel.create.mockResolvedValue({
       _id: objectId(ids.schedule),
     });
-    userModel.find.mockReturnValue(query([{ _id: objectId(ids.student) }]));
 
     await service.create(
       {
@@ -227,6 +223,44 @@ describe('ScheduleService', () => {
         endTime: '10:05',
       },
     });
+  });
+
+  it('returns only course assignments visible to an elective student', async () => {
+    academicAccessService.findVisibleCourseAssignmentIds.mockResolvedValue([
+      objectId(ids.assignment),
+    ]);
+    scheduleEntryModel.find.mockReturnValue(query([scheduleEntry]));
+
+    const result = await service.findForUser(
+      {
+        sub: ids.student,
+        login: 'student1',
+        role: Role.STUDENT,
+      },
+      {},
+    );
+
+    expect(result).toHaveLength(1);
+    expect(scheduleEntryModel.find).toHaveBeenCalledWith({
+      courseAssignment: { $in: [objectId(ids.assignment)] },
+    });
+  });
+
+  it('does not expose schedule entries when a student has no visible assignments', async () => {
+    academicAccessService.findVisibleCourseAssignmentIds.mockResolvedValue([]);
+
+    await expect(
+      service.findForUser(
+        {
+          sub: ids.student,
+          login: 'student1',
+          role: Role.STUDENT,
+        },
+        {},
+      ),
+    ).resolves.toEqual([]);
+
+    expect(scheduleEntryModel.find).not.toHaveBeenCalled();
   });
 
   it('exports scoped schedule CSV and neutralizes spreadsheet formulas', async () => {

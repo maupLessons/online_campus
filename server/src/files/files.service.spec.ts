@@ -29,8 +29,7 @@ function createService(
     assignments?: Array<Record<string, unknown>>;
     submissions?: Array<Record<string, unknown>>;
     submittedAssignment?: Record<string, unknown> | null;
-    courseAssignment?: Record<string, unknown> | null;
-    user?: Record<string, unknown> | null;
+    canAccessCourseAssignment?: boolean;
   } = {},
 ) {
   const fileModel = {
@@ -40,9 +39,6 @@ function createService(
       .mockReturnValue(chainResult(options.attachedFilesCount ?? 0)),
     create: jest.fn(),
     findByIdAndDelete: jest.fn(),
-  };
-  const userModel = {
-    findById: jest.fn().mockReturnValue(chainResult(options.user ?? null)),
   };
   const materialModel = {
     find: jest.fn().mockReturnValue(chainResult(options.materials ?? [])),
@@ -56,23 +52,22 @@ function createService(
   const submissionModel = {
     find: jest.fn().mockReturnValue(chainResult(options.submissions ?? [])),
   };
-  const courseAssignmentModel = {
-    findById: jest
+  const academicAccessService = {
+    canAccessCourseAssignment: jest
       .fn()
-      .mockReturnValue(chainResult(options.courseAssignment ?? null)),
+      .mockResolvedValue(options.canAccessCourseAssignment ?? false),
   };
 
   return new FilesService(
     fileModel as never,
-    userModel as never,
     materialModel as never,
     assignmentModel as never,
     submissionModel as never,
-    courseAssignmentModel as never,
     {
       onRollback: jest.fn().mockReturnValue(false),
       onCommit: jest.fn().mockReturnValue(false),
     } as never,
+    academicAccessService as never,
   );
 }
 
@@ -92,17 +87,12 @@ describe('FilesService security checks', () => {
     const ownerId = new Types.ObjectId();
     const studentId = new Types.ObjectId();
     const courseAssignmentId = new Types.ObjectId();
-    const groupId = new Types.ObjectId();
 
     const file = { _id: fileId, uploadedBy: ownerId };
     const service = createService({
       file,
       materials: [{ courseAssignment: courseAssignmentId }],
-      courseAssignment: {
-        teacher: new Types.ObjectId(),
-        group: groupId,
-      },
-      user: { studentProfile: { group: groupId } },
+      canAccessCourseAssignment: true,
     });
 
     await expect(
@@ -114,12 +104,31 @@ describe('FilesService security checks', () => {
     ).resolves.toBe(file);
   });
 
+  it('blocks an unselected student from elective course files', async () => {
+    const fileId = new Types.ObjectId();
+    const ownerId = new Types.ObjectId();
+    const studentId = new Types.ObjectId();
+    const courseAssignmentId = new Types.ObjectId();
+    const service = createService({
+      file: { _id: fileId, uploadedBy: ownerId },
+      materials: [{ courseAssignment: courseAssignmentId }],
+      canAccessCourseAssignment: false,
+    });
+
+    await expect(
+      service.getDownloadableFileById(
+        fileId.toHexString(),
+        studentId.toHexString(),
+        Role.STUDENT,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('blocks a student from downloading another student submission file from the same group', async () => {
     const fileId = new Types.ObjectId();
     const ownerId = new Types.ObjectId();
     const requesterId = new Types.ObjectId();
     const courseAssignmentId = new Types.ObjectId();
-    const groupId = new Types.ObjectId();
 
     const service = createService({
       file: { _id: fileId, uploadedBy: ownerId },
@@ -130,11 +139,7 @@ describe('FilesService security checks', () => {
         },
       ],
       submittedAssignment: { courseAssignment: courseAssignmentId },
-      courseAssignment: {
-        teacher: new Types.ObjectId(),
-        group: groupId,
-      },
-      user: { studentProfile: { group: groupId } },
+      canAccessCourseAssignment: true,
     });
 
     await expect(

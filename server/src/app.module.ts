@@ -21,6 +21,7 @@ import { FilesModule } from './files/files.module';
 import { SurveysModule } from './surveys/surveys.module';
 import { ElectiveDisciplinesModule } from './elective-disciplines/elective-disciplines.module';
 import { TransactionInterceptor } from './audit-log/transaction.interceptor';
+import { validateEnvironment } from './config/environment.validation';
 
 mongoose.set('transactionAsyncLocalStorage', true);
 
@@ -62,7 +63,10 @@ function buildMongoUri(config: ConfigService): string {
 @Module({
   imports: [
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60000, limit: 100 }]),
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: validateEnvironment,
+    }),
 
     MongooseModule.forRootAsync({
       inject: [ConfigService],

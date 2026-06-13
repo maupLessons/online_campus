@@ -974,6 +974,15 @@ Student        (базовий доступ)
 - **CORS** — дозволені тільки домени фронтенду з `CLIENT_URL`, cookies передаються лише з `credentials: true`
 - **Rate limiting** — `/auth/login` максимум 10 спроб за 15 хвилин з одного IP, password reset endpoints максимум 5 спроб за 15 хвилин
 - **Input validation** — `class-validator` + `ValidationPipe` на всіх DTO
+- **Environment validation** — backend завершує запуск до підключення модулів, якщо production secrets, HTTPS origin, cookie flags або MongoDB/replica-set configuration є відсутніми чи небезпечними
+
+### Об'єктна авторизація
+
+- `AcademicAccessService` централізує ABAC-політики для користувачів, курсів, призначень курсів, файлів і розкладу
+- студент бачить стандартні дисципліни своєї групи, але вибіркові — лише за наявності у `enrolledStudents`
+- викладач бачить власні призначення, завідувач — кафедральні, декан — лише дані факультету, до якого його призначено
+- файли, розклад і сповіщення вибіркових дисциплін використовують один і той самий enrollment scope; належність до групи сама по собі не надає доступу
+- security regression suite `npm run test:e2e:db -- academic-access.e2e-spec.ts` перевіряє ці правила через реальні HTTP endpoints і MongoDB
 
 ### Захист від типових вразливостей
 
@@ -1487,6 +1496,10 @@ jobs:
 
 Backend `npm run test:e2e` запускає швидкі smoke-перевірки без MongoDB, щоб CI мав детермінований e2e-сигнал. Повний DB-backed набір із Testcontainers запускається окремо командою `npm run test:e2e:db` у `server/` і потребує доступного Docker daemon.
 
+CI окремо запускає `academic-access.e2e-spec.ts`, який блокує регресії
+об'єктної авторизації для elective files/schedule/notifications та
+факультетської ізоляції декана.
+
 ### Deploy workflow (`.github/workflows/deploy.yml`)
 
 Запускається після push у `master`. Workflow підключається до VPS через SSH, виконує `git pull origin master`, записує `.env` із GitHub Secrets і запускає `docker compose up --build -d`.
@@ -1539,6 +1552,7 @@ jobs:
 | `MONGO_PORT` | порт MongoDB |
 | `MONGO_REPLICA_SET_NAME` | optional; назва replica set (`rs0` за замовчуванням) |
 | `MONGO_REPLICA_SET_KEY` | обов'язковий keyfile secret; згенерувати `openssl rand -hex 48` |
+| `MONGODB_URI` | optional alternative до окремих `MONGO_*`; у production має містити credentials, database name і replica set для transactional outbox |
 | `JWT_SECRET` | секрет для JWT |
 | `PORT` | порт backend |
 | `CLIENT_URL` | URL frontend для CORS і reset links |
@@ -1561,6 +1575,12 @@ jobs:
 | `SWAGGER_ENABLED` | `true` для dev, `false`/unset у production; Swagger вимкнений у production за замовчуванням |
 | `SEED_DEMO_DATA` | optional; `true` тільки для локальних fixture-даних, `false`/unset для shared dev/prod |
 | `SEED_DEMO_DATA_IN_PRODUCTION` | emergency/demo-only override; не додавати у production secrets |
+
+`ConfigModule` застосовує централізовану fail-fast схему. Для
+`NODE_ENV=production` застосунок не запуститься зі слабкими або placeholder
+JWT/CSRF/Mongo secrets, HTTP `CLIENT_URL`, `AUTH_COOKIE_SECURE=false`,
+увімкненим Swagger/reset-token exposure, некоректними cookie paths чи
+MongoDB без автентифікації та replica-set configuration.
 
 ### Правила роботи із залежностями
 

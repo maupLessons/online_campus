@@ -24,6 +24,8 @@ import { ChangeUserRoleDto } from './dto/change-user-role.dto';
 import { toId } from '../common/utils/to-id.util';
 import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { AcademicAccessService } from '../common/access/academic-access.service';
+import { AuthenticatedUser } from '../common/types/authenticated-request';
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -52,6 +54,7 @@ export class UsersService {
   constructor(
     @InjectModel(User.name)
     private readonly userModel: PaginateModel<UserDocument>,
+    private readonly academicAccessService: AcademicAccessService,
   ) {}
 
   // =========================
@@ -545,9 +548,12 @@ export class UsersService {
     return transformToDto(UserDto, updated);
   }
 
-  async findOne(id: string): Promise<UserDto> {
+  async findOne(id: string, requester?: AuthenticatedUser): Promise<UserDto> {
+    const scopeFilter = requester
+      ? await this.academicAccessService.buildVisibleUserFilter(requester)
+      : {};
     const user = await this.userModel
-      .findById(id)
+      .findOne({ $and: [{ _id: id }, scopeFilter] })
       .select('-passwordHash')
       .populate('studentProfile.group')
       .populate({
@@ -579,28 +585,45 @@ export class UsersService {
     return transformToPaginatedDto(UserDto, result);
   }
 
-  async findByName(query: string, role?: Role): Promise<UserDto[]> {
+  async findByName(
+    query: string,
+    role?: Role,
+    requester?: AuthenticatedUser,
+  ): Promise<UserDto[]> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return [];
 
     const q = new RegExp(escapeRegex(normalizedQuery.slice(0, 100)), 'i');
-    const filter: Record<string, unknown> = {
+    const searchFilter: Record<string, unknown> = {
       $or: [{ firstName: q }, { lastName: q }, { middleName: q }],
     };
 
     if (role) {
-      filter.role = role;
+      searchFilter.role = role;
     }
+    const scopeFilter = requester
+      ? await this.academicAccessService.buildVisibleUserFilter(requester)
+      : {};
 
     const users = await this.userModel
-      .find(filter)
+      .find({ $and: [searchFilter, scopeFilter] })
       .select('-passwordHash')
       .lean()
       .exec();
     return transformToDtoArray(UserDto, users);
   }
 
-  async getStudentsByGroup(groupId: string): Promise<UserDto[]> {
+  async getStudentsByGroup(
+    groupId: string,
+    requester?: AuthenticatedUser,
+  ): Promise<UserDto[]> {
+    if (
+      requester &&
+      !(await this.academicAccessService.canAccessGroup(groupId, requester))
+    ) {
+      throw new ForbiddenException('Немає доступу до цієї групи');
+    }
+
     const filter = { 'studentProfile.group': groupId } as Record<
       string,
       unknown
@@ -613,7 +636,20 @@ export class UsersService {
     return transformToDtoArray(UserDto, users);
   }
 
-  async getTeachersByDepartment(departmentId: string): Promise<UserDto[]> {
+  async getTeachersByDepartment(
+    departmentId: string,
+    requester?: AuthenticatedUser,
+  ): Promise<UserDto[]> {
+    if (
+      requester &&
+      !(await this.academicAccessService.canAccessDepartment(
+        departmentId,
+        requester,
+      ))
+    ) {
+      throw new ForbiddenException('Немає доступу до цієї кафедри');
+    }
+
     const filter = { 'teacherProfile.department': departmentId } as Record<
       string,
       unknown

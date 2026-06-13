@@ -27,9 +27,10 @@ export class CoursesController {
   @Get()
   @ApiPaginatedResponse(CourseDto)
   async findAll(
+    @Request() req: RequestWithUser,
     @Query() paginationDto: PaginationDto,
   ): Promise<PaginatedDto<CourseDto>> {
-    return this.coursesService.findAllCourses(paginationDto);
+    return this.coursesService.findAllCourses(paginationDto, req.user);
   }
 
   @Get('my')
@@ -67,7 +68,10 @@ export class CoursesController {
 
   @Get(':id')
   @ApiResponse({ type: CourseDto })
-  async findOne(@Param('id') id: string): Promise<CourseDto> {
-    return this.coursesService.findCourseById(id);
+  async findOne(
+    @Param('id') id: string,
+    @Request() req: RequestWithUser,
+  ): Promise<CourseDto> {
+    return this.coursesService.findCourseById(id, req.user);
   }
 }

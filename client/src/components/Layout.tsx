@@ -239,13 +239,10 @@ export default function Layout() {
           <div className="border-t border-white/10 px-4 py-5">
             <div className="mb-4 rounded-2xl bg-white/5 px-4 py-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {t('layout.supportTitle', 'Підтримка')}
+                {t('layout.supportTitle')}
               </p>
               <p className="mt-2 text-xs leading-5 text-slate-300">
-                {t(
-                  'layout.supportText',
-                  'Зверніться до технічної підтримки через бот або пошту.',
-                )}
+                {t('layout.supportText')}
               </p>
             </div>
 

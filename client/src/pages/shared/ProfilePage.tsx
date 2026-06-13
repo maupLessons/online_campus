@@ -77,7 +77,9 @@ export default function ProfilePage() {
       reset();
     } catch (err) {
       setPasswordError(
-        err instanceof Error ? err.message : 'Не вдалося змінити пароль',
+        err instanceof Error
+          ? err.message
+          : t('profile.changePasswordError'),
       );
     }
   };

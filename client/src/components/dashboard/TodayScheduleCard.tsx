@@ -7,8 +7,8 @@ type Props = {
   isLoading: boolean;
 };
 
-function getLessonTitle(item: ScheduleItem) {
-  return item.title || item.subjectName || item.courseName || 'Заняття';
+function getLessonTitle(item: ScheduleItem, fallback: string) {
+  return item.title || item.subjectName || item.courseName || fallback;
 }
 
 function getLessonMeta(item: ScheduleItem) {
@@ -41,7 +41,7 @@ export default function TodayScheduleCard({ items, isLoading }: Props) {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-slate-500">Loading ...</p>
+        <p className="text-sm text-slate-500">{t('common.loading')}</p>
       ) : items.length === 0 ? (
         <div className="flex min-h-[170px] items-center justify-between gap-6 rounded-3xl bg-slate-50 px-6 py-5">
           <div>
@@ -70,7 +70,7 @@ export default function TodayScheduleCard({ items, isLoading }: Props) {
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">
-                    {getLessonTitle(item)}
+                    {getLessonTitle(item, t('dashboard.lessonFallback'))}
                   </p>
 
                   <p className="mt-1 text-xs text-slate-500">

@@ -42,7 +42,7 @@ export default function ProfileSummaryCard({ user }: Props) {
     : user?.teacherProfile?.position || '—';
 
   const year = user?.studentProfile?.year
-    ? `${user.studentProfile.year} курс`
+    ? t('dashboard.studyYearValue', { year: user.studentProfile.year })
     : '—';
 
   return (

@@ -134,7 +134,7 @@
 | ------------------- | ------ | --------------------------------- |
 | React               | 19     | UI framework                      |
 | TypeScript          | 5      | Типізація                         |
-| Vite                | 7      | Bundler / dev-сервер              |
+| Vite                | 8      | Bundler / dev-сервер              |
 | Tailwind CSS        | 4      | Утилітарні стилі                  |
 | Zustand             | 5      | State management (auth, UI state) |
 | Axios               | —      | HTTP-клієнт з interceptors        |
@@ -213,25 +213,33 @@
 
 **Файли:** `src/schedule/`
 
-**Відповідальність:** зберігання та відображення розкладу; перевірка конфліктів (накладання по викладачу, аудиторії, групі); позначення замін, скасувань, перенесень.
+**Відповідальність:** зберігання та відображення розкладу; перевірка конфліктів
+(накладання по викладачу, аудиторії та групі); рольове й об'єктне обмеження
+видимості; сповіщення про створення, зміну або видалення заняття. Стани
+`cancelled` і `rescheduled` встановлюються через звичайне оновлення запису
+`PUT /schedule/:id`; окремих `/cancel` і `/reschedule` endpoints наразі немає.
 
 **Ендпоінти та доступ:**
 
-| Метод  | Шлях                               | Доступ                                |
-| ------ | ---------------------------------- | ------------------------------------- |
-| GET    | `/schedule`                        | всі авторизовані                      |
-| GET    | `/schedule/my`                     | всі авторизовані (особистий розклад)  |
-| GET    | `/schedule/group/:groupId`         | teacher+                              |
-| GET    | `/schedule/teacher/:teacherId`     | dispatcher+                           |
-| GET    | `/schedule/classroom/:classroomId` | dispatcher+                           |
-| POST   | `/schedule`                        | dispatcher, admin                     |
-| PUT    | `/schedule/:id`                    | dispatcher, admin                     |
-| DELETE | `/schedule/:id`                    | dispatcher, admin                     |
-| POST   | `/schedule/:id/cancel`             | dispatcher, admin (+ авто-сповіщення) |
-| POST   | `/schedule/:id/reschedule`         | dispatcher, admin (+ авто-сповіщення) |
-| GET    | `/schedule/export?format=csv`      | dispatcher+                           |
+| Метод  | Шлях                                                              | Доступ                                               |
+| ------ | ----------------------------------------------------------------- | ---------------------------------------------------- |
+| GET    | `/schedule?date=&startDate=&endDate=&groupId=&teacherId=&status=` | авторизовані; результат обмежується академічним scope |
+| GET    | `/schedule/my`                                                    | авторизовані; особистий видимий розклад              |
+| GET    | `/schedule/export`                                                | авторизовані; CSV у межах видимого scope             |
+| GET    | `/schedule/:id`                                                   | авторизовані; з object-level перевіркою доступу       |
+| POST   | `/schedule`                                                       | dispatcher, admin                                    |
+| PUT    | `/schedule/:id`                                                   | dispatcher, admin                                    |
+| DELETE | `/schedule/:id`                                                   | dispatcher, admin                                    |
 
-**Перевірка конфліктів:** при POST/PUT перевіряє зайнятість викладача, аудиторії, групи. Повертає HTTP 409 з переліком конфліктів.
+**Перевірка конфліктів:** при POST/PUT перевіряє зайнятість викладача,
+аудиторії та групи. Скасовані записи не блокують часовий слот. Зміни
+розкладу створюють персональні сповіщення; для вибіркових дисциплін їх
+отримують лише викладач і фактично зараховані студенти.
+
+**Поточний стан:** backend CRUD, конфлікти, CSV-експорт, audit та scoped
+visibility реалізовані. Окремий диспетчерський frontend для створення й
+редагування розкладу та спеціалізовані workflow endpoints
+`/cancel`/`/reschedule` залишаються подальшим покращенням.
 
 ---
 
@@ -479,7 +487,7 @@ interface ElectiveSelection {
 
 | Метод           | Шлях                          | Опис                                         |
 | --------------- | ----------------------------- | -------------------------------------------- |
-| GET             | `/references/groups`          | Список груп (+ фільтр по факультету/курсу)   |
+| GET             | `/references/groups`          | Список груп (+ фільтр за курсом)              |
 | GET             | `/references/groups/:id`      | Деталі групи                                 |
 | GET             | `/references/classrooms`      | Список аудиторій (+ фільтр по типу, корпусу) |
 | GET             | `/references/departments`     | Список кафедр                                |
@@ -487,6 +495,11 @@ interface ElectiveSelection {
 | GET             | `/references/faculties`       | Список факультетів                           |
 | GET             | `/references/specialties`     | Список спеціальностей                        |
 | POST/PUT/DELETE | `/references/*`               | admin                                        |
+
+**Поточний стан:** MongoDB schemas, backend CRUD, DTO validation,
+reference-integrity checks і захист видалення пов'язаних записів реалізовані.
+Окремої адміністративної frontend-сторінки для повного керування всіма
+довідниками ще немає, тому модуль не вважається повністю закритим end-to-end.
 
 ---
 
@@ -618,47 +631,53 @@ interface AuditLogEntry {
 
 ```
 src/
-├── App.tsx                  ← роутер, ProtectedRoute
+├── App.tsx                  ← lazy routes, role guards, route error boundaries
 ├── main.tsx
 ├── index.css                ← Tailwind base styles
-├── types/index.ts           ← всі TS-інтерфейси
+├── i18n.ts                  ← українська та англійська локалізація
+├── types/index.ts           ← спільні frontend domain types
+├── schemas/
+│   └── authSchema.ts        ← Zod-схеми форм аутентифікації
 ├── services/
 │   ├── api.ts               ← Axios instance, cookie session refresh/retry
-│   └── surveysApi.ts        ← typed client для SurveysModule
+│   ├── notificationsApi.ts
+│   ├── surveysApi.ts
+│   └── electivesApi.ts
 ├── store/
-│   ├── authStore.ts         ← Zustand: user, session state, login/logout
-│   └── notificationsStore.ts
+│   └── authStore.ts         ← Zustand: user, session state, login/logout
 ├── components/
 │   ├── Layout.tsx           ← sidebar + header + role-based nav
 │   ├── ProtectedRoute.tsx   ← route guard
+│   ├── ErrorBoundary.tsx
+│   ├── RouteErrorBoundary.tsx
+│   ├── FileUploader.tsx
+│   ├── CreateUserModal.tsx
 │   ├── LanguageSwitcher.tsx
+│   ├── dashboard/
 │   └── notifications/
 └── pages/                   ← role-based pages architecture
-    │
     ├── auth/                ← authentication pages
     │   ├── LoginPage.tsx
     │   └── ForgotPasswordPage.tsx
-    │
     ├── shared/              ← pages shared між декількома ролями
     │   ├── DashboardPage.tsx
     │   ├── SchedulePage.tsx
     │   ├── NotificationsPage.tsx
-    │   └── NewsPage.tsx
-    │
+    │   └── ProfilePage.tsx
     ├── student/             ← student-specific pages
     │   ├── AssignmentsPage.tsx
     │   └── GradesPage.tsx
-    │
     ├── surveys/             ← SurveysModule frontend
     │   ├── SurveysPage.tsx
     │   ├── SurveyPlayerPage.tsx
     │   ├── SurveyAdminPage.tsx
     │   └── SurveyResultsPage.tsx
-    │
+    ├── electives/           ← elective selection and administration
+    │   ├── ElectivesPage.tsx
+    │   └── ElectiveAdminPage.tsx
     ├── admin/               ← system administration pages
     │   ├── UsersPage.tsx
     │   └── AuditLogPage.tsx
-    │
     └── course/              ← course-related shared modules
         ├── CoursesPage.tsx
         └── CourseDetailPage.tsx
@@ -668,20 +687,26 @@ src/
 
 ### 5.2 Layout — видимість меню за роллю
 
-| Пункт                  | student | teacher | dispatcher | dept_head | dean | admin |
-| ---------------------- | ------- | ------- | ---------- | --------- | ---- | ----- |
-| Дашборд                | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
-| Розклад                | ✅      | ✅      | ✅         | ✅        | ✅   | —     |
-| Мої курси              | ✅      | ✅      | —          | —         | —    | —     |
-| Завдання               | ✅      | ✅      | —          | —         | —    | —     |
-| Оцінки                 | ✅      | —       | —          | —         | —    | —     |
-| Опитування             | ✅      | ✅      | —          | —         | —    | —     |
-| Керування опитуваннями | —       | —       | —          | —         | ✅   | ✅    |
-| Результати опитувань   | —       | —       | —          | ✅        | ✅   | ✅    |
-| Сповіщення             | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
-| Звіти                  | —       | —       | —          | ✅        | ✅   | —     |
-| Розклад (CRUD)         | —       | —       | ✅         | —         | —    | ✅    |
-| Користувачі            | —       | —       | —          | —         | —    | ✅    |
+| Пункт                    | student | teacher | dispatcher | dept_head | dean | admin |
+| ------------------------ | ------- | ------- | ---------- | --------- | ---- | ----- |
+| Профіль                  | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
+| Дашборд                  | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
+| Розклад                  | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
+| Мої дисципліни           | ✅      | ✅      | —          | ✅        | ✅   | —     |
+| Мої завдання             | ✅      | —       | —          | —         | —    | —     |
+| Залікова книжка          | ✅      | —       | —          | —         | —    | —     |
+| Опитування               | ✅      | ✅      | —          | —         | —    | —     |
+| Адміністрування опитувань | —      | —       | —          | —         | ✅   | ✅    |
+| Вибіркові дисципліни     | ✅      | —       | —          | —         | —    | —     |
+| Керування вибірковими    | —       | —       | —          | ✅        | ✅   | ✅    |
+| Користувачі              | —       | —       | —          | —         | ✅   | ✅    |
+| Аудит                    | —       | —       | —          | —         | —    | ✅    |
+| Сповіщення               | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
+
+Ролі `rector` і `president` також мають окремі дозволи для керівних
+переглядів, результатів та адміністрування відповідно до `App.tsx` і
+`Layout.tsx`. Таблиця відображає основні щоденні сценарії, а не повну RBAC
+матрицю backend endpoints.
 
 ---
 
@@ -843,15 +868,19 @@ AuditLogEntry
 
 ### Розклад `/api/schedule`
 
-| Метод  | Шлях                                   | Доступ            |
-| ------ | -------------------------------------- | ----------------- |
-| GET    | `/schedule/my`                         | Авторизований     |
-| GET    | `/schedule?date=&groupId=&teacherId=`  | Авторизований     |
-| POST   | `/schedule`                            | dispatcher, admin |
-| PUT    | `/schedule/:id`                        | dispatcher, admin |
-| DELETE | `/schedule/:id`                        | dispatcher, admin |
-| POST   | `/schedule/:id/cancel`                 | dispatcher, admin |
-| GET    | `/schedule/export?format=csv&groupId=` | dispatcher+       |
+| Метод  | Шлях                                                              | Доступ                                               |
+| ------ | ----------------------------------------------------------------- | ---------------------------------------------------- |
+| GET    | `/schedule?date=&startDate=&endDate=&groupId=&teacherId=&status=` | авторизовані; scoped visibility                      |
+| GET    | `/schedule/my`                                                    | авторизовані; scoped visibility                      |
+| GET    | `/schedule/export`                                                | авторизовані; CSV у межах scoped visibility          |
+| GET    | `/schedule/:id`                                                   | авторизовані; object-level authorization             |
+| POST   | `/schedule`                                                       | dispatcher, admin                                    |
+| PUT    | `/schedule/:id`                                                   | dispatcher, admin; у тому числі зміна status         |
+| DELETE | `/schedule/:id`                                                   | dispatcher, admin                                    |
+
+Стани `scheduled`, `cancelled` і `rescheduled` є частиною
+`UpdateScheduleEntryDto`; спеціалізованих endpoints
+`/schedule/:id/cancel` та `/schedule/:id/reschedule` у поточному API немає.
 
 ### Курси та навчання `/api/courses`
 
@@ -1023,36 +1052,36 @@ Student        (базовий доступ)
 
 ## 11. Фази розробки
 
-### Фаза 1 — MVP (поточний стан)
+### Фаза 1 — Базова платформа
 
-| #   | Компонент                                       | Статус    |
-| --- | ----------------------------------------------- | --------- |
-| 1   | NestJS + TypeScript ініціалізація               | ✅ Готово |
-| 2   | Моделі даних та типи                            | ✅ Готово |
-| 3   | Mock-дані (15 користувачів, всі 8 ролей)        | ✅ Готово |
-| 4   | AuthModule (JWT, bcrypt, refresh)               | ✅ Готово |
-| 5   | RBAC Guards (@Roles, RolesGuard)                | ✅ Готово |
-| 6   | ScheduleModule (CRUD, перевірка конфліктів)     | ✅ Готово |
-| 7   | CoursesModule (дисципліни, матеріали, завдання) | ✅ Готово |
-| 8   | ReferencesModule (довідники)                    | ✅ Готово |
-| 9   | NotificationsModule                             | ✅ Готово |
-| 10  | UsersModule                                     | ✅ Готово |
-| 11  | React: Auth flow (Zustand, interceptors)        | ✅ Готово |
-| 12  | React: Layout з роль-навігацією                 | ✅ Готово |
-| 13  | React: 8 сторінок                               | ✅ Готово |
-| 14  | Docker Compose                                  | ✅ Готово |
+| #   | Компонент                                                | Статус                                      |
+| --- | -------------------------------------------------------- | ------------------------------------------- |
+| 1   | NestJS + TypeScript ініціалізація                        | ✅ Реалізовано                              |
+| 2   | MongoDB domain models і DTO                              | ✅ Реалізовано                              |
+| 3   | Demo fixtures для локального seed                        | ✅ Реалізовано; не runtime data layer       |
+| 4   | AuthModule (cookies, JWT rotation, CSRF, password reset) | ✅ Реалізовано                              |
+| 5   | RBAC Guards та академічна object-level authorization     | ✅ Реалізовано                              |
+| 6   | ScheduleModule backend CRUD, conflicts, audit, CSV       | 🟡 Core готовий; dispatcher UI ще відсутній |
+| 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
+| 8   | ReferencesModule                                        | 🟡 Backend CRUD готовий; frontend у роботі  |
+| 9   | NotificationsModule                                     | ✅ In-app сценарії реалізовано              |
+| 10  | UsersModule                                             | ✅ Реалізовано                              |
+| 11  | React auth flow (Zustand, cookies, interceptors)         | ✅ Реалізовано                              |
+| 12  | React layout, lazy routes, RBAC navigation, i18n         | ✅ Реалізовано                              |
+| 13  | Role-based frontend pages                               | ✅ 18 page components                       |
+| 14  | Docker Compose + MongoDB replica set                    | ✅ Реалізовано                              |
 
 ### Фаза 2 — База даних + File Upload + Опитування
 
 | #   | Завдання                                            | Статус       |
 | --- | --------------------------------------------------- | ------------ |
-| 1   | MongoDB + Mongoose ODM замість mock-даних           | ✅ Готово    |
-| 2   | Міграції схеми                                      | ⏳ У роботі  |
-| 3   | FileModule — завантаження файлів (матеріали, здачі) | ✅ Готово    |
-| 4   | CRUD для всіх довідників через UI                   | ⏳ У роботі  |
-| 5   | **SurveysModule** — бекенд + фронтенд (повний цикл) | ✅ Готово    |
-| 6   | **ElectiveDisciplinesModule — вибіркові дисципліни** | ✅ Готово    |
-| 7   | Модуль відвідуваності                               | ⏳ Заплановано |
+| 1   | MongoDB + Mongoose ODM замість runtime mock-даних        | ✅ Реалізовано |
+| 2   | Автоматизована стратегія schema migrations               | ⏳ У роботі   |
+| 3   | FilesModule — завантаження файлів (матеріали, здачі)     | ✅ Реалізовано |
+| 4   | CRUD усіх довідників через окремий admin UI              | ⏳ У роботі   |
+| 5   | **SurveysModule** — backend + frontend, результати/export | ✅ Реалізовано |
+| 6   | **ElectiveDisciplinesModule** — повний цикл вибору        | ✅ Реалізовано |
+| 7   | Відвідуваність і теми занять у електронному журналі      | ✅ Реалізовано у CoursesModule |
 
 ### ElectiveDisciplinesModule — реалізовано
 
@@ -1065,17 +1094,19 @@ Student        (базовий доступ)
 - перегляд результатів для адміністратора, деканату та керівництва;
 - захищений структурований експорт результатів у XLSX/CSV зі зведенням, групами та деталізацією вибору кожного студента.
 
-### Фаза 3 — Production Ready
+### Фаза 3 — Production hardening
 
-| #   | Завдання                                         |
-| --- | ------------------------------------------------ |
-| 1   | HTTPS + Helmet + rate limiting                   |
-| 2   | CI/CD pipeline (GitHub Actions → VPS)            |
-| 3   | Email-сповіщення (зміни розкладу, нові завдання) |
-| 4   | AuditLogModule (повна реалізація)                |
-| 5   | Адаптивний дизайн (мобільні пристрої)            |
-| 6   | Звіти та експорт (XLS/CSV)                       |
-| 7   | i18n (українська + англійська)                   |
+| #   | Завдання                                                   | Статус                                      |
+| --- | ---------------------------------------------------------- | ------------------------------------------- |
+| 1   | HTTPS, Helmet, CORS, rate limiting, CSRF                    | ✅ Реалізовано                              |
+| 2   | CI/CD pipeline (GitHub Actions → VPS)                       | ✅ Реалізовано                              |
+| 3   | Email/push/realtime delivery для сповіщень                   | ⏳ Наступний етап                           |
+| 4   | AuditLogModule + transactional outbox                       | ✅ Реалізовано; доменні події розширюються  |
+| 5   | Адаптивний дизайн                                           | 🟡 Основні сторінки адаптивні; потрібен QA  |
+| 6   | XLSX/CSV export                                             | ✅ Реалізовано для surveys/electives; schedule CSV |
+| 7   | i18n (українська + англійська)                              | ✅ Реалізовано                              |
+| 8   | Production email delivery для password reset                | ⏳ Наступний етап                           |
+| 9   | Antivirus/content scanning і private object storage файлів  | ⏳ Наступний етап                           |
 
 ---
 
@@ -1233,8 +1264,13 @@ online_campus/
 │       │   ├── seed.service.ts
 │       │   └── seeders/
 │       │
-│       └── common/            # shared DTOs, middleware, swagger, types, utils, validators
+│       ├── config/
+│       │   └── environment.validation.ts # fail-fast environment schema
+│       │
+│       └── common/            # shared access policies, DTOs and infrastructure
+│           ├── access/        # centralized academic ABAC
 │           ├── dto/
+│           ├── guards/
 │           ├── middleware/
 │           ├── swagger/
 │           ├── types/
@@ -1251,50 +1287,50 @@ online_campus/
         ├── main.tsx
         ├── index.css
         ├── App.tsx
+        ├── i18n.ts
         ├── types/index.ts
+        ├── schemas/
+        │   └── authSchema.ts
         ├── services/
         │   ├── api.ts
         │   ├── notificationsApi.ts
         │   ├── surveysApi.ts
         │   └── electivesApi.ts
         ├── store/
-        │   ├── authStore.ts
-        │   └── notificationsStore.ts
+        │   └── authStore.ts
         ├── components/
         │   ├── Layout.tsx
         │   ├── ProtectedRoute.tsx
+        │   ├── ErrorBoundary.tsx
+        │   ├── RouteErrorBoundary.tsx
+        │   ├── FileUploader.tsx
+        │   ├── CreateUserModal.tsx
         │   ├── LanguageSwitcher.tsx
+        │   ├── dashboard/
         │   └── notifications/
         └── pages/
-            │
             ├── auth/
             │   ├── LoginPage.tsx
             │   └── ForgotPasswordPage.tsx
-            │
             ├── shared/
             │   ├── DashboardPage.tsx
             │   ├── SchedulePage.tsx
             │   ├── NotificationsPage.tsx
             │   └── ProfilePage.tsx
-            │
             ├── student/
             │   ├── AssignmentsPage.tsx
             │   └── GradesPage.tsx
-            │
             ├── surveys/
             │   ├── SurveysPage.tsx
             │   ├── SurveyPlayerPage.tsx
             │   ├── SurveyAdminPage.tsx
             │   └── SurveyResultsPage.tsx
-            │
             ├── electives/
             │   ├── ElectivesPage.tsx
             │   └── ElectiveAdminPage.tsx
-            │
             ├── admin/
             │   ├── UsersPage.tsx
             │   └── AuditLogPage.tsx
-            │
             └── course/
                 ├── CoursesPage.tsx
                 └── CourseDetailPage.tsx

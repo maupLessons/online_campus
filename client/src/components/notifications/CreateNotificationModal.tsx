@@ -3,6 +3,7 @@ import type { SyntheticEvent } from 'react';
 import api from '../../services/api';
 import { notificationsApi } from '../../services/notificationsApi';
 import type { Notification, NotificationInput } from '../../types';
+import { useTranslation } from 'react-i18next';
 
 interface ReferenceItem {
   id?: string;
@@ -46,6 +47,7 @@ function NotificationForm({
   onClose,
   onCreated,
 }: NotificationFormProps) {
+  const { t } = useTranslation();
   const isEditing = Boolean(notification);
   const [title, setTitle] = useState(() => notification?.title ?? '');
   const [message, setMessage] = useState(() => notification?.message ?? '');
@@ -86,9 +88,11 @@ function NotificationForm({
     } catch (err) {
       console.error(err);
       setError(
-        isEditing
-          ? 'Не вдалося оновити сповіщення'
-          : 'Не вдалося створити сповіщення',
+        t(
+          isEditing
+            ? 'notifications.form.errors.update'
+            : 'notifications.form.errors.create',
+        ),
       );
     } finally {
       setLoading(false);
@@ -130,10 +134,16 @@ function NotificationForm({
             color: '#1e293b',
           }}
         >
-          {isEditing ? 'Редагувати сповіщення' : 'Створити сповіщення'}
+          {t(
+            isEditing
+              ? 'notifications.form.editTitle'
+              : 'notifications.form.createTitle',
+          )}
         </h2>
         <button
+          type="button"
           onClick={onClose}
+          aria-label={t('notifications.form.close')}
           style={{
             background: 'none',
             border: 'none',
@@ -153,7 +163,7 @@ function NotificationForm({
             event.currentTarget.style.color = '#94a3b8';
           }}
         >
-          ✖
+          ×
         </button>
       </div>
 
@@ -178,7 +188,7 @@ function NotificationForm({
           <label
             style={{ fontSize: '14px', fontWeight: 500, color: '#475569' }}
           >
-            Тип
+            {t('notifications.form.type')}
           </label>
           <select
             value={type}
@@ -193,11 +203,17 @@ function NotificationForm({
               event.currentTarget.style.boxShadow = 'none';
             }}
           >
-            <option value="announcement">Оголошення</option>
-            <option value="system">Система</option>
-            <option value="grade">Оцінка</option>
-            <option value="new_assignment">Завдання</option>
-            <option value="schedule_change">Розклад</option>
+            <option value="announcement">
+              {t('notifications.types.announcement')}
+            </option>
+            <option value="system">{t('notifications.types.system')}</option>
+            <option value="grade">{t('notifications.types.grade')}</option>
+            <option value="new_assignment">
+              {t('notifications.types.new_assignment')}
+            </option>
+            <option value="schedule_change">
+              {t('notifications.types.schedule_change')}
+            </option>
           </select>
         </div>
 
@@ -205,7 +221,7 @@ function NotificationForm({
           <label
             style={{ fontSize: '14px', fontWeight: 500, color: '#475569' }}
           >
-            Заголовок сповіщення
+            {t('notifications.form.title')}
           </label>
           <input
             type="text"
@@ -213,7 +229,7 @@ function NotificationForm({
             onChange={(event) => setTitle(event.target.value)}
             required
             style={inputStyle}
-            placeholder="Введіть заголовок"
+            placeholder={t('notifications.form.titlePlaceholder')}
             onFocus={(event) => {
               event.currentTarget.style.borderColor = focusStyle.borderColor;
               event.currentTarget.style.boxShadow = focusStyle.boxShadow;
@@ -229,7 +245,7 @@ function NotificationForm({
           <label
             style={{ fontSize: '14px', fontWeight: 500, color: '#475569' }}
           >
-            Текст сповіщення
+            {t('notifications.form.message')}
           </label>
           <textarea
             value={message}
@@ -237,7 +253,7 @@ function NotificationForm({
             required
             rows={5}
             style={{ ...inputStyle, resize: 'vertical', minHeight: '100px' }}
-            placeholder="Опишіть сповіщення"
+            placeholder={t('notifications.form.messagePlaceholder')}
             onFocus={(event) => {
               event.currentTarget.style.borderColor = focusStyle.borderColor;
               event.currentTarget.style.boxShadow = focusStyle.boxShadow;
@@ -253,7 +269,7 @@ function NotificationForm({
           <label
             style={{ fontSize: '14px', fontWeight: 500, color: '#475569' }}
           >
-            Кому відправити
+            {t('notifications.form.recipient')}
           </label>
           <select
             value={targetType}
@@ -270,11 +286,21 @@ function NotificationForm({
               event.currentTarget.style.boxShadow = 'none';
             }}
           >
-            <option value="all">Усім користувачам</option>
-            <option value="students">Усім студентам</option>
-            <option value="teachers">Усім викладачам</option>
-            <option value="students_teachers">Студентам і викладачам</option>
-            <option value="group">Конкретній групі</option>
+            <option value="all">
+              {t('notifications.form.targets.all')}
+            </option>
+            <option value="students">
+              {t('notifications.form.targets.students')}
+            </option>
+            <option value="teachers">
+              {t('notifications.form.targets.teachers')}
+            </option>
+            <option value="students_teachers">
+              {t('notifications.form.targets.studentsTeachers')}
+            </option>
+            <option value="group">
+              {t('notifications.form.targets.group')}
+            </option>
           </select>
         </div>
 
@@ -283,7 +309,7 @@ function NotificationForm({
             <label
               style={{ fontSize: '14px', fontWeight: 500, color: '#475569' }}
             >
-              Група
+              {t('notifications.form.group')}
             </label>
             <select
               value={groupId}
@@ -299,7 +325,9 @@ function NotificationForm({
                 event.currentTarget.style.boxShadow = 'none';
               }}
             >
-              <option value="">Оберіть групу</option>
+              <option value="">
+                {t('notifications.form.selectGroup')}
+              </option>
               {groups.map((group) => (
                 <option key={group.id || group._id} value={group.id || group._id}>
                   {group.code}
@@ -340,11 +368,11 @@ function NotificationForm({
         >
           {loading
             ? isEditing
-              ? 'Збереження...'
-              : 'Створення...'
+              ? t('notifications.form.saving')
+              : t('notifications.form.creating')
             : isEditing
-              ? 'Зберегти зміни'
-              : 'Створити'}
+              ? t('notifications.form.saveChanges')
+              : t('notifications.form.create')}
         </button>
       </form>
     </>

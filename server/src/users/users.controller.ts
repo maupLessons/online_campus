@@ -107,14 +107,17 @@ export class UsersController {
 
   @Get('search')
   @Roles(Role.ADMIN, Role.PRESIDENT, Role.RECTOR, Role.DEAN)
-  search(@Query() query: UserSearchQueryDto) {
-    return this.usersService.findByName(query.q ?? '', query.role);
+  search(@Query() query: UserSearchQueryDto, @Req() req: AuthenticatedRequest) {
+    return this.usersService.findByName(query.q ?? '', query.role, req.user);
   }
 
   @Get('group/:groupId')
   @Roles(Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
-  getStudentsByGroup(@Param('groupId') groupId: string) {
-    return this.usersService.getStudentsByGroup(groupId);
+  getStudentsByGroup(
+    @Param('groupId') groupId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.usersService.getStudentsByGroup(groupId, req.user);
   }
 
   @Get('department/:departmentId')
@@ -125,13 +128,16 @@ export class UsersController {
     Role.PRESIDENT,
     Role.ADMIN,
   )
-  getTeachersByDepartment(@Param('departmentId') departmentId: string) {
-    return this.usersService.getTeachersByDepartment(departmentId);
+  getTeachersByDepartment(
+    @Param('departmentId') departmentId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.usersService.getTeachersByDepartment(departmentId, req.user);
   }
 
   @Get(':id')
   @Roles(Role.ADMIN, Role.PRESIDENT, Role.RECTOR, Role.DEAN)
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.usersService.findOne(id, req.user);
   }
 }

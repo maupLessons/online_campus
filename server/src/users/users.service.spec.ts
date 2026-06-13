@@ -55,7 +55,14 @@ describe('UsersService', () => {
       countDocuments: jest.fn(),
     };
 
-    service = new UsersService(model as never);
+    service = new UsersService(
+      model as never,
+      {
+        buildVisibleUserFilter: jest.fn().mockResolvedValue({}),
+        canAccessGroup: jest.fn().mockResolvedValue(true),
+        canAccessDepartment: jest.fn().mockResolvedValue(true),
+      } as never,
+    );
     removeAllRefreshTokenHashesSpy = jest
       .spyOn(service, 'removeAllRefreshTokenHashes')
       .mockResolvedValue(undefined);

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -10,7 +11,14 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  ParseEnumPipe,
+  Request,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { RolesGuard, Roles } from '../auth/roles.guard';
@@ -31,12 +39,30 @@ import {
   DepartmentDto,
   FacultyDto,
   SpecialtyDto,
+  ReferenceAdminQueryDto,
+  ReferenceImportQueryDto,
 } from './dto';
 import { GroupsService } from './groups.service';
 import { ClassroomsService } from './classrooms.service';
 import { DepartmentsService } from './departments.service';
 import { FacultiesService } from './faculties.service';
 import { SpecialtiesService } from './specialties.service';
+import { SPREADSHEET_EXPORT_CONFIG } from '../common/utils/spreadsheet-export.util';
+import { ReferencesAdminService } from './references-admin.service';
+import { ReferencesExportService } from './references-export.service';
+import { ReferencesImportService } from './references-import.service';
+import {
+  ReferenceExportFormat,
+  ReferenceExportLocale,
+  ReferenceType,
+} from './reference.types';
+import { AuthenticatedRequest } from '../common/types/authenticated-request';
+import {
+  ReferenceReadFilter,
+  ReferencesAccessService,
+} from './references-access.service';
+
+const REFERENCE_IMPORT_FILE_LIMIT = 2 * 1024 * 1024;
 
 @ApiTags('references')
 @ApiBearerAuth()
@@ -49,22 +75,105 @@ export class ReferencesController {
     private readonly departmentsService: DepartmentsService,
     private readonly facultiesService: FacultiesService,
     private readonly specialtiesService: SpecialtiesService,
+    private readonly adminService: ReferencesAdminService,
+    private readonly exportService: ReferencesExportService,
+    private readonly importService: ReferencesImportService,
+    private readonly accessService: ReferencesAccessService,
   ) {}
+
+  @Get('catalog/:type')
+  async getReferenceCatalog(
+    @Param('type', new ParseEnumPipe(ReferenceType)) type: ReferenceType,
+    @Query() query: ReferenceAdminQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    const filter = await this.accessService.buildReadFilter(type, req.user);
+    return this.adminService.findAll(type, query, filter);
+  }
+
+  @Get('admin/:type')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  getAdminReferences(
+    @Param('type', new ParseEnumPipe(ReferenceType)) type: ReferenceType,
+    @Query() query: ReferenceAdminQueryDto,
+  ) {
+    return this.adminService.findAll(type, query);
+  }
+
+  @Get('admin/:type/export')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  async exportReferences(
+    @Param('type', new ParseEnumPipe(ReferenceType)) type: ReferenceType,
+    @Query('format', new ParseEnumPipe(ReferenceExportFormat))
+    format: ReferenceExportFormat,
+    @Query(
+      'locale',
+      new ParseEnumPipe(ReferenceExportLocale, { optional: true }),
+    )
+    locale: ReferenceExportLocale = ReferenceExportLocale.UK,
+    @Res() response: Response,
+  ) {
+    const buffer =
+      format === ReferenceExportFormat.XLSX
+        ? await this.exportService.toXlsx(type, locale)
+        : await this.exportService.toCsv(type, locale);
+    response.set({
+      'Cache-Control': 'private, no-store',
+      'Content-Disposition': `attachment; filename="references-${type}.${format}"`,
+      'Content-Length': buffer.length,
+      'Content-Type':
+        format === ReferenceExportFormat.XLSX
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : SPREADSHEET_EXPORT_CONFIG.csvMimeType,
+      'X-Content-Type-Options': 'nosniff',
+    });
+    response.send(buffer);
+  }
+
+  @Post('admin/:type/import')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: REFERENCE_IMPORT_FILE_LIMIT, files: 1 },
+    }),
+  )
+  importReferences(
+    @Param('type', new ParseEnumPipe(ReferenceType)) type: ReferenceType,
+    @Query() query: ReferenceImportQueryDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('CSV or XLSX import file is required');
+    }
+    return this.importService.import(type, file, query.dryRun, query.mode);
+  }
 
   @Get('groups')
   @ApiQuery({ name: 'course', required: false, type: Number })
   @ApiResponse({ status: 200, type: [GroupDto] })
-  getGroups(@Query('course') course?: number) {
-    const query: { course?: number } = {};
-    if (course) {
-      query.course = Number(course);
-    }
-    return this.groupsService.findAll(query);
+  async getGroups(
+    @Request() req: AuthenticatedRequest,
+    @Query('course') course?: number,
+  ) {
+    const courseNumber = course === undefined ? undefined : Number(course);
+    const filter = await this.scopedFilter(
+      ReferenceType.GROUPS,
+      req.user,
+      Number.isFinite(courseNumber) ? { course: courseNumber } : {},
+    );
+    return this.adminService.getAll(ReferenceType.GROUPS, filter);
   }
 
   @Get('groups/:id')
   @ApiResponse({ status: 200, type: GroupDto })
-  getGroupById(@Param('id') id: string) {
+  async getGroupById(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.accessService.assertCanRead(ReferenceType.GROUPS, id, req.user);
     return this.groupsService.findById(id);
   }
 
@@ -106,23 +215,37 @@ export class ReferencesController {
   @ApiQuery({ name: 'type', required: false, type: String })
   @ApiQuery({ name: 'building', required: false, type: String })
   @ApiResponse({ status: 200, type: [ClassroomDto] })
-  getClassrooms(
+  async getClassrooms(
+    @Request() req: AuthenticatedRequest,
     @Query('type') type?: string,
     @Query('building') building?: string,
   ) {
-    const query: { type?: string; building?: string } = {};
+    const query: ReferenceReadFilter = {};
     if (type) {
       query.type = type;
     }
     if (building) {
       query.building = building;
     }
-    return this.classroomsService.findAll(query);
+    const filter = await this.scopedFilter(
+      ReferenceType.CLASSROOMS,
+      req.user,
+      query,
+    );
+    return this.adminService.getAll(ReferenceType.CLASSROOMS, filter);
   }
 
   @Get('classrooms/:id')
   @ApiResponse({ status: 200, type: ClassroomDto })
-  getClassroomById(@Param('id') id: string) {
+  async getClassroomById(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.accessService.assertCanRead(
+      ReferenceType.CLASSROOMS,
+      id,
+      req.user,
+    );
     return this.classroomsService.findById(id);
   }
 
@@ -165,13 +288,25 @@ export class ReferencesController {
 
   @Get('departments')
   @ApiResponse({ status: 200, type: [DepartmentDto] })
-  getDepartments() {
-    return this.departmentsService.findAll();
+  async getDepartments(@Request() req: AuthenticatedRequest) {
+    const filter = await this.accessService.buildReadFilter(
+      ReferenceType.DEPARTMENTS,
+      req.user,
+    );
+    return this.adminService.getAll(ReferenceType.DEPARTMENTS, filter);
   }
 
   @Get('departments/:id')
   @ApiResponse({ status: 200, type: DepartmentDto })
-  getDepartmentById(@Param('id') id: string) {
+  async getDepartmentById(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.accessService.assertCanRead(
+      ReferenceType.DEPARTMENTS,
+      id,
+      req.user,
+    );
     return this.departmentsService.findById(id);
   }
 
@@ -214,13 +349,25 @@ export class ReferencesController {
 
   @Get('faculties')
   @ApiResponse({ status: 200, type: [FacultyDto] })
-  getFaculties() {
-    return this.facultiesService.findAll();
+  async getFaculties(@Request() req: AuthenticatedRequest) {
+    const filter = await this.accessService.buildReadFilter(
+      ReferenceType.FACULTIES,
+      req.user,
+    );
+    return this.adminService.getAll(ReferenceType.FACULTIES, filter);
   }
 
   @Get('faculties/:id')
   @ApiResponse({ status: 200, type: FacultyDto })
-  getFacultyById(@Param('id') id: string) {
+  async getFacultyById(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.accessService.assertCanRead(
+      ReferenceType.FACULTIES,
+      id,
+      req.user,
+    );
     return this.facultiesService.findById(id);
   }
 
@@ -263,13 +410,25 @@ export class ReferencesController {
 
   @Get('specialties')
   @ApiResponse({ status: 200, type: [SpecialtyDto] })
-  getSpecialties() {
-    return this.specialtiesService.findAll();
+  async getSpecialties(@Request() req: AuthenticatedRequest) {
+    const filter = await this.accessService.buildReadFilter(
+      ReferenceType.SPECIALTIES,
+      req.user,
+    );
+    return this.adminService.getAll(ReferenceType.SPECIALTIES, filter);
   }
 
   @Get('specialties/:id')
   @ApiResponse({ status: 200, type: SpecialtyDto })
-  getSpecialtyById(@Param('id') id: string) {
+  async getSpecialtyById(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    await this.accessService.assertCanRead(
+      ReferenceType.SPECIALTIES,
+      id,
+      req.user,
+    );
     return this.specialtiesService.findById(id);
   }
 
@@ -308,5 +467,23 @@ export class ReferencesController {
   @ApiResponse({ status: 409, description: 'Specialty is in use.' })
   removeSpecialty(@Param('id') id: string) {
     return this.specialtiesService.remove(id);
+  }
+
+  private async scopedFilter(
+    type: ReferenceType,
+    user: AuthenticatedRequest['user'],
+    additionalFilter: ReferenceReadFilter = {},
+  ): Promise<ReferenceReadFilter> {
+    const accessFilter = await this.accessService.buildReadFilter(type, user);
+    const activeFilters = [accessFilter, additionalFilter].filter(
+      (filter) => Object.keys(filter).length > 0,
+    );
+    if (activeFilters.length === 0) {
+      return {};
+    }
+    if (activeFilters.length === 1) {
+      return activeFilters[0];
+    }
+    return { $and: activeFilters };
   }
 }

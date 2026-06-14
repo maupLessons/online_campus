@@ -8,7 +8,21 @@ import {
   CourseAssignmentSchema,
   CourseSchema,
 } from '../courses/schemas';
+import {
+  ElectiveDiscipline,
+  ElectiveDisciplineSchema,
+  ElectiveSelection,
+  ElectiveSelectionPeriod,
+  ElectiveSelectionPeriodSchema,
+  ElectiveSelectionSchema,
+} from '../elective-disciplines/schemas';
+import {
+  Notification,
+  NotificationSchema,
+} from '../notifications/schemas/notification.schema';
+import { AcademicAccessModule } from '../common/access/academic-access.module';
 import { ScheduleModule } from '../schedule/schedule.module';
+import { ScheduleEntry, ScheduleEntrySchema } from '../schedule/schemas';
 import { Survey, SurveySchema } from '../surveys/schemas';
 import { User, UserSchema } from '../users/schemas';
 import { ReferencesController } from './references.controller';
@@ -30,6 +44,11 @@ import { DepartmentsService } from './departments.service';
 import { FacultiesService } from './faculties.service';
 import { SpecialtiesService } from './specialties.service';
 import { ReferenceIntegrityService } from './reference-integrity.service';
+import { ReferenceRelationsService } from './reference-relations.service';
+import { ReferencesAdminService } from './references-admin.service';
+import { ReferencesExportService } from './references-export.service';
+import { ReferencesImportService } from './references-import.service';
+import { ReferencesAccessService } from './references-access.service';
 
 @Module({
   imports: [
@@ -44,12 +63,26 @@ import { ReferenceIntegrityService } from './reference-integrity.service';
       { name: CourseAssignment.name, schema: CourseAssignmentSchema },
       { name: Assignment.name, schema: AssignmentSchema },
       { name: Survey.name, schema: SurveySchema },
+      { name: ElectiveDiscipline.name, schema: ElectiveDisciplineSchema },
+      {
+        name: ElectiveSelectionPeriod.name,
+        schema: ElectiveSelectionPeriodSchema,
+      },
+      { name: ElectiveSelection.name, schema: ElectiveSelectionSchema },
+      { name: Notification.name, schema: NotificationSchema },
+      { name: ScheduleEntry.name, schema: ScheduleEntrySchema },
     ]),
     ScheduleModule,
+    AcademicAccessModule,
   ],
   controllers: [ReferencesController],
   providers: [
     ReferenceIntegrityService,
+    ReferenceRelationsService,
+    ReferencesAdminService,
+    ReferencesExportService,
+    ReferencesImportService,
+    ReferencesAccessService,
     GroupsService,
     ClassroomsService,
     DepartmentsService,

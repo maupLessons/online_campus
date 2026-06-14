@@ -481,7 +481,11 @@ interface ElectiveSelection {
 
 **Файли:** `src/references/`
 
-**Відповідальність:** довідники системи — групи, аудиторії, кафедри, факультети, спеціальності. Тільки читання для більшості; CRUD для адміністратора.
+**Відповідальність:** довідники системи — групи, аудиторії, кафедри,
+факультети, спеціальності. Усі авторизовані ролі мають read-only доступ до
+сторінки `/references`, але backend повертає лише записи в межах академічних
+повноважень користувача. Повне CRUD-керування, імпорт та експорт доступні
+тільки адміністратору.
 
 **Ендпоінти:**
 
@@ -494,12 +498,40 @@ interface ElectiveSelection {
 | GET             | `/references/departments/:id` | Деталі кафедри                               |
 | GET             | `/references/faculties`       | Список факультетів                           |
 | GET             | `/references/specialties`     | Список спеціальностей                        |
+| GET             | `/references/catalog/:type`   | Пошук і пагінація у межах академічного scope |
 | POST/PUT/DELETE | `/references/*`               | admin                                        |
+| GET             | `/references/admin/:type`     | admin — пошук і пагінація                    |
+| GET             | `/references/admin/:type/export?format=csv\|xlsx` | admin — безпечний експорт |
+| POST            | `/references/admin/:type/import` | admin — CSV/XLSX dry-run та імпорт         |
 
-**Поточний стан:** MongoDB schemas, backend CRUD, DTO validation,
-reference-integrity checks і захист видалення пов'язаних записів реалізовані.
-Окремої адміністративної frontend-сторінки для повного керування всіма
-довідниками ще немає, тому модуль не вважається повністю закритим end-to-end.
+**Поточний стан:** модуль закритий end-to-end. Реалізовано:
+
+- спільну React-сторінку `/references` з п'ятьма вкладками, пошуком і
+  пагінацією; для більшості ролей вона працює в режимі read-only, а admin
+  додатково отримує створення, редагування, імпорт, експорт і захищене
+  видалення;
+- централізований `ReferencesAccessService`, який застосовує object-level
+  authorization до списків і окремих записів на основі профілю користувача,
+  призначень курсів, зарахування на вибіркові дисципліни та розкладу;
+- глобальний read scope для admin, dispatcher, rector і president; керований
+  scope для dean і department_head; власні кафедри, групи та аудиторії для
+  teacher; власний академічний контекст для student;
+- fail-closed поведінку та `404 Not Found` для чужих об'єктів без розкриття
+  факту їх існування;
+- сувору DTO-валідацію, нормалізацію кодів і перетворення duplicate key у
+  контрольований `409 Conflict`;
+- перевірку активного статусу й допустимої ролі декана, завідувача кафедри та
+  куратора;
+- integrity checks для users, courses, assignments, schedule, surveys,
+  ElectiveDisciplinesModule і групових notifications;
+- локалізований CSV/XLSX-експорт із заголовками мовою інтерфейсу,
+  єдиним для проєкту UTF-8 BOM CSV та нейтралізацією spreadsheet formulas;
+- CSV/XLSX-імпорт до 2 МБ / 1000 рядків із підтримкою CSV у UTF-8
+  (та UTF-16LE для зворотної сумісності),
+  локалізованих заголовків, перевіркою сигнатури, забороною формул, пошуком
+  дубльованих рядків, dry-run і транзакційним застосуванням;
+- окремий MongoDB E2E-набір:
+  `npm run test:e2e:db -- references.e2e-spec.ts`.
 
 ---
 
@@ -642,7 +674,8 @@ src/
 │   ├── api.ts               ← Axios instance, cookie session refresh/retry
 │   ├── notificationsApi.ts
 │   ├── surveysApi.ts
-│   └── electivesApi.ts
+│   ├── electivesApi.ts
+│   └── referencesApi.ts
 ├── store/
 │   └── authStore.ts         ← Zustand: user, session state, login/logout
 ├── components/
@@ -654,7 +687,8 @@ src/
 │   ├── CreateUserModal.tsx
 │   ├── LanguageSwitcher.tsx
 │   ├── dashboard/
-│   └── notifications/
+│   ├── notifications/
+│   └── references/
 └── pages/                   ← role-based pages architecture
     ├── auth/                ← authentication pages
     │   ├── LoginPage.tsx
@@ -663,7 +697,8 @@ src/
     │   ├── DashboardPage.tsx
     │   ├── SchedulePage.tsx
     │   ├── NotificationsPage.tsx
-    │   └── ProfilePage.tsx
+    │   ├── ProfilePage.tsx
+    │   └── ReferencesPage.tsx
     ├── student/             ← student-specific pages
     │   ├── AssignmentsPage.tsx
     │   └── GradesPage.tsx
@@ -701,6 +736,7 @@ src/
 | Керування вибірковими    | —       | —       | —          | ✅        | ✅   | ✅    |
 | Користувачі              | —       | —       | —          | —         | ✅   | ✅    |
 | Аудит                    | —       | —       | —          | —         | —    | ✅    |
+| Довідники                | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
 | Сповіщення               | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
 
 Ролі `rector` і `president` також мають окремі дозволи для керівних
@@ -941,7 +977,11 @@ AuditLogEntry
 | GET             | `/references/classrooms`  | Авторизований |
 | GET             | `/references/departments` | Авторизований |
 | GET             | `/references/faculties`   | Авторизований |
+| GET             | `/references/catalog/:type` | Авторизований, scoped |
 | POST/PUT/DELETE | `/references/*`           | admin         |
+| GET             | `/references/admin/:type` | admin         |
+| GET             | `/references/admin/:type/export` | admin |
+| POST            | `/references/admin/:type/import` | admin |
 
 ---
 
@@ -1063,7 +1103,7 @@ Student        (базовий доступ)
 | 5   | RBAC Guards та академічна object-level authorization     | ✅ Реалізовано                              |
 | 6   | ScheduleModule backend CRUD, conflicts, audit, CSV       | 🟡 Core готовий; dispatcher UI ще відсутній |
 | 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
-| 8   | ReferencesModule                                        | 🟡 Backend CRUD готовий; frontend у роботі  |
+| 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
 | 9   | NotificationsModule                                     | ✅ In-app сценарії реалізовано              |
 | 10  | UsersModule                                             | ✅ Реалізовано                              |
 | 11  | React auth flow (Zustand, cookies, interceptors)         | ✅ Реалізовано                              |
@@ -1078,7 +1118,7 @@ Student        (базовий доступ)
 | 1   | MongoDB + Mongoose ODM замість runtime mock-даних        | ✅ Реалізовано |
 | 2   | Автоматизована стратегія schema migrations               | ⏳ У роботі   |
 | 3   | FilesModule — завантаження файлів (матеріали, здачі)     | ✅ Реалізовано |
-| 4   | CRUD усіх довідників через окремий admin UI              | ⏳ У роботі   |
+| 4   | CRUD усіх довідників через окремий admin UI              | ✅ Реалізовано |
 | 5   | **SurveysModule** — backend + frontend, результати/export | ✅ Реалізовано |
 | 6   | **ElectiveDisciplinesModule** — повний цикл вибору        | ✅ Реалізовано |
 | 7   | Відвідуваність і теми занять у електронному журналі      | ✅ Реалізовано у CoursesModule |
@@ -1223,8 +1263,14 @@ online_campus/
 │       │   ├── schemas/
 │       │   ├── references.module.ts
 │       │   ├── references.controller.ts
+│       │   ├── references-access.service.ts
+│       │   ├── references-admin.service.ts
+│       │   ├── references-import.service.ts
+│       │   ├── references-export.service.ts
 │       │   ├── reference-integrity.service.ts
 │       │   ├── reference-integrity.service.spec.ts
+│       │   ├── reference-relations.service.ts
+│       │   ├── reference-relations.service.spec.ts
 │       │   ├── faculties.service.ts
 │       │   ├── departments.service.ts
 │       │   ├── groups.service.ts
@@ -1295,7 +1341,8 @@ online_campus/
         │   ├── api.ts
         │   ├── notificationsApi.ts
         │   ├── surveysApi.ts
-        │   └── electivesApi.ts
+        │   ├── electivesApi.ts
+        │   └── referencesApi.ts
         ├── store/
         │   └── authStore.ts
         ├── components/
@@ -1307,7 +1354,8 @@ online_campus/
         │   ├── CreateUserModal.tsx
         │   ├── LanguageSwitcher.tsx
         │   ├── dashboard/
-        │   └── notifications/
+        │   ├── notifications/
+        │   └── references/
         └── pages/
             ├── auth/
             │   ├── LoginPage.tsx
@@ -1316,7 +1364,8 @@ online_campus/
             │   ├── DashboardPage.tsx
             │   ├── SchedulePage.tsx
             │   ├── NotificationsPage.tsx
-            │   └── ProfilePage.tsx
+            │   ├── ProfilePage.tsx
+            │   └── ReferencesPage.tsx
             ├── student/
             │   ├── AssignmentsPage.tsx
             │   └── GradesPage.tsx

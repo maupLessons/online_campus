@@ -1,4 +1,14 @@
 import * as ExcelJS from 'exceljs';
+import {
+  alignSpreadsheetCellsLeft as alignCellsLeft,
+  buildSpreadsheetCsv,
+  createSpreadsheetWorkbook,
+  sanitizeSpreadsheetValue as sanitizeSpreadsheetText,
+  spreadsheetSolidFill as solidFill,
+  SPREADSHEET_EXPORT_CONFIG,
+  styleSpreadsheetDataRow as styleDataRow,
+  styleSpreadsheetHeaderRow as styleHeaderRow,
+} from '../common/utils/spreadsheet-export.util';
 
 type ReferenceView = {
   id: string;
@@ -43,9 +53,7 @@ export type ElectiveExportResults = {
   }>;
 };
 
-const HEADER_FILL = '1D4ED8';
-const SUBHEADER_FILL = 'DBEAFE';
-const BORDER_COLOR = 'CBD5E1';
+const HEADER_FILL = SPREADSHEET_EXPORT_CONFIG.headerFill;
 
 export function buildElectiveResultsCsv(
   results: ElectiveExportResults,
@@ -128,22 +136,13 @@ export function buildElectiveResultsCsv(
     }
   }
 
-  const body = rows
-    .map((row) => row.map((value) => escapeCsvCell(value)).join(';'))
-    .join('\r\n');
-
-  return `\uFEFF${body}\r\n`;
+  return buildSpreadsheetCsv(rows);
 }
 
 export async function buildElectiveResultsXlsx(
   results: ElectiveExportResults,
 ): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'MAUP Online Campus';
-  workbook.lastModifiedBy = 'MAUP Online Campus';
-  workbook.created = new Date();
-  workbook.modified = new Date();
-  workbook.calcProperties.fullCalcOnLoad = true;
+  const workbook = createSpreadsheetWorkbook();
 
   addSummaryWorksheet(workbook, results);
   addSelectionsWorksheet(workbook, results);
@@ -331,71 +330,6 @@ function addSelectionsWorksheet(
     { width: 32 },
     { width: 20 },
   ];
-}
-
-function styleHeaderRow(row: ExcelJS.Row): void {
-  row.height = 26;
-  row.eachCell((cell) => {
-    cell.font = { bold: true, color: { argb: 'FF1E3A8A' } };
-    cell.fill = solidFill(SUBHEADER_FILL);
-    cell.alignment = {
-      vertical: 'middle',
-      horizontal: 'center',
-      wrapText: true,
-    };
-    cell.border = thinBorder();
-  });
-}
-
-function styleDataRow(row: ExcelJS.Row): void {
-  row.eachCell((cell) => {
-    cell.alignment = { vertical: 'top', wrapText: true };
-    cell.border = thinBorder();
-  });
-}
-
-function alignCellsLeft(
-  row: ExcelJS.Row,
-  fromColumn: number,
-  toColumn: number,
-): void {
-  for (let column = fromColumn; column <= toColumn; column += 1) {
-    const cell = row.getCell(column);
-    cell.alignment = {
-      ...cell.alignment,
-      horizontal: 'left',
-      wrapText: true,
-    };
-  }
-}
-
-function thinBorder(): Partial<ExcelJS.Borders> {
-  const side: Partial<ExcelJS.Border> = {
-    style: 'thin',
-    color: { argb: BORDER_COLOR },
-  };
-  return { top: side, left: side, bottom: side, right: side };
-}
-
-function solidFill(color: string): ExcelJS.Fill {
-  return {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: `FF${color}` },
-  };
-}
-
-function sanitizeSpreadsheetText(value: string | number): string | number {
-  if (typeof value === 'number') return value;
-  return /^\s*[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-}
-
-function escapeCsvCell(value: string): string {
-  const safeValue = String(sanitizeSpreadsheetText(value));
-  if (/[;"\n\r]/.test(safeValue)) {
-    return `"${safeValue.replace(/"/g, '""')}"`;
-  }
-  return safeValue;
 }
 
 function referenceLabel(reference?: ReferenceView | null): string {

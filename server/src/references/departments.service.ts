@@ -14,6 +14,8 @@ import {
   throwReferenceNotFound,
   toReferenceObjectId,
 } from './reference-errors';
+import { ReferenceRelationsService } from './reference-relations.service';
+import { executeReferenceWrite } from './reference-write.util';
 
 @Injectable()
 export class DepartmentsService {
@@ -21,6 +23,7 @@ export class DepartmentsService {
     @InjectModel(Department.name)
     private readonly departmentModel: Model<Department>,
     private readonly referenceIntegrityService: ReferenceIntegrityService,
+    private readonly referenceRelationsService: ReferenceRelationsService,
   ) {}
 
   async findAll(): Promise<DepartmentDto[]> {
@@ -48,21 +51,34 @@ export class DepartmentsService {
   }
 
   async create(createDepartmentDto: CreateDepartmentDto): Promise<string> {
-    const created = new this.departmentModel(createDepartmentDto);
-    await created.save();
-    return created._id.toString();
+    await this.referenceRelationsService.assertDepartmentHead(
+      createDepartmentDto.head,
+    );
+    return executeReferenceWrite(async () => {
+      const created = new this.departmentModel(createDepartmentDto);
+      await created.save();
+      return created._id.toString();
+    }, 'Department');
   }
 
   async update(
     id: string,
     updateDepartmentDto: UpdateDepartmentDto,
   ): Promise<string> {
+    await this.referenceRelationsService.assertDepartmentHead(
+      updateDepartmentDto.head,
+    );
     const objectId = toReferenceObjectId(id, 'department');
-    const department = await this.departmentModel
-      .findByIdAndUpdate(objectId, updateDepartmentDto, {
-        returnDocument: 'after',
-      })
-      .exec();
+    const department = await executeReferenceWrite(
+      () =>
+        this.departmentModel
+          .findByIdAndUpdate(objectId, updateDepartmentDto, {
+            returnDocument: 'after',
+            runValidators: true,
+          })
+          .exec(),
+      'Department',
+    );
     if (!department) {
       throwReferenceNotFound('Department', id);
     }

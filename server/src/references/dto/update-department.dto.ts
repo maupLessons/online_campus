@@ -14,5 +14,5 @@ export class UpdateDepartmentDto extends PartialType(CreateDepartmentDto) {
   @IsOptional()
   @IsMongoId()
   @ExistsInDatabase(User.name)
-  head?: string;
+  head?: string | null;
 }

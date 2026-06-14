@@ -12,12 +12,15 @@ import {
   throwReferenceNotFound,
   toReferenceObjectId,
 } from './reference-errors';
+import { ReferenceRelationsService } from './reference-relations.service';
+import { executeReferenceWrite } from './reference-write.util';
 
 @Injectable()
 export class FacultiesService {
   constructor(
     @InjectModel(Faculty.name) private readonly facultyModel: Model<Faculty>,
     private readonly referenceIntegrityService: ReferenceIntegrityService,
+    private readonly referenceRelationsService: ReferenceRelationsService,
   ) {}
 
   async findAll(): Promise<FacultyDto[]> {
@@ -45,21 +48,34 @@ export class FacultiesService {
   }
 
   async create(createFacultyDto: CreateFacultyDto): Promise<string> {
-    const created = new this.facultyModel(createFacultyDto);
-    await created.save();
-    return created._id.toString();
+    await this.referenceRelationsService.assertFacultyDean(
+      createFacultyDto.dean,
+    );
+    return executeReferenceWrite(async () => {
+      const created = new this.facultyModel(createFacultyDto);
+      await created.save();
+      return created._id.toString();
+    }, 'Faculty');
   }
 
   async update(
     id: string,
     updateFacultyDto: UpdateFacultyDto,
   ): Promise<string> {
+    await this.referenceRelationsService.assertFacultyDean(
+      updateFacultyDto.dean,
+    );
     const objectId = toReferenceObjectId(id, 'faculty');
-    const faculty = await this.facultyModel
-      .findByIdAndUpdate(objectId, updateFacultyDto, {
-        returnDocument: 'after',
-      })
-      .exec();
+    const faculty = await executeReferenceWrite(
+      () =>
+        this.facultyModel
+          .findByIdAndUpdate(objectId, updateFacultyDto, {
+            returnDocument: 'after',
+            runValidators: true,
+          })
+          .exec(),
+      'Faculty',
+    );
     if (!faculty) {
       throwReferenceNotFound('Faculty', id);
     }

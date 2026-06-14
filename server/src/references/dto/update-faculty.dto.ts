@@ -8,5 +8,5 @@ export class UpdateFacultyDto extends PartialType(CreateFacultyDto) {
   @IsOptional()
   @IsMongoId()
   @ExistsInDatabase(User.name)
-  dean?: string;
+  dean?: string | null;
 }

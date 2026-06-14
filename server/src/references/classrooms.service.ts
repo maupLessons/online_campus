@@ -12,6 +12,7 @@ import {
   throwReferenceNotFound,
   toReferenceObjectId,
 } from './reference-errors';
+import { executeReferenceWrite } from './reference-write.util';
 
 @Injectable()
 export class ClassroomsService {
@@ -44,9 +45,11 @@ export class ClassroomsService {
   }
 
   async create(createClassroomDto: CreateClassroomDto): Promise<string> {
-    const created = new this.classroomModel(createClassroomDto);
-    await created.save();
-    return created._id.toString();
+    return executeReferenceWrite(async () => {
+      const created = new this.classroomModel(createClassroomDto);
+      await created.save();
+      return created._id.toString();
+    }, 'Classroom');
   }
 
   async update(
@@ -54,12 +57,17 @@ export class ClassroomsService {
     updateClassroomDto: UpdateClassroomDto,
   ): Promise<string> {
     const objectId = toReferenceObjectId(id, 'classroom');
-    const classroom = await this.classroomModel
-      .findByIdAndUpdate(objectId, updateClassroomDto, {
-        returnDocument: 'after',
-      })
-      .lean()
-      .exec();
+    const classroom = await executeReferenceWrite(
+      () =>
+        this.classroomModel
+          .findByIdAndUpdate(objectId, updateClassroomDto, {
+            returnDocument: 'after',
+            runValidators: true,
+          })
+          .lean()
+          .exec(),
+      'Classroom',
+    );
     if (!classroom) {
       throwReferenceNotFound('Classroom', id);
     }

@@ -16,3 +16,5 @@ export * from './group.dto';
 export * from './specialty.dto';
 export * from './classroom.dto';
 export * from './user-reference.dto';
+export * from './reference-admin-query.dto';
+export * from './reference-import-query.dto';

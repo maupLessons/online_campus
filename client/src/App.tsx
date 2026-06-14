@@ -10,6 +10,8 @@ import type { ReactNode } from 'react';
 import { useAuthStore } from './store/authStore';
 import { AUTH_SESSION_EXPIRED_EVENT } from './services/api';
 
+const ALL_ROLES = Object.values(Role) as Role[];
+
 const DashboardPage = lazy(() => import('./pages/shared/DashboardPage'));
 const SchedulePage = lazy(() => import('./pages/shared/SchedulePage'));
 const CoursesPage = lazy(() => import('./pages/course/CoursesPage'));
@@ -21,6 +23,7 @@ const NotificationsPage = lazy(
 );
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 const AuditLogPage = lazy(() => import('./pages/admin/AuditLogPage'));
+const ReferencesPage = lazy(() => import('./pages/shared/ReferencesPage'));
 const ProfilePage = lazy(() => import('./pages/shared/ProfilePage'));
 const SurveysPage = lazy(() => import('./pages/surveys/SurveysPage'));
 const SurveyPlayerPage = lazy(
@@ -247,6 +250,16 @@ export default function App() {
               <ProtectedRoute allowedRoles={[Role.ADMIN]}>
                 <LazyPage>
                   <AuditLogPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="references"
+            element={
+              <ProtectedRoute allowedRoles={ALL_ROLES}>
+                <LazyPage>
+                  <ReferencesPage />
                 </LazyPage>
               </ProtectedRoute>
             }

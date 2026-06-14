@@ -67,6 +67,11 @@ const NAV_ITEMS: {
     path: '/audit-log',
     roles: [Role.ADMIN],
   },
+  {
+    labelKey: 'nav.references',
+    path: '/references',
+    roles: ALL_ROLES,
+  },
 ];
 
 export default function Layout() {
@@ -130,6 +135,8 @@ export default function Layout() {
         return t('nav.notifications');
       case '/audit-log':
         return t('nav.auditLog');
+      case '/references':
+        return t('nav.references');
       default:
         return t('app.title');
     }

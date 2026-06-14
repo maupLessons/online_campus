@@ -14,5 +14,5 @@ export class UpdateGroupDto extends PartialType(CreateGroupDto) {
   @IsOptional()
   @IsMongoId()
   @ExistsInDatabase(User.name)
-  curator?: string;
+  curator?: string | null;
 }

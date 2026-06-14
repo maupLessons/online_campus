@@ -31,6 +31,10 @@ function createService(
     courseAssignmentCount?: number;
     assignmentCount?: number;
     surveyCount?: number;
+    electiveDisciplineCount?: number;
+    electivePeriodCount?: number;
+    electiveSelectionCount?: number;
+    notificationCount?: number;
     classroomUsed?: boolean;
   } = {},
 ) {
@@ -55,6 +59,10 @@ function createService(
     modelWithCount(overrides.courseAssignmentCount) as never,
     modelWithCount(overrides.assignmentCount) as never,
     modelWithCount(overrides.surveyCount) as never,
+    modelWithCount(overrides.electiveDisciplineCount) as never,
+    modelWithCount(overrides.electivePeriodCount) as never,
+    modelWithCount(overrides.electiveSelectionCount) as never,
+    modelWithCount(overrides.notificationCount) as never,
     scheduleService as never,
   );
 
@@ -87,10 +95,11 @@ describe('ReferenceIntegrityService', () => {
     );
   });
 
-  it('blocks deleting departments used by courses or teacher profiles', async () => {
+  it('blocks deleting departments used by courses, teachers, or electives', async () => {
     const { service } = createService({
       courseCount: 1,
       userCounts: [3, 0],
+      electiveDisciplineCount: 1,
     });
 
     await expect(service.assertDepartmentCanBeDeleted(id)).rejects.toThrow(
@@ -98,12 +107,15 @@ describe('ReferenceIntegrityService', () => {
     );
   });
 
-  it('blocks deleting groups used by students, courses, assignments, or surveys', async () => {
+  it('blocks deleting groups used by academic or communication records', async () => {
     const { service } = createService({
       userCounts: [4, 0],
       courseAssignmentCount: 2,
       assignmentCount: 1,
       surveyCount: 1,
+      electivePeriodCount: 1,
+      electiveSelectionCount: 1,
+      notificationCount: 1,
     });
 
     await expect(service.assertGroupCanBeDeleted(id)).rejects.toThrow(

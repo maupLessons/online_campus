@@ -9,6 +9,18 @@ import {
   CourseAssignmentDocument,
   CourseDocument,
 } from '../courses/schemas';
+import {
+  ElectiveDiscipline,
+  ElectiveDisciplineDocument,
+  ElectiveSelection,
+  ElectiveSelectionDocument,
+  ElectiveSelectionPeriod,
+  ElectiveSelectionPeriodDocument,
+} from '../elective-disciplines/schemas';
+import {
+  Notification,
+  NotificationDocument,
+} from '../notifications/schemas/notification.schema';
 import { ScheduleService } from '../schedule/schedule.service';
 import { Survey, SurveyDocument, SurveyTargetType } from '../surveys/schemas';
 import { User, UserDocument } from '../users/schemas';
@@ -32,6 +44,14 @@ export class ReferenceIntegrityService {
     private readonly assignmentModel: Model<AssignmentDocument>,
     @InjectModel(Survey.name)
     private readonly surveyModel: Model<SurveyDocument>,
+    @InjectModel(ElectiveDiscipline.name)
+    private readonly electiveDisciplineModel: Model<ElectiveDisciplineDocument>,
+    @InjectModel(ElectiveSelectionPeriod.name)
+    private readonly electivePeriodModel: Model<ElectiveSelectionPeriodDocument>,
+    @InjectModel(ElectiveSelection.name)
+    private readonly electiveSelectionModel: Model<ElectiveSelectionDocument>,
+    @InjectModel(Notification.name)
+    private readonly notificationModel: Model<NotificationDocument>,
     private readonly scheduleService: ScheduleService,
   ) {}
 
@@ -58,6 +78,12 @@ export class ReferenceIntegrityService {
           .countDocuments({
             'teacherProfile.department': id as unknown as Department,
           })
+          .exec(),
+      },
+      {
+        resource: 'electiveDisciplines',
+        count: await this.electiveDisciplineModel
+          .countDocuments({ department: id })
           .exec(),
       },
     ]);
@@ -99,6 +125,24 @@ export class ReferenceIntegrityService {
             targetType: SurveyTargetType.GROUPS,
             targetIds: idString,
           })
+          .exec(),
+      },
+      {
+        resource: 'electiveSelectionPeriods',
+        count: await this.electivePeriodModel
+          .countDocuments({ targetGroups: id })
+          .exec(),
+      },
+      {
+        resource: 'electiveSelections',
+        count: await this.electiveSelectionModel
+          .countDocuments({ group: id })
+          .exec(),
+      },
+      {
+        resource: 'notifications',
+        count: await this.notificationModel
+          .countDocuments({ groupId: id })
           .exec(),
       },
     ]);

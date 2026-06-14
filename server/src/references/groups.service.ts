@@ -14,12 +14,15 @@ import {
   throwReferenceNotFound,
   toReferenceObjectId,
 } from './reference-errors';
+import { ReferenceRelationsService } from './reference-relations.service';
+import { executeReferenceWrite } from './reference-write.util';
 
 @Injectable()
 export class GroupsService {
   constructor(
     @InjectModel(Group.name) private readonly groupModel: Model<Group>,
     private readonly referenceIntegrityService: ReferenceIntegrityService,
+    private readonly referenceRelationsService: ReferenceRelationsService,
   ) {}
 
   async findAll(query: { course?: number }): Promise<GroupDto[]> {
@@ -47,18 +50,31 @@ export class GroupsService {
   }
 
   async create(createGroupDto: CreateGroupDto): Promise<string> {
-    const createdGroup = new this.groupModel(createGroupDto);
-    await createdGroup.save();
-    return createdGroup._id.toString();
+    await this.referenceRelationsService.assertGroupCurator(
+      createGroupDto.curator,
+    );
+    return executeReferenceWrite(async () => {
+      const createdGroup = new this.groupModel(createGroupDto);
+      await createdGroup.save();
+      return createdGroup._id.toString();
+    }, 'Group');
   }
 
   async update(id: string, updateGroupDto: UpdateGroupDto): Promise<string> {
+    await this.referenceRelationsService.assertGroupCurator(
+      updateGroupDto.curator,
+    );
     const objectId = toReferenceObjectId(id, 'group');
-    const group = await this.groupModel
-      .findByIdAndUpdate(objectId, updateGroupDto, {
-        returnDocument: 'after',
-      })
-      .exec();
+    const group = await executeReferenceWrite(
+      () =>
+        this.groupModel
+          .findByIdAndUpdate(objectId, updateGroupDto, {
+            returnDocument: 'after',
+            runValidators: true,
+          })
+          .exec(),
+      'Group',
+    );
     if (!group) {
       throwReferenceNotFound('Group', id);
     }

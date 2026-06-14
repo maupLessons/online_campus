@@ -12,6 +12,7 @@ import {
   throwReferenceNotFound,
   toReferenceObjectId,
 } from './reference-errors';
+import { executeReferenceWrite } from './reference-write.util';
 
 @Injectable()
 export class SpecialtiesService {
@@ -41,9 +42,11 @@ export class SpecialtiesService {
   }
 
   async create(createSpecialtyDto: CreateSpecialtyDto): Promise<string> {
-    const created = new this.specialtyModel(createSpecialtyDto);
-    await created.save();
-    return created._id.toString();
+    return executeReferenceWrite(async () => {
+      const created = new this.specialtyModel(createSpecialtyDto);
+      await created.save();
+      return created._id.toString();
+    }, 'Specialty');
   }
 
   async update(
@@ -51,11 +54,16 @@ export class SpecialtiesService {
     updateSpecialtyDto: UpdateSpecialtyDto,
   ): Promise<string> {
     const objectId = toReferenceObjectId(id, 'specialty');
-    const specialty = await this.specialtyModel
-      .findByIdAndUpdate(objectId, updateSpecialtyDto, {
-        returnDocument: 'after',
-      })
-      .exec();
+    const specialty = await executeReferenceWrite(
+      () =>
+        this.specialtyModel
+          .findByIdAndUpdate(objectId, updateSpecialtyDto, {
+            returnDocument: 'after',
+            runValidators: true,
+          })
+          .exec(),
+      'Specialty',
+    );
     if (!specialty) {
       throwReferenceNotFound('Specialty', id);
     }

@@ -24,6 +24,8 @@ export const AUDIT_ACTIONS = {
   ELECTIVE_PERIOD_FINALIZE: 'elective.period.finalize',
   ELECTIVE_SELECTION_SELECT: 'elective.selection.select',
   ELECTIVE_SELECTION_CANCEL: 'elective.selection.cancel',
+  REPORT_VIEW: 'report.view',
+  REPORT_EXPORT: 'report.export',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

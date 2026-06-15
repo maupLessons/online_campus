@@ -68,3 +68,4 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.plugin(paginate);
 UserSchema.index({ passwordResetTokenHash: 1 }, { unique: true, sparse: true });
 UserSchema.index({ passwordResetTokenExpiresAt: 1 }, { sparse: true });
+UserSchema.index({ role: 1, status: 1, 'studentProfile.group': 1 });

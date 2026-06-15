@@ -33,6 +33,7 @@ import {
   type ElectivePeriod,
 } from '../../types';
 import { useAuthStore } from '../../store/authStore';
+import { downloadBlob } from '../../utils/spreadsheetExport';
 
 type DisciplineFormState = {
   code: string;
@@ -177,18 +178,6 @@ function statusBadgeClass(status: ElectiveDisciplineStatus | ElectivePeriodStatu
   }
 
   return 'bg-amber-100 text-amber-700';
-}
-
-function downloadFile(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }
 
 export default function ElectiveAdminPage() {
@@ -401,7 +390,7 @@ export default function ElectiveAdminPage() {
       format: ElectiveExportFormat;
     }) => electivesApi.exportPeriodResults(id, format),
     onSuccess: (blob, { id, format }) => {
-      downloadFile(blob, `elective-period-${id}-results.${format}`);
+      downloadBlob(blob, `elective-period-${id}-results.${format}`);
     },
   });
 

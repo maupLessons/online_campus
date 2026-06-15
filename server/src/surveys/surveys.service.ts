@@ -8,6 +8,11 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import {
+  buildSpreadsheetExportArtifact,
+  SpreadsheetExportArtifact,
+  SpreadsheetExportFormat,
+} from '../common/export';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { toId } from '../common/utils/to-id.util';
 import { UsersService } from '../users/users.service';
@@ -562,17 +567,18 @@ export class SurveysService {
     return this.buildResults(survey);
   }
 
-  async exportResultsCsv(id: string, user: AuthenticatedUser): Promise<Buffer> {
-    const results = await this.getExportableResults(id, user);
-    return Buffer.from(buildSurveyResultsCsv(results), 'utf8');
-  }
-
-  async exportResultsXlsx(
+  async exportResults(
     id: string,
     user: AuthenticatedUser,
-  ): Promise<Buffer> {
+    format: SpreadsheetExportFormat,
+  ): Promise<SpreadsheetExportArtifact> {
     const results = await this.getExportableResults(id, user);
-    return buildSurveyResultsXlsx(results);
+    return buildSpreadsheetExportArtifact({
+      filename: `survey-${id}-results`,
+      format,
+      buildCsv: () => buildSurveyResultsCsv(results),
+      buildXlsx: () => buildSurveyResultsXlsx(results),
+    });
   }
 
   private async buildResults(

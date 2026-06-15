@@ -4,7 +4,6 @@ export const SPREADSHEET_EXPORT_CONFIG = {
   creator: 'MAUP Online Campus',
   csvDelimiter: ';',
   csvLineEnding: '\r\n',
-  csvMimeType: 'text/csv; charset=utf-8',
   headerFill: '1D4ED8',
   subheaderFill: 'DBEAFE',
   borderColor: 'CBD5E1',
@@ -46,7 +45,7 @@ export function sanitizeSpreadsheetValue(
         : value instanceof Date
           ? value.toISOString()
           : '';
-  return /^\s*[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /^\s*[=+\-@\t\r\n]/.test(text) ? `'${text}` : text;
 }
 
 export function escapeSpreadsheetCsvCell(value: unknown): string {

@@ -22,6 +22,7 @@ import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import { RolesGuard, Roles } from '../auth/roles.guard';
+import { sendSpreadsheetExport } from '../common/export';
 import { Role } from '../common/types/roles.enum';
 import {
   CreateClassroomDto,
@@ -47,7 +48,6 @@ import { ClassroomsService } from './classrooms.service';
 import { DepartmentsService } from './departments.service';
 import { FacultiesService } from './faculties.service';
 import { SpecialtiesService } from './specialties.service';
-import { SPREADSHEET_EXPORT_CONFIG } from '../common/utils/spreadsheet-export.util';
 import { ReferencesAdminService } from './references-admin.service';
 import { ReferencesExportService } from './references-export.service';
 import { ReferencesImportService } from './references-import.service';
@@ -115,21 +115,8 @@ export class ReferencesController {
     locale: ReferenceExportLocale = ReferenceExportLocale.UK,
     @Res() response: Response,
   ) {
-    const buffer =
-      format === ReferenceExportFormat.XLSX
-        ? await this.exportService.toXlsx(type, locale)
-        : await this.exportService.toCsv(type, locale);
-    response.set({
-      'Cache-Control': 'private, no-store',
-      'Content-Disposition': `attachment; filename="references-${type}.${format}"`,
-      'Content-Length': buffer.length,
-      'Content-Type':
-        format === ReferenceExportFormat.XLSX
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : SPREADSHEET_EXPORT_CONFIG.csvMimeType,
-      'X-Content-Type-Options': 'nosniff',
-    });
-    response.send(buffer);
+    const artifact = await this.exportService.export(type, locale, format);
+    return sendSpreadsheetExport(response, artifact);
   }
 
   @Post('admin/:type/import')

@@ -23,6 +23,7 @@ const NotificationsPage = lazy(
 );
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 const AuditLogPage = lazy(() => import('./pages/admin/AuditLogPage'));
+const ReportsPage = lazy(() => import('./pages/shared/ReportsPage'));
 const ReferencesPage = lazy(() => import('./pages/shared/ReferencesPage'));
 const ProfilePage = lazy(() => import('./pages/shared/ProfilePage'));
 const SurveysPage = lazy(() => import('./pages/surveys/SurveysPage'));
@@ -250,6 +251,23 @@ export default function App() {
               <ProtectedRoute allowedRoles={[Role.ADMIN]}>
                 <LazyPage>
                   <AuditLogPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="reports"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  Role.DEPARTMENT_HEAD,
+                  Role.DEAN,
+                  Role.RECTOR,
+                  Role.PRESIDENT,
+                  Role.ADMIN,
+                ]}>
+                <LazyPage>
+                  <ReportsPage />
                 </LazyPage>
               </ProtectedRoute>
             }

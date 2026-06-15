@@ -1,4 +1,6 @@
-import api from './api';
+import api from "./api";
+import { fetchSpreadsheetExport } from "./spreadsheetExportApi";
+import type { SpreadsheetExportFormat } from "../utils/spreadsheetExport";
 import type {
   CreateSurveyInput,
   PaginatedResponse,
@@ -9,7 +11,7 @@ import type {
   SurveyStatus,
   SurveySubmitInput,
   SurveyTargetType,
-} from '../types';
+} from "../types";
 
 export type SurveyCourseTarget = {
   id: string;
@@ -19,25 +21,25 @@ export type SurveyCourseTarget = {
 
 export type SurveyListFilters = {
   search?: string;
-  status?: SurveyStatus | '';
-  targetType?: SurveyTargetType | '';
+  status?: SurveyStatus | "";
+  targetType?: SurveyTargetType | "";
 };
 
-export type SurveyExportFormat = 'csv' | 'xlsx';
+export type SurveyExportFormat = SpreadsheetExportFormat;
 
 function buildSurveyParams(filters?: SurveyListFilters) {
   const params = new URLSearchParams();
 
   if (filters?.search?.trim()) {
-    params.set('search', filters.search.trim());
+    params.set("search", filters.search.trim());
   }
 
   if (filters?.status) {
-    params.set('status', filters.status);
+    params.set("status", filters.status);
   }
 
   if (filters?.targetType) {
-    params.set('targetType', filters.targetType);
+    params.set("targetType", filters.targetType);
   }
 
   return params;
@@ -45,13 +47,13 @@ function buildSurveyParams(filters?: SurveyListFilters) {
 
 export const surveysApi = {
   listActive: async () => {
-    const { data } = await api.get<Survey[]>('/surveys/active');
+    const { data } = await api.get<Survey[]>("/surveys/active");
     return data;
   },
 
   listManaged: async (filters?: SurveyListFilters) => {
     const params = buildSurveyParams(filters);
-    const { data } = await api.get<Survey[]>('/surveys', {
+    const { data } = await api.get<Survey[]>("/surveys", {
       params,
     });
     return data;
@@ -70,7 +72,7 @@ export const surveysApi = {
   },
 
   create: async (payload: CreateSurveyInput) => {
-    const { data } = await api.post<Survey>('/surveys', payload);
+    const { data } = await api.post<Survey>("/surveys", payload);
     return data;
   },
 
@@ -109,28 +111,19 @@ export const surveysApi = {
   },
 
   exportResults: async (id: string, format: SurveyExportFormat) => {
-    const { data } = await api.get<ArrayBuffer>(
-      `/surveys/${id}/results/export`,
-      {
-        params: { format },
-        responseType: 'arraybuffer',
-      },
-    );
-    const contentType =
-      format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv;charset=utf-8';
-    return new Blob([data], { type: contentType });
+    return fetchSpreadsheetExport(`/surveys/${id}/results/export`, {
+      params: { format },
+    });
   },
 
   listTargetGroups: async () => {
-    const { data } = await api.get<ReferenceView[]>('/references/groups');
+    const { data } = await api.get<ReferenceView[]>("/references/groups");
     return data;
   },
 
   listTargetCourses: async () => {
     const { data } = await api.get<PaginatedResponse<SurveyCourseTarget>>(
-      '/courses',
+      "/courses",
       { params: { page: 1, limit: 100 } },
     );
     return data.docs;

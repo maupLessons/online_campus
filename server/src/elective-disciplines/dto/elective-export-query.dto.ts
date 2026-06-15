@@ -1,17 +1,8 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import {
+  SpreadsheetExportFormat,
+  SpreadsheetExportQueryDto,
+} from '../../common/export';
 
-export enum ElectiveExportFormat {
-  CSV = 'csv',
-  XLSX = 'xlsx',
-}
+export { SpreadsheetExportFormat as ElectiveExportFormat };
 
-export class ElectiveExportQueryDto {
-  @ApiPropertyOptional({
-    enum: ElectiveExportFormat,
-    default: ElectiveExportFormat.CSV,
-  })
-  @IsOptional()
-  @IsEnum(ElectiveExportFormat)
-  format: ElectiveExportFormat = ElectiveExportFormat.CSV;
-}
+export class ElectiveExportQueryDto extends SpreadsheetExportQueryDto {}

@@ -20,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { FilesModule } from './files/files.module';
 import { SurveysModule } from './surveys/surveys.module';
 import { ElectiveDisciplinesModule } from './elective-disciplines/elective-disciplines.module';
+import { ReportsModule } from './reports/reports.module';
 import { TransactionInterceptor } from './audit-log/transaction.interceptor';
 import { validateEnvironment } from './config/environment.validation';
 
@@ -106,6 +107,7 @@ function buildMongoUri(config: ConfigService): string {
     FilesModule,
     SurveysModule,
     ElectiveDisciplinesModule,
+    ReportsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: CsrfGuard },

@@ -8,7 +8,7 @@ import {
   SPREADSHEET_EXPORT_CONFIG,
   styleSpreadsheetDataRow as styleDataRow,
   styleSpreadsheetHeaderRow as styleHeaderRow,
-} from '../common/utils/spreadsheet-export.util';
+} from '../common/export';
 
 type ReferenceView = {
   id: string;

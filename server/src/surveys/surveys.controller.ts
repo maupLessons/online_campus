@@ -23,6 +23,7 @@ import {
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
+import { sendSpreadsheetExport } from '../common/export';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import {
@@ -182,32 +183,11 @@ export class SurveysController {
     @Res() res: Response,
   ) {
     const format = query.format ?? SurveyExportFormat.CSV;
-    res.setHeader('Cache-Control', 'private, no-store');
-
-    if (format === SurveyExportFormat.XLSX) {
-      const workbook = await this.surveysService.exportResultsXlsx(
-        id,
-        req.user,
-      );
-      res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
-      res.setHeader('Content-Length', workbook.length);
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="survey-${id}-results.xlsx"`,
-      );
-      return res.send(workbook);
-    }
-
-    const csvBuffer = await this.surveysService.exportResultsCsv(id, req.user);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Length', csvBuffer.length);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="survey-${id}-results.csv"`,
+    const artifact = await this.surveysService.exportResults(
+      id,
+      req.user,
+      format,
     );
-    return res.send(csvBuffer);
+    return sendSpreadsheetExport(res, artifact);
   }
 }

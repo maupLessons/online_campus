@@ -22,6 +22,7 @@ import {
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
+import { sendSpreadsheetExport } from '../common/export';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import {
@@ -246,34 +247,11 @@ export class ElectiveDisciplinesController {
     @Res() res: Response,
   ) {
     const format = query.format ?? ElectiveExportFormat.CSV;
-    res.setHeader('Cache-Control', 'private, no-store');
-
-    if (format === ElectiveExportFormat.XLSX) {
-      const workbook = await this.electivesService.exportPeriodResultsXlsx(
-        id,
-        req.user,
-      );
-      res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
-      res.setHeader(
-        'Content-Disposition',
-        `attachment; filename="elective-period-${id}-results.xlsx"`,
-      );
-      return res.send(workbook);
-    }
-
-    const csvBuffer = await this.electivesService.exportPeriodResultsCsv(
+    const artifact = await this.electivesService.exportPeriodResults(
       id,
       req.user,
+      format,
     );
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader('Content-Length', csvBuffer.length);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="elective-period-${id}-results.csv"`,
-    );
-    return res.send(csvBuffer);
+    return sendSpreadsheetExport(res, artifact);
   }
 }

@@ -272,9 +272,12 @@ describe('ScheduleService', () => {
 
     scheduleEntryModel.find.mockReturnValue(query([scheduleEntry]));
 
-    const csv = await service.exportCsv(user, {});
+    const exportArtifact = await service.exportCsv(user, {});
+    const csv = exportArtifact.buffer.toString('utf8');
 
-    expect(csv).toContain('date,start_time,end_time');
+    expect(exportArtifact.filename).toBe('schedule.csv');
+    expect(exportArtifact.contentType).toBe('text/csv; charset=utf-8');
+    expect(csv).toContain('date;start_time;end_time');
     expect(csv).toContain("'=SEC101");
     expect(csv).toContain('Основи кібербезпеки');
   });

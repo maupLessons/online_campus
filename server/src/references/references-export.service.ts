@@ -2,12 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
+  buildSpreadsheetExportArtifact,
+  SpreadsheetExportArtifact,
+  SpreadsheetExportFormat,
+} from '../common/export';
+import {
   buildSpreadsheetCsv,
   createSpreadsheetWorkbook,
   fitWorksheetColumns,
   styleSpreadsheetDataRow,
   styleSpreadsheetHeaderRow,
-} from '../common/utils/spreadsheet-export.util';
+} from '../common/export';
 import { User, UserDocument } from '../users/schemas';
 import { ReferencesAdminService } from './references-admin.service';
 import { ReferenceExportLocale, ReferenceType } from './reference.types';
@@ -135,6 +140,19 @@ export class ReferencesExportService {
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
   ) {}
+
+  async export(
+    type: ReferenceType,
+    locale: ReferenceExportLocale,
+    format: SpreadsheetExportFormat,
+  ): Promise<SpreadsheetExportArtifact> {
+    return buildSpreadsheetExportArtifact({
+      filename: `references-${type}`,
+      format,
+      buildCsv: () => this.toCsv(type, locale),
+      buildXlsx: () => this.toXlsx(type, locale),
+    });
+  }
 
   async toCsv(
     type: ReferenceType,

@@ -6,15 +6,10 @@ export enum ReferenceType {
   CLASSROOMS = 'classrooms',
 }
 
-export enum ReferenceExportFormat {
-  CSV = 'csv',
-  XLSX = 'xlsx',
-}
-
-export enum ReferenceExportLocale {
-  UK = 'uk',
-  EN = 'en',
-}
+export {
+  SpreadsheetExportFormat as ReferenceExportFormat,
+  SpreadsheetExportLocale as ReferenceExportLocale,
+} from '../common/export';
 
 export enum ReferenceImportMode {
   CREATE = 'create',

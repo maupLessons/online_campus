@@ -8,6 +8,11 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import {
+  createSpreadsheetExportArtifact,
+  SpreadsheetExportArtifact,
+  SpreadsheetExportFormat,
+} from '../common/export';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import { toId } from '../common/utils/to-id.util';
@@ -30,6 +35,7 @@ import {
 import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { AcademicAccessService } from '../common/access/academic-access.service';
+import { buildSpreadsheetCsv } from '../common/export';
 
 type EntityObject = { _id?: unknown; id?: unknown };
 type EntityRef = Types.ObjectId | string | EntityObject;
@@ -312,7 +318,7 @@ export class ScheduleService {
   async exportCsv(
     user: AuthenticatedUser,
     query: ScheduleQueryDto = {},
-  ): Promise<string> {
+  ): Promise<SpreadsheetExportArtifact> {
     const entries = await this.findForUser(user, query);
     const rows = [
       [
@@ -341,9 +347,11 @@ export class ScheduleService {
       ]),
     ];
 
-    return `\uFEFF${rows
-      .map((row) => row.map((value) => this.escapeCsv(value)).join(','))
-      .join('\n')}\n`;
+    return createSpreadsheetExportArtifact({
+      content: buildSpreadsheetCsv(rows),
+      filename: 'schedule',
+      format: SpreadsheetExportFormat.CSV,
+    });
   }
 
   private async findEntries(
@@ -876,13 +884,5 @@ export class ScheduleService {
       type: entry.type,
       status: entry.status,
     };
-  }
-
-  private escapeCsv(value: string): string {
-    const safeValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
-    if (/[",\n\r]/.test(safeValue)) {
-      return `"${safeValue.replace(/"/g, '""')}"`;
-    }
-    return safeValue;
   }
 }

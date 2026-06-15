@@ -9,6 +9,11 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { randomUUID } from 'crypto';
 import { Model, Types } from 'mongoose';
+import {
+  buildSpreadsheetExportArtifact,
+  SpreadsheetExportArtifact,
+  SpreadsheetExportFormat,
+} from '../common/export';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import {
@@ -1146,20 +1151,18 @@ export class ElectiveDisciplinesService {
     };
   }
 
-  async exportPeriodResultsCsv(
+  async exportPeriodResults(
     periodId: string,
     user: AuthenticatedUser,
-  ): Promise<Buffer> {
+    format: SpreadsheetExportFormat,
+  ): Promise<SpreadsheetExportArtifact> {
     const results = await this.getPeriodResults(periodId, user);
-    return Buffer.from(buildElectiveResultsCsv(results), 'utf8');
-  }
-
-  async exportPeriodResultsXlsx(
-    periodId: string,
-    user: AuthenticatedUser,
-  ): Promise<Buffer> {
-    const results = await this.getPeriodResults(periodId, user);
-    return buildElectiveResultsXlsx(results);
+    return buildSpreadsheetExportArtifact({
+      filename: `elective-period-${periodId}-results`,
+      format,
+      buildCsv: () => buildElectiveResultsCsv(results),
+      buildXlsx: () => buildElectiveResultsXlsx(results),
+    });
   }
 
   private async createSelectionInAvailableSlot(params: {

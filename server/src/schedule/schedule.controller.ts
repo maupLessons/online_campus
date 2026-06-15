@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Header,
   Param,
   Post,
   Put,
@@ -21,6 +20,7 @@ import {
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
+import { sendSpreadsheetExport } from '../common/export';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import {
@@ -66,16 +66,14 @@ export class ScheduleController {
   }
 
   @Get('export')
-  @Header('Content-Type', 'text/csv; charset=utf-8')
   @ApiOperation({ summary: 'Export schedule entries as CSV' })
   async exportCsv(
     @Query() query: ScheduleQueryDto,
     @Request() req: AuthenticatedRequest,
-    @Res({ passthrough: true }) res: Response,
+    @Res() res: Response,
   ) {
-    const csv = await this.scheduleService.exportCsv(req.user, query);
-    res.setHeader('Content-Disposition', 'attachment; filename="schedule.csv"');
-    return csv;
+    const artifact = await this.scheduleService.exportCsv(req.user, query);
+    return sendSpreadsheetExport(res, artifact);
   }
 
   @Get(':id')

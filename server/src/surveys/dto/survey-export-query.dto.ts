@@ -1,17 +1,8 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import {
+  SpreadsheetExportFormat,
+  SpreadsheetExportQueryDto,
+} from '../../common/export';
 
-export enum SurveyExportFormat {
-  CSV = 'csv',
-  XLSX = 'xlsx',
-}
+export { SpreadsheetExportFormat as SurveyExportFormat };
 
-export class SurveyExportQueryDto {
-  @ApiPropertyOptional({
-    enum: SurveyExportFormat,
-    default: SurveyExportFormat.CSV,
-  })
-  @IsOptional()
-  @IsEnum(SurveyExportFormat)
-  format: SurveyExportFormat = SurveyExportFormat.CSV;
-}
+export class SurveyExportQueryDto extends SpreadsheetExportQueryDto {}

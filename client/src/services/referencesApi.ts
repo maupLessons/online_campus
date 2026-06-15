@@ -1,5 +1,11 @@
 import api from "./api";
 import type { PaginatedResponse, Role, User } from "../types";
+import {
+  downloadBlob,
+  type SpreadsheetExportFormat,
+  type SpreadsheetExportLocale,
+} from "../utils/spreadsheetExport";
+import { fetchSpreadsheetExport } from "./spreadsheetExportApi";
 
 export const ReferenceType = {
   FACULTIES: "faculties",
@@ -82,17 +88,6 @@ export interface ReferenceImportResult {
   errors: ReferenceImportError[];
 }
 
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
 export const referencesApi = {
   async list(
     type: ReferenceType,
@@ -155,23 +150,13 @@ export const referencesApi = {
 
   async export(
     type: ReferenceType,
-    format: "csv" | "xlsx",
-    locale: "uk" | "en",
+    format: SpreadsheetExportFormat,
+    locale: SpreadsheetExportLocale,
   ) {
-    const { data } = await api.get<ArrayBuffer>(
+    const blob = await fetchSpreadsheetExport(
       `/references/admin/${type}/export`,
-      {
-        params: { format, locale },
-        responseType: "arraybuffer",
-      },
+      { params: { format, locale } },
     );
-    const contentType =
-      format === "xlsx"
-        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        : "text/csv;charset=utf-8";
-    downloadBlob(
-      new Blob([data], { type: contentType }),
-      `references-${type}.${format}`,
-    );
+    downloadBlob(blob, `references-${type}.${format}`);
   },
 };

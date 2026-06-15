@@ -1,4 +1,6 @@
-import api from './api';
+import api from "./api";
+import { fetchSpreadsheetExport } from "./spreadsheetExportApi";
+import type { SpreadsheetExportFormat } from "../utils/spreadsheetExport";
 import {
   ElectiveDisciplineStatus,
   ElectivePeriodStatus,
@@ -13,7 +15,7 @@ import {
   type ElectiveSelection,
   type ReferenceView,
   type User,
-} from '../types';
+} from "../types";
 
 const teacherRoles: Role[] = [
   Role.TEACHER,
@@ -24,17 +26,17 @@ const teacherRoles: Role[] = [
 ];
 
 export type ElectiveDisciplineFilters = {
-  status?: ElectiveDisciplineStatus | '';
-  semester?: number | '';
+  status?: ElectiveDisciplineStatus | "";
+  semester?: number | "";
   departmentId?: string;
 };
 
 export type ElectivePeriodFilters = {
-  status?: ElectivePeriodStatus | '';
-  semester?: number | '';
+  status?: ElectivePeriodStatus | "";
+  semester?: number | "";
 };
 
-export type ElectiveExportFormat = 'csv' | 'xlsx';
+export type ElectiveExportFormat = SpreadsheetExportFormat;
 
 function buildParams(
   filters?: Record<string, string | number | undefined | null>,
@@ -42,7 +44,7 @@ function buildParams(
   const params = new URLSearchParams();
 
   Object.entries(filters ?? {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') {
+    if (value !== undefined && value !== null && value !== "") {
       params.set(key, String(value));
     }
   });
@@ -52,12 +54,12 @@ function buildParams(
 
 export const electivesApi = {
   listActive: async () => {
-    const { data } = await api.get<ActiveElectivePeriod[]>('/electives/active');
+    const { data } = await api.get<ActiveElectivePeriod[]>("/electives/active");
     return data;
   },
 
   listMySelections: async () => {
-    const { data } = await api.get<ElectiveSelection[]>('/electives/my');
+    const { data } = await api.get<ElectiveSelection[]>("/electives/my");
     return data;
   },
 
@@ -79,7 +81,7 @@ export const electivesApi = {
   listDisciplines: async (filters?: ElectiveDisciplineFilters) => {
     const params = buildParams(filters);
     const { data } = await api.get<ElectiveDiscipline[]>(
-      '/electives/disciplines',
+      "/electives/disciplines",
       { params },
     );
     return data;
@@ -87,7 +89,7 @@ export const electivesApi = {
 
   createDiscipline: async (payload: CreateElectiveDisciplineInput) => {
     const { data } = await api.post<ElectiveDiscipline>(
-      '/electives/disciplines',
+      "/electives/disciplines",
       payload,
     );
     return data;
@@ -104,10 +106,7 @@ export const electivesApi = {
     return data;
   },
 
-  setDisciplineStatus: async (
-    id: string,
-    status: ElectiveDisciplineStatus,
-  ) => {
+  setDisciplineStatus: async (id: string, status: ElectiveDisciplineStatus) => {
     const { data } = await api.patch<ElectiveDiscipline>(
       `/electives/disciplines/${id}/status`,
       { status },
@@ -117,7 +116,7 @@ export const electivesApi = {
 
   listPeriods: async (filters?: ElectivePeriodFilters) => {
     const params = buildParams(filters);
-    const { data } = await api.get<ElectivePeriod[]>('/electives/periods', {
+    const { data } = await api.get<ElectivePeriod[]>("/electives/periods", {
       params,
     });
     return data;
@@ -125,7 +124,7 @@ export const electivesApi = {
 
   createPeriod: async (payload: CreateElectivePeriodInput) => {
     const { data } = await api.post<ElectivePeriod>(
-      '/electives/periods',
+      "/electives/periods",
       payload,
     );
     return data;
@@ -166,33 +165,25 @@ export const electivesApi = {
   },
 
   exportPeriodResults: async (id: string, format: ElectiveExportFormat) => {
-    const { data } = await api.get<ArrayBuffer>(
-      `/electives/periods/${id}/results/export`,
-      { params: { format }, responseType: 'arraybuffer' },
-    );
-    const contentType =
-      format === 'xlsx'
-        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        : 'text/csv;charset=utf-8';
-    return new Blob([data], { type: contentType });
+    return fetchSpreadsheetExport(`/electives/periods/${id}/results/export`, {
+      params: { format },
+    });
   },
 };
 
 export const electiveReferencesApi = {
   listDepartments: async () => {
-    const { data } = await api.get<ReferenceView[]>('/references/departments');
+    const { data } = await api.get<ReferenceView[]>("/references/departments");
     return data;
   },
 
   listGroups: async () => {
-    const { data } = await api.get<ReferenceView[]>('/references/groups');
+    const { data } = await api.get<ReferenceView[]>("/references/groups");
     return data;
   },
 
   listTeachersByDepartment: async (departmentId: string) => {
-    const { data } = await api.get<User[]>(
-      `/users/department/${departmentId}`,
-    );
+    const { data } = await api.get<User[]>(`/users/department/${departmentId}`);
     return data.filter((user) => teacherRoles.includes(user.role));
   },
 };

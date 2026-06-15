@@ -25,6 +25,7 @@ import {
   type SurveyQuestionResult,
   type TextQuestionResult,
 } from '../../types';
+import { downloadBlob } from '../../utils/spreadsheetExport';
 
 function barWidth(value: number) {
   return `${Math.max(0, Math.min(100, value))}%`;
@@ -38,17 +39,6 @@ function getRequestErrorMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
-}
-
-function downloadBlob(blob: Blob, fileName: string) {
-  const url = window.URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName.replace(/[^a-zA-Z0-9._-]/g, '-');
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.URL.revokeObjectURL(url);
 }
 
 function ChoiceResultCard({ question }: { question: ChoiceQuestionResult }) {

@@ -3,6 +3,7 @@
   "rootDir": ".",
   "testEnvironment": "node",
   "testTimeout": 30000,
+  "setupFiles": ["<rootDir>/e2e-db.setup.ts"],
   "testMatch": [
     "<rootDir>/app.e2e-spec.ts",
     "<rootDir>/assignments.e2e-spec.ts",
@@ -12,6 +13,7 @@
     "<rootDir>/grades.e2e-spec.ts",
     "<rootDir>/materials.e2e-spec.ts",
     "<rootDir>/references.e2e-spec.ts",
+    "<rootDir>/reports.e2e-spec.ts",
     "<rootDir>/surveys.e2e-spec.ts"
   ],
   "detectOpenHandles": true,

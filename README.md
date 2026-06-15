@@ -590,6 +590,7 @@ interface ElectiveSelection {
 | Опитування | `survey.publish`, `survey.close` |
 | Файли | `file.upload`, `file.delete` |
 | Вибіркові дисципліни | `elective.period.publish`, `elective.period.close`, `elective.period.finalize`, `elective.selection.select`, `elective.selection.cancel` |
+| Аналітичні звіти | `report.view`, `report.export` |
 
 Глобальний interceptor зберігає резервний HTTP-аудит для непокритих
 мутацій і помилок. Якщо сервіс уже записав доменну подію, дубль HTTP-події
@@ -654,6 +655,81 @@ interface AuditLogEntry {
   requestId?: string;
 }
 ```
+
+---
+
+### 4.10 ReportsModule
+
+**Файли:** `src/reports/`
+
+**Відповідальність:** формування управлінської аналітики успішності та
+відвідуваності без передачі персональних даних студентів у браузер.
+
+**Доступ і область даних:**
+
+- `department_head` бачить лише дисципліни кафедр, де він призначений
+  керівником;
+- `dean` бачить лише кафедри факультетів, де він призначений деканом;
+- `rector`, `president` і `admin` мають загальний академічний scope кампусу;
+- `student`, `teacher` і `dispatcher` не мають доступу до модуля;
+- ідентифікатори кафедри, групи або призначення дисципліни перевіряються
+  повторно на backend; фільтр поза дозволеним scope завершується `403`.
+
+**Метрики:**
+
+- середній бал і кількість лише активних оцінок; відкликані оцінки
+  виключаються;
+- кількість занять і записів відвідування з електронного журналу;
+- відвідуваність розраховується як
+  `(present + late) / (present + late + absent) × 100`;
+- `excused` показується окремо та не зменшує відсоток відвідуваності;
+- тренд автоматично групується за днем, тижнем або місяцем залежно від
+  тривалості вибраного періоду;
+- зріз за дисциплінами повертається з серверною пагінацією.
+
+**Безпека й продуктивність:**
+
+- API повертає лише агрегати, назви академічних сутностей і технічні
+  ідентифікатори призначень; ПІБ, логіни, email та інші дані студентів у
+  відповіді відсутні;
+- останній доступний навчальний рік обирається за замовчуванням, щоб не
+  виконувати необмежену агрегацію всієї історії;
+- довільний календарний період задається лише повною парою `from/to` і
+  обмежений 366 днями;
+- `ReportsService` є тонким orchestration facade; академічний scope,
+  MongoDB-аналітика, складання export і форматування документів розділені між
+  окремими сервісами;
+- overview/KPI і paginated course breakdown виконуються незалежно: перехід
+  між сторінками дисциплін більше не перераховує student count, KPI та тренди;
+- одночасні overview/course запити з однаковим користувачем і фільтрами
+  об'єднують лише in-flight scope lookup; довготривалий authorization cache не
+  використовується, тому зміни повноважень не залишають stale-доступ;
+- MongoDB aggregation pipelines і scope/count queries мають `maxTimeMS`,
+  roster count підтримується складеним індексом
+  `role + status + studentProfile.group`, а endpoint-и захищені окремими rate
+  limits;
+- синхронний export обмежений 5000 призначеннями дисциплін; більша вибірка
+  відхиляється з `413` і потребує звуження фільтрів замість неконтрольованого
+  використання пам'яті;
+- CSV/XLSX використовують спільну інфраструктуру `common/export`:
+  типізований artifact, безпечне ім'я файлу, єдині MIME/security headers,
+  UTF-8 BOM, Excel-сумісний CSV і нейтралізацію spreadsheet formulas;
+- export-відповіді мають `Cache-Control: private, no-store`, `Pragma:
+  no-cache`, `Vary: Cookie, Authorization` і `X-Content-Type-Options:
+  nosniff`;
+- перегляд та експорт фіксуються в audit outbox як `report.view` і
+  `report.export`; до аудиту потрапляють лише scope та безпечні фільтри.
+
+**Ендпоінти:**
+
+| Метод | Шлях | Доступ | Опис |
+|---|---|---|---|
+| GET | `/reports/overview` | department_head, dean, rector, president, admin | KPI, тренди, scope та безпечні filter options |
+| GET | `/reports/courses?page=1&limit=10` | department_head, dean, rector, president, admin | Окремий paginated агрегований зріз за дисциплінами |
+| GET | `/reports/export?format=csv\|xlsx&locale=uk\|en` | department_head, dean, rector, president, admin | Повний агрегований експорт поточної вибірки |
+
+MongoDB E2E quality gate:
+`npm run test:e2e:db -- reports.e2e-spec.ts`.
 
 ---
 
@@ -734,6 +810,7 @@ src/
 | Адміністрування опитувань | —      | —       | —          | —         | ✅   | ✅    |
 | Вибіркові дисципліни     | ✅      | —       | —          | —         | —    | —     |
 | Керування вибірковими    | —       | —       | —          | ✅        | ✅   | ✅    |
+| Аналітичні звіти         | —       | —       | —          | ✅        | ✅   | ✅    |
 | Користувачі              | —       | —       | —          | —         | ✅   | ✅    |
 | Аудит                    | —       | —       | —          | —         | —    | ✅    |
 | Довідники                | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
@@ -778,6 +855,20 @@ src/
   - text: список відповідей із пагінацією
 - Для активного опитування показуються живі результати без кнопок експорту
 - Після закриття доступні кнопки "Експорт CSV" і "Експорт XLSX"
+
+---
+
+### 5.4 ReportsPage _(department_head, dean, rector, president, admin)_
+
+- KPI успішності, відвідуваності, кількості студентів і заповнених занять
+- фільтри за навчальним роком, семестром, кафедрою, групою, дисципліною та
+  календарним періодом
+- адаптивні графіки динаміки й структура статусів відвідування
+- desktop-таблиця та mobile-картки зі зрізом за дисциплінами
+- незалежна серверна пагінація дисциплін без повторного розрахунку KPI/трендів
+- двомовний CSV/XLSX export через спільний frontend download helper
+- стан без даних, помилки, progressive loading і збереження попереднього
+  результату під час оновлення фільтрів
 
 ---
 
@@ -958,6 +1049,14 @@ AuditLogEntry
 | GET    | `/surveys/:id/results`        | admin, dean (автор), rector, president |
 | GET    | `/surveys/:id/results/export?format=csv` | admin, dean (автор), rector, president |
 | GET    | `/surveys/:id/results/export?format=xlsx` | admin, dean (автор), rector, president |
+
+### Аналітичні звіти `/api/reports`
+
+| Метод | Шлях | Доступ |
+|---|---|---|
+| GET | `/reports/overview` | department_head, dean, rector, president, admin |
+| GET | `/reports/courses?page=1&limit=10` | department_head, dean, rector, president, admin |
+| GET | `/reports/export?format=csv\|xlsx&locale=uk\|en` | department_head, dean, rector, president, admin |
 
 ### Сповіщення `/api/notifications`
 
@@ -1143,7 +1242,7 @@ Student        (базовий доступ)
 | 3   | Email/push/realtime delivery для сповіщень                   | ⏳ Наступний етап                           |
 | 4   | AuditLogModule + transactional outbox                       | ✅ Реалізовано; доменні події розширюються  |
 | 5   | Адаптивний дизайн                                           | 🟡 Основні сторінки адаптивні; потрібен QA  |
-| 6   | XLSX/CSV export                                             | ✅ Реалізовано для surveys/electives; schedule CSV |
+| 6   | XLSX/CSV export                                             | ✅ Спільна інфраструктура для reports, surveys, electives, references і schedule |
 | 7   | i18n (українська + англійська)                              | ✅ Реалізовано                              |
 | 8   | Production email delivery для password reset                | ⏳ Наступний етап                           |
 | 9   | Antivirus/content scanning і private object storage файлів  | ⏳ Наступний етап                           |
@@ -1305,6 +1404,22 @@ online_campus/
 │       │   ├── transaction.interceptor.ts
 │       │   └── transaction-lifecycle.service.ts
 │       │
+│       ├── reports/           # scoped performance and attendance analytics
+│       │   ├── dto/
+│       │   ├── reports.types.ts
+│       │   ├── reports-query.util.ts
+│       │   ├── reports.module.ts
+│       │   ├── reports.controller.ts
+│       │   ├── reports.service.ts          # orchestration facade
+│       │   ├── reports-scope.service.ts    # ABAC scope, filters, roster count
+│       │   ├── reports-analytics.service.ts # bounded MongoDB aggregations
+│       │   ├── reports-export.service.ts   # shared export artifact integration
+│       │   ├── reports-exporter.ts
+│       │   ├── reports.service.spec.ts
+│       │   ├── reports-scope.service.spec.ts
+│       │   ├── reports-analytics.service.spec.ts
+│       │   └── reports-exporter.spec.ts
+│       │
 │       ├── seed-data/         # optional demo data seeders for local fixtures
 │       │   ├── seed.module.ts
 │       │   ├── seed.service.ts
@@ -1316,6 +1431,7 @@ online_campus/
 │       └── common/            # shared access policies, DTOs and infrastructure
 │           ├── access/        # centralized academic ABAC
 │           ├── dto/
+│           ├── export/        # CSV/XLSX DTOs, artifacts, headers and document helpers
 │           ├── guards/
 │           ├── middleware/
 │           ├── swagger/
@@ -1342,6 +1458,7 @@ online_campus/
         │   ├── notificationsApi.ts
         │   ├── surveysApi.ts
         │   ├── electivesApi.ts
+        │   ├── reportsApi.ts
         │   └── referencesApi.ts
         ├── store/
         │   └── authStore.ts
@@ -1365,6 +1482,7 @@ online_campus/
             │   ├── SchedulePage.tsx
             │   ├── NotificationsPage.tsx
             │   ├── ProfilePage.tsx
+            │   ├── ReportsPage.tsx
             │   └── ReferencesPage.tsx
             ├── student/
             │   ├── AssignmentsPage.tsx

@@ -58,6 +58,17 @@ const NAV_ITEMS: {
     ],
   },
   {
+    labelKey: 'nav.reports',
+    path: '/reports',
+    roles: [
+      Role.DEPARTMENT_HEAD,
+      Role.DEAN,
+      Role.RECTOR,
+      Role.PRESIDENT,
+      Role.ADMIN,
+    ],
+  },
+  {
     labelKey: 'nav.users',
     path: '/users',
     roles: [Role.ADMIN, Role.PRESIDENT, Role.RECTOR, Role.DEAN],
@@ -135,6 +146,8 @@ export default function Layout() {
         return t('nav.notifications');
       case '/audit-log':
         return t('nav.auditLog');
+      case '/reports':
+        return t('nav.reports');
       case '/references':
         return t('nav.references');
       default:

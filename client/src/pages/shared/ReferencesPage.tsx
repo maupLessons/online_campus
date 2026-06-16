@@ -223,7 +223,7 @@ export default function ReferencesPage() {
             )}
           </p>
         </div>
-        {canManage ? (
+        {canManage && (
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -258,10 +258,6 @@ export default function ReferencesPage() {
               {t("references.create")}
             </button>
           </div>
-        ) : (
-          <span className="inline-flex h-9 items-center rounded-md bg-slate-100 px-3 text-sm font-medium text-slate-600">
-            {t("references.readOnly")}
-          </span>
         )}
       </section>
 

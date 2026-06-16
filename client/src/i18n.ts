@@ -838,7 +838,6 @@ const resources = {
         'Керуйте організаційною структурою, академічними групами та аудиторіями.',
       'references.readOnlySubtitle':
         'Переглядайте довідникові дані, доступні у межах ваших академічних повноважень.',
-      'references.readOnly': 'Лише перегляд',
       'references.create': 'Додати запис',
       'references.importButton': 'Імпорт',
       'references.search': 'Знайти',
@@ -1742,7 +1741,6 @@ const resources = {
         'Manage the organizational structure, academic groups, and classrooms.',
       'references.readOnlySubtitle':
         'View reference data available within your academic scope.',
-      'references.readOnly': 'Read only',
       'references.create': 'Add record',
       'references.importButton': 'Import',
       'references.search': 'Search',

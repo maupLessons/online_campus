@@ -6,13 +6,30 @@ type SeederMock = {
   seed: jest.Mock<Promise<void>, []>;
 };
 
+type UserModelMock = {
+  estimatedDocumentCount: jest.Mock<{
+    exec: jest.Mock<Promise<number>, []>;
+  }>;
+};
+
 function createSeeder(): SeederMock {
   const seed = jest.fn<Promise<void>, []>();
   seed.mockResolvedValue(undefined);
   return { seed };
 }
 
-function createService(env: Record<string, string | undefined> = {}) {
+function createUserModel(userCount = 1): UserModelMock {
+  const exec = jest.fn<Promise<number>, []>().mockResolvedValue(userCount);
+
+  return {
+    estimatedDocumentCount: jest.fn(() => ({ exec })),
+  };
+}
+
+function createService(
+  env: Record<string, string | undefined> = {},
+  userCount = 1,
+) {
   const configService = {
     get: jest.fn((key: string) => env[key]),
   } as unknown as ConfigService;
@@ -31,9 +48,11 @@ function createService(env: Record<string, string | undefined> = {}) {
     assignmentSeeder: createSeeder(),
     materialSeeder: createSeeder(),
   };
+  const userModel = createUserModel(userCount);
 
   const service = new SeedService(
     configService,
+    userModel as never,
     seeders.userSeeder as never,
     seeders.facultySeeder as never,
     seeders.departmentSeeder as never,
@@ -48,7 +67,7 @@ function createService(env: Record<string, string | undefined> = {}) {
     seeders.materialSeeder as never,
   );
 
-  return { service, seeders };
+  return { service, seeders, userModel };
 }
 
 describe('SeedService', () => {
@@ -69,12 +88,33 @@ describe('SeedService', () => {
   });
 
   it('does not seed demo data unless explicitly enabled', async () => {
-    const { service, seeders } = createService({ NODE_ENV: 'development' });
+    const { service, seeders, userModel } = createService({
+      NODE_ENV: 'development',
+    });
 
     await service.onModuleInit();
 
     expect(seeders.userSeeder.seed).not.toHaveBeenCalled();
     expect(seeders.materialSeeder.seed).not.toHaveBeenCalled();
+    expect(userModel.estimatedDocumentCount).toHaveBeenCalledTimes(1);
+  });
+
+  it('warns local developers when a fresh database has no users', async () => {
+    const { service } = createService({ NODE_ENV: 'development' }, 0);
+
+    await service.onModuleInit();
+
+    expect(loggerWarnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('No users found in MongoDB'),
+    );
+  });
+
+  it('does not inspect user count in production when demo seeding is disabled', async () => {
+    const { service, userModel } = createService({ NODE_ENV: 'production' });
+
+    await service.onModuleInit();
+
+    expect(userModel.estimatedDocumentCount).not.toHaveBeenCalled();
   });
 
   it('runs demo seeders in development when enabled', async () => {

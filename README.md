@@ -1516,6 +1516,28 @@ docker compose up --build
 - **Frontend:** http://localhost:5173
 - **Backend API:** http://localhost:3000/api
 
+Для повністю нового локального clone з порожньою MongoDB створіть `.env` з
+основного прикладу та увімкніть demo fixtures лише для disposable local DB:
+
+```powershell
+Copy-Item .env.example .env
+# у локальному .env встановіть SEED_DEMO_DATA=true
+docker compose up --build
+```
+
+`SEED_DEMO_DATA=true` створює тестових користувачів із розділу
+[Тестові дані](#15-тестові-дані). Не вмикайте цей прапорець для shared dev,
+staging або production: demo-користувачі мають відомий пароль.
+
+Якщо контейнери вже підняті з порожньою БД і `SEED_DEMO_DATA=false`, login
+поверне `401 Unauthorized`, бо в колекції `users` ще немає жодного акаунта.
+Для локальної disposable БД можна виконати одноразовий seed без перескладання
+контейнерів:
+
+```bash
+docker compose exec server npm run seed:demo
+```
+
 ### Локально
 
 ```bash
@@ -1531,6 +1553,14 @@ cd server && npm run start:dev
 
 # Термінал 2 — фронтенд
 cd client && npm run dev
+```
+
+Для локального запуску без Docker demo fixtures можна створити після підключення
+MongoDB:
+
+```bash
+cd server
+npm run seed:demo:dev
 ```
 
 ### Змінні середовища (server)
@@ -1588,6 +1618,11 @@ Demo seeders копіюють fixture-дані з `server/src/common/mock-data` 
 замовчуванням навіть із цим прапорцем; `SEED_DEMO_DATA_IN_PRODUCTION=true`
 дозволено тільки для одноразових demo-баз, бо fixture-користувачі мають відомий
 пароль.
+
+Для локального disposable запуску можна тимчасово встановити
+`SEED_DEMO_DATA=true` у власному `.env`. Для shared dev/prod залишайте
+`SEED_DEMO_DATA=false` і створюйте реальних адміністраторів контрольованою
+процедурою.
 
 У локальному `docker-compose.yml` MongoDB доступна backend-контейнеру через
 внутрішню Docker network (`mongodb:27017`) і не публікується на host-порт за

@@ -1,9 +1,17 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { SpreadsheetExportFormat } from '../common/export';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
+import { ScheduleExportService } from './schedule-export.service';
+import { ScheduleMapper } from './schedule.mapper';
+import { ScheduleMutationService } from './schedule-mutation.service';
+import { ScheduleNotificationsService } from './schedule-notifications.service';
+import { ScheduleReaderService } from './schedule-reader.service';
 import { ScheduleService } from './schedule.service';
+import { ScheduleTemplatesService } from './schedule-templates.service';
+import { ScheduleValidationService } from './schedule-validation.service';
 import { ScheduleEntryStatus, ScheduleEntryType } from './schemas';
 import { DomainAuditEvent } from '../audit-log/audit-context';
 
@@ -21,6 +29,13 @@ type ScheduleEntryModelMock = {
   create: jest.Mock;
   countDocuments: jest.Mock;
   deleteOne: jest.Mock;
+};
+
+type ScheduleTemplateModelMock = {
+  find: jest.Mock;
+  findById: jest.Mock;
+  create: jest.Mock;
+  updateOne: jest.Mock;
 };
 
 type CourseAssignmentModelMock = {
@@ -102,10 +117,12 @@ describe('ScheduleService', () => {
   };
 
   let scheduleEntryModel: ScheduleEntryModelMock;
+  let scheduleTemplateModel: ScheduleTemplateModelMock;
   let courseAssignmentModel: CourseAssignmentModelMock;
   let classroomModel: ClassroomModelMock;
   let notificationsService: NotificationsServiceMock;
   let academicAccessService: AcademicAccessServiceMock;
+  let mapper: ScheduleMapper;
   let service: ScheduleService;
 
   beforeEach(() => {
@@ -115,6 +132,12 @@ describe('ScheduleService', () => {
       create: jest.fn(),
       countDocuments: jest.fn(),
       deleteOne: jest.fn(),
+    };
+    scheduleTemplateModel = {
+      find: jest.fn(),
+      findById: jest.fn(),
+      create: jest.fn(),
+      updateOne: jest.fn(),
     };
     courseAssignmentModel = {
       find: jest.fn(),
@@ -131,13 +154,43 @@ describe('ScheduleService', () => {
       canAccessCourseAssignment: jest.fn().mockResolvedValue(false),
       findCourseAssignmentRecipientIds: jest.fn().mockResolvedValue([]),
     };
-
-    service = new ScheduleService(
+    mapper = new ScheduleMapper();
+    const scheduleReader = new ScheduleReaderService(
+      scheduleEntryModel as never,
+      courseAssignmentModel as never,
+      academicAccessService as never,
+      mapper,
+    );
+    const scheduleNotifications = new ScheduleNotificationsService(
+      notificationsService as never,
+      academicAccessService as never,
+    );
+    const scheduleTemplates = new ScheduleTemplatesService(
+      scheduleTemplateModel as never,
+      courseAssignmentModel as never,
+      classroomModel as never,
+      mapper,
+    );
+    const scheduleValidation = new ScheduleValidationService(
       scheduleEntryModel as never,
       courseAssignmentModel as never,
       classroomModel as never,
-      notificationsService as never,
-      academicAccessService as never,
+      mapper,
+    );
+    const scheduleMutation = new ScheduleMutationService(
+      scheduleEntryModel as never,
+      mapper,
+      scheduleReader,
+      scheduleNotifications,
+      scheduleTemplates,
+      scheduleValidation,
+    );
+
+    service = new ScheduleService(
+      scheduleReader,
+      scheduleMutation,
+      new ScheduleExportService(),
+      scheduleTemplates,
     );
   });
 
@@ -263,6 +316,102 @@ describe('ScheduleService', () => {
     expect(scheduleEntryModel.find).not.toHaveBeenCalled();
   });
 
+  it('rejects user schedule filters outside visible academic scope', async () => {
+    academicAccessService.findVisibleCourseAssignmentIds.mockResolvedValue([
+      objectId(ids.assignment),
+    ]);
+    courseAssignmentModel.find.mockReturnValue(
+      query([{ _id: objectId(ids.scheduleConflict) }]),
+    );
+
+    await expect(
+      service.findForUser(
+        {
+          sub: ids.student,
+          login: 'student1',
+          role: Role.STUDENT,
+        },
+        { groupId: ids.group },
+      ),
+    ).rejects.toThrow(ForbiddenException);
+
+    expect(scheduleEntryModel.find).not.toHaveBeenCalled();
+  });
+
+  it('cancels schedule entries with reason, notifications and audit trail', async () => {
+    const record = jest
+      .fn<Promise<void>, [DomainAuditEvent]>()
+      .mockResolvedValue(undefined);
+    const audit = { record };
+    const mutableEntry = {
+      status: ScheduleEntryStatus.SCHEDULED,
+      changeHistory: [],
+      set: jest.fn(function set(values: Record<string, unknown>) {
+        Object.assign(this, values);
+      }),
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const cancelledEntry = {
+      ...scheduleEntry,
+      status: ScheduleEntryStatus.CANCELLED,
+      changeReason: 'Викладач захворів',
+      cancelledAt: new Date('2026-09-01T07:00:00.000Z'),
+    };
+
+    scheduleEntryModel.findById
+      .mockReturnValueOnce(query(mutableEntry))
+      .mockReturnValueOnce(query(scheduleEntry))
+      .mockReturnValueOnce(query(cancelledEntry));
+    academicAccessService.findCourseAssignmentRecipientIds.mockResolvedValue([
+      ids.teacher,
+      ids.student,
+    ]);
+
+    const result = await service.cancel(
+      ids.schedule,
+      { reason: 'Викладач захворів' },
+      audit,
+      {
+        sub: ids.teacher,
+        login: 'teacher1',
+        role: Role.DISPATCHER,
+      },
+    );
+
+    expect(result.status).toBe(ScheduleEntryStatus.CANCELLED);
+    expect(mutableEntry.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: ScheduleEntryStatus.CANCELLED,
+        changeReason: 'Викладач захворів',
+      }),
+    );
+    expect(mutableEntry.changeHistory).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'cancelled',
+          reason: 'Викладач захворів',
+          actorLogin: 'teacher1',
+        }),
+      ]),
+    );
+    expect(notificationsService.createMany).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: ids.student,
+          important: true,
+          entityType: 'schedule',
+          actionUrl: '/schedule',
+        }),
+      ]),
+    );
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'schedule.cancel',
+        targetId: ids.schedule,
+      }),
+    );
+  });
+
   it('exports scoped schedule CSV and neutralizes spreadsheet formulas', async () => {
     const user: AuthenticatedUser = {
       sub: ids.teacher,
@@ -277,8 +426,28 @@ describe('ScheduleService', () => {
 
     expect(exportArtifact.filename).toBe('schedule.csv');
     expect(exportArtifact.contentType).toBe('text/csv; charset=utf-8');
-    expect(csv).toContain('date;start_time;end_time');
+    expect(csv).toContain('Дата;Початок;Завершення');
     expect(csv).toContain("'=SEC101");
     expect(csv).toContain('Основи кібербезпеки');
+  });
+
+  it('exports scoped schedule XLSX through the shared spreadsheet pipeline', async () => {
+    const user: AuthenticatedUser = {
+      sub: ids.teacher,
+      login: 'teacher',
+      role: Role.ADMIN,
+    };
+
+    scheduleEntryModel.find.mockReturnValue(query([scheduleEntry]));
+
+    const exportArtifact = await service.export(user, {
+      format: SpreadsheetExportFormat.XLSX,
+    });
+
+    expect(exportArtifact.filename).toBe('schedule.xlsx');
+    expect(exportArtifact.contentType).toContain(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(exportArtifact.buffer.length).toBeGreaterThan(0);
   });
 });

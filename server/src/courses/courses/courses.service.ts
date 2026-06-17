@@ -244,6 +244,35 @@ export class CoursesService {
     return transformToPaginatedDto(CourseAssignmentDto, result);
   }
 
+  async findCourseAssignments(
+    pagination: PaginationDto,
+    user: AuthenticatedUser,
+  ): Promise<PaginatedDto<CourseAssignmentDto>> {
+    const options = {
+      page: pagination.page || 1,
+      limit: pagination.limit || 10,
+      populate: [
+        'course',
+        'teacher',
+        {
+          path: 'group',
+          populate: { path: 'specialty' },
+        },
+      ],
+      sort: { academicYear: -1, semester: -1, createdAt: -1 },
+      lean: true,
+    };
+
+    const filter =
+      await this.academicAccessService.buildCourseAssignmentFilter(user);
+    const result = await this.courseAssignmentModel.paginate(
+      filter,
+      options as any,
+    );
+
+    return transformToPaginatedDto(CourseAssignmentDto, result);
+  }
+
   async findCoursesByStudent(
     studentId: string,
     pagination: PaginationDto,

@@ -14,8 +14,16 @@ import {
   GroupSchema,
 } from '../references/schemas';
 import { ScheduleController } from './schedule.controller';
+import { ScheduleExportService } from './schedule-export.service';
+import { ScheduleMapper } from './schedule.mapper';
+import { ScheduleMutationService } from './schedule-mutation.service';
+import { ScheduleNotificationsService } from './schedule-notifications.service';
+import { ScheduleReaderService } from './schedule-reader.service';
 import { ScheduleService } from './schedule.service';
+import { ScheduleTemplatesService } from './schedule-templates.service';
+import { ScheduleValidationService } from './schedule-validation.service';
 import { ScheduleEntry, ScheduleEntrySchema } from './schemas';
+import { ScheduleTemplate, ScheduleTemplateSchema } from './schemas';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { AcademicAccessModule } from '../common/access/academic-access.module';
 
@@ -23,6 +31,7 @@ import { AcademicAccessModule } from '../common/access/academic-access.module';
   imports: [
     MongooseModule.forFeature([
       { name: ScheduleEntry.name, schema: ScheduleEntrySchema },
+      { name: ScheduleTemplate.name, schema: ScheduleTemplateSchema },
       { name: CourseAssignment.name, schema: CourseAssignmentSchema },
       { name: Course.name, schema: CourseSchema },
       { name: Classroom.name, schema: ClassroomSchema },
@@ -33,7 +42,16 @@ import { AcademicAccessModule } from '../common/access/academic-access.module';
     AcademicAccessModule,
   ],
   controllers: [ScheduleController],
-  providers: [ScheduleService],
+  providers: [
+    ScheduleService,
+    ScheduleMapper,
+    ScheduleReaderService,
+    ScheduleMutationService,
+    ScheduleNotificationsService,
+    ScheduleExportService,
+    ScheduleTemplatesService,
+    ScheduleValidationService,
+  ],
   exports: [ScheduleService],
 })
 export class ScheduleModule {}

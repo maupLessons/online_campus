@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useState } from "react";
 import type { ChangeEvent, SyntheticEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import type { User } from "../../types";
 import {
   ReferenceType,
@@ -129,7 +130,7 @@ export default function ReferenceFormModal({
 }: Props) {
   const { t } = useTranslation();
   const [form, setForm] = useState(() => buildInitialState(type, record));
-  const [error, setError] = useState("");
+  const [error, setError] = useAutoDismissState("");
   const [saving, setSaving] = useState(false);
 
   const handleChange = (

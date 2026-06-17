@@ -1,5 +1,26 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ScheduleEntryStatus, ScheduleEntryType } from '../schemas';
+import {
+  ScheduleChangeAction,
+  ScheduleEntryStatus,
+  ScheduleEntryType,
+} from '../schedule.enums';
+
+export class ScheduleChangeHistoryDto {
+  @ApiProperty({ enum: ScheduleChangeAction })
+  action: ScheduleChangeAction;
+
+  @ApiPropertyOptional()
+  reason?: string;
+
+  @ApiPropertyOptional()
+  actorId?: string | null;
+
+  @ApiPropertyOptional()
+  actorLogin?: string;
+
+  @ApiProperty()
+  changedAt: string;
+}
 
 export class ScheduleEntryDto {
   @ApiProperty()
@@ -43,6 +64,21 @@ export class ScheduleEntryDto {
 
   @ApiPropertyOptional()
   classroom?: string;
+
+  @ApiPropertyOptional()
+  changeReason?: string;
+
+  @ApiPropertyOptional()
+  cancelledAt?: string;
+
+  @ApiPropertyOptional()
+  rescheduledAt?: string;
+
+  @ApiPropertyOptional()
+  substitutedAt?: string;
+
+  @ApiPropertyOptional({ type: () => [ScheduleChangeHistoryDto] })
+  changeHistory?: ScheduleChangeHistoryDto[];
 
   @ApiPropertyOptional()
   createdAt?: string;

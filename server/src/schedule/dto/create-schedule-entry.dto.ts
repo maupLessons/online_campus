@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsMongoId, IsOptional, Matches } from 'class-validator';
-import { ScheduleEntryStatus, ScheduleEntryType } from '../schemas';
+import { ScheduleEntryStatus, ScheduleEntryType } from '../schedule.enums';
 
 export class CreateScheduleEntryDto {
   @ApiProperty()

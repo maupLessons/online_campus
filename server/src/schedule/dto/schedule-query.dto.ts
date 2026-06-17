@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsEnum, IsMongoId, IsOptional, Matches } from 'class-validator';
-import { ScheduleEntryStatus } from '../schemas';
+import { ScheduleEntryStatus } from '../schedule.enums';
 
 export class ScheduleQueryDto {
   @ApiPropertyOptional({ example: '2026-09-01' })

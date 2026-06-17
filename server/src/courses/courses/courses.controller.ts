@@ -43,6 +43,15 @@ export class CoursesController {
     return this.coursesService.findMy(sub, role, paginationDto);
   }
 
+  @Get('course-assignments')
+  @ApiPaginatedResponse(CourseAssignmentDto)
+  async findCourseAssignments(
+    @Request() req: RequestWithUser,
+    @Query() paginationDto: PaginationDto,
+  ): Promise<PaginatedDto<CourseAssignmentDto>> {
+    return this.coursesService.findCourseAssignments(paginationDto, req.user);
+  }
+
   @Get('course-assignments/:id/students')
   @ApiResponse({ type: [UserDto] })
   async findAssignmentStudents(

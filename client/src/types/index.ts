@@ -57,6 +57,33 @@ export interface User {
   updatedAt?: string;
 }
 
+export type ScheduleEntryType =
+  | 'lecture'
+  | 'seminar'
+  | 'lab'
+  | 'exam'
+  | 'consultation';
+
+export type ScheduleEntryStatus =
+  | 'scheduled'
+  | 'cancelled'
+  | 'rescheduled'
+  | 'substituted';
+
+export interface ScheduleChangeHistory {
+  action:
+    | 'created'
+    | 'updated'
+    | 'cancelled'
+    | 'rescheduled'
+    | 'substituted'
+    | 'deleted';
+  reason?: string;
+  actorId?: string | null;
+  actorLogin?: string;
+  changedAt: string;
+}
+
 export interface ScheduleEntry {
   id: string;
   courseAssignmentId: string;
@@ -64,13 +91,80 @@ export interface ScheduleEntry {
   date: string;
   startTime: string;
   endTime: string;
-  type: string;
-  status: string;
+  type: ScheduleEntryType;
+  status: ScheduleEntryStatus;
   courseName?: string;
   courseCode?: string;
   groupCode?: string;
   teacherId?: string;
+  teacherName?: string;
   classroom?: string;
+  changeReason?: string;
+  cancelledAt?: string;
+  rescheduledAt?: string;
+  substitutedAt?: string;
+  changeHistory?: ScheduleChangeHistory[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScheduleEntryInput {
+  courseAssignmentId: string;
+  classroomId?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  type: ScheduleEntryType;
+  status?: ScheduleEntryStatus;
+  changeReason?: string;
+}
+
+export type ScheduleTemplateStatus = 'active' | 'archived';
+
+export interface ScheduleTemplate {
+  id: string;
+  title: string;
+  courseAssignmentId: string;
+  classroomId?: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  type: ScheduleEntryType;
+  status: ScheduleTemplateStatus;
+  courseName?: string;
+  courseCode?: string;
+  groupCode?: string;
+  teacherName?: string;
+  classroom?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ScheduleTemplateInput {
+  title: string;
+  courseAssignmentId: string;
+  classroomId?: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  type: ScheduleEntryType;
+}
+
+export interface ScheduleBulkResultItem {
+  index?: number;
+  id?: string;
+  success: boolean;
+  entry?: ScheduleEntry;
+  error?: string;
+}
+
+export interface ScheduleBulkResult {
+  dryRun: boolean;
+  created?: number;
+  updated?: number;
+  cancelled?: number;
+  skipped: number;
+  items: ScheduleBulkResultItem[];
 }
 
 export interface CourseAssignment {

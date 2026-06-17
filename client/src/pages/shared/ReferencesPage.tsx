@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import ReferenceFormModal from "../../components/references/ReferenceFormModal";
 import ReferenceImportModal from "../../components/references/ReferenceImportModal";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import {
   ReferenceType,
   referencesApi,
@@ -59,7 +60,7 @@ export default function ReferencesPage() {
   const [editing, setEditing] = useState<ReferenceRecord | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [actionError, setActionError] = useState("");
+  const [actionError, setActionError] = useAutoDismissState("");
 
   const referencesQuery = useQuery({
     queryKey: ["references", type, page, appliedSearch],
@@ -217,9 +218,7 @@ export default function ReferencesPage() {
           </h1>
           <p className="mt-1 text-sm text-slate-600">
             {t(
-              canManage
-                ? "references.subtitle"
-                : "references.readOnlySubtitle",
+              canManage ? "references.subtitle" : "references.readOnlySubtitle",
             )}
           </p>
         </div>
@@ -394,7 +393,7 @@ export default function ReferencesPage() {
           onImported={() => {
             setImportOpen(false);
             void queryClient.invalidateQueries({
-                queryKey: ["references"],
+              queryKey: ["references"],
             });
             void queryClient.invalidateQueries({
               queryKey: ["admin-reference-options"],

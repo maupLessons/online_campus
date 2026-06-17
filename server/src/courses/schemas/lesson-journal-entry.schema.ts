@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 import * as paginate from 'mongoose-paginate-v2';
-import { ScheduleEntryType } from '../../schedule/schemas';
+import { ScheduleEntryType } from '../../schedule/schedule.enums';
 import { User } from '../../users/schemas';
 import { CourseAssignment } from './course-assignment.schema';
 

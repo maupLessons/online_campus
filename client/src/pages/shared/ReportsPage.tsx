@@ -23,6 +23,7 @@ import {
   type ReportOverview,
   type ReportQuery,
 } from "../../services/reportsApi";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import { downloadBlob } from "../../utils/spreadsheetExport";
 
 type DraftFilters = {
@@ -284,9 +285,9 @@ export default function ReportsPage() {
   const [appliedFilters, setAppliedFilters] =
     useState<DraftFilters>(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
-  const [filterError, setFilterError] = useState("");
+  const [filterError, setFilterError] = useAutoDismissState("");
   const [exporting, setExporting] = useState<ReportExportFormat | null>(null);
-  const [exportError, setExportError] = useState("");
+  const [exportError, setExportError] = useAutoDismissState("");
   const query = useMemo(() => toQuery(appliedFilters), [appliedFilters]);
 
   const reportQuery = useQuery({

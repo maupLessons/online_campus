@@ -1,10 +1,10 @@
-import { create } from 'zustand';
-import axios from 'axios';
-import api from '../services/api';
-import type { User } from '../types';
+import { create } from "zustand";
+import axios from "axios";
+import api from "../services/api";
+import type { User } from "../types";
 
-const PUBLIC_AUTH_PATHS = ['/login', '/forgot-password', '/reset-password'];
-const CSRF_COOKIE_NAME = 'campus_csrf_token';
+const PUBLIC_AUTH_PATHS = ["/login", "/forgot-password", "/reset-password"];
+const CSRF_COOKIE_NAME = "campus_csrf_token";
 
 interface AuthState {
   user: User | null;
@@ -17,20 +17,21 @@ interface AuthState {
   loadProfile: () => Promise<void>;
   initializeAuth: () => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<string>;
+  clearError: () => void;
   expireSession: () => void;
 }
 
 function clearLegacyAuthStorage() {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return;
   }
 
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
 }
 
 function isPublicAuthPage() {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     return false;
   }
 
@@ -40,13 +41,13 @@ function isPublicAuthPage() {
 }
 
 function readCookie(name: string) {
-  if (typeof document === 'undefined') {
+  if (typeof document === "undefined") {
     return null;
   }
 
-  const cookies = document.cookie.split(';');
+  const cookies = document.cookie.split(";");
   for (const cookie of cookies) {
-    const separatorIndex = cookie.indexOf('=');
+    const separatorIndex = cookie.indexOf("=");
     if (separatorIndex < 0) {
       continue;
     }
@@ -71,6 +72,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthChecked: false,
   error: null,
 
+  clearError: () => set({ error: null }),
+
   expireSession: () => {
     clearLegacyAuthStorage();
     set({
@@ -86,7 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
 
     try {
-      const { data } = await api.post('/auth/login', { login, password });
+      const { data } = await api.post("/auth/login", { login, password });
 
       clearLegacyAuthStorage();
       set({
@@ -100,10 +103,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const message =
         status === 401
-          ? 'Неправильний логін або пароль'
+          ? "Неправильний логін або пароль"
           : status === 403
-            ? 'Обліковий запис заблоковано. Зверніться до адміністратора.'
-            : 'Помилка входу. Спробуйте ще раз.';
+            ? "Обліковий запис заблоковано. Зверніться до адміністратора."
+            : "Помилка входу. Спробуйте ще раз.";
 
       set({
         error: message,
@@ -119,7 +122,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, error: null });
 
     try {
-      await api.post('/auth/logout', {});
+      await api.post("/auth/logout", {});
     } finally {
       clearLegacyAuthStorage();
 
@@ -134,7 +137,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   loadProfile: async () => {
-    const { data } = await api.get('/auth/profile');
+    const { data } = await api.get("/auth/profile");
 
     set({
       user: data,
@@ -146,26 +149,26 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   changePassword: async (oldPassword: string, newPassword: string) => {
     try {
-      const { data } = await api.post('/auth/change-password', {
+      const { data } = await api.post("/auth/change-password", {
         oldPassword,
         newPassword,
       });
 
-      return data.message || 'Пароль успішно змінено';
+      return data.message || "Пароль успішно змінено";
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
         const message = err.response?.data?.message;
 
         if (Array.isArray(message)) {
-          throw new Error(message.join(', '));
+          throw new Error(message.join(", "));
         }
 
-        if (typeof message === 'string') {
+        if (typeof message === "string") {
           throw new Error(message);
         }
       }
 
-      throw new Error('Не вдалося змінити пароль');
+      throw new Error("Не вдалося змінити пароль");
     }
   },
 
@@ -183,7 +186,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     try {
-      const { data } = await api.get('/auth/profile');
+      const { data } = await api.get("/auth/profile");
 
       set({
         user: data,

@@ -25,8 +25,17 @@ import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import {
   CreateScheduleEntryDto,
+  ApplyScheduleTemplateDto,
+  BulkCancelScheduleEntriesDto,
+  BulkCreateScheduleEntriesDto,
+  CreateScheduleTemplateDto,
+  RescheduleScheduleEntryDto,
   ScheduleEntryDto,
+  ScheduleExportQueryDto,
   ScheduleQueryDto,
+  ScheduleReasonDto,
+  SubstituteScheduleEntryDto,
+  UpdateScheduleTemplateDto,
   UpdateScheduleEntryDto,
 } from './dto';
 import { ScheduleService } from './schedule.service';
@@ -66,14 +75,115 @@ export class ScheduleController {
   }
 
   @Get('export')
-  @ApiOperation({ summary: 'Export schedule entries as CSV' })
+  @ApiOperation({ summary: 'Export schedule entries as CSV or XLSX' })
   async exportCsv(
-    @Query() query: ScheduleQueryDto,
+    @Query() query: ScheduleExportQueryDto,
     @Request() req: AuthenticatedRequest,
     @Res() res: Response,
   ) {
-    const artifact = await this.scheduleService.exportCsv(req.user, query);
+    const artifact = await this.scheduleService.export(req.user, query);
     return sendSpreadsheetExport(res, artifact);
+  }
+
+  @Get('templates')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @ApiOperation({ summary: 'List active schedule templates' })
+  findTemplates() {
+    return this.scheduleService.findTemplates();
+  }
+
+  @Post('templates')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_CREATE, 'schedule-template')
+  @ApiOperation({ summary: 'Create reusable schedule template' })
+  createTemplate(
+    @Body() body: CreateScheduleTemplateDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.createTemplate(
+      body,
+      createAuditContext(req, this.auditLogService),
+      req.user,
+    );
+  }
+
+  @Put('templates/:id')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_UPDATE, 'schedule-template')
+  @ApiOperation({ summary: 'Update schedule template' })
+  updateTemplate(
+    @Param('id') id: string,
+    @Body() body: UpdateScheduleTemplateDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.updateTemplate(
+      id,
+      body,
+      createAuditContext(req, this.auditLogService),
+    );
+  }
+
+  @Delete('templates/:id')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_DELETE, 'schedule-template')
+  @ApiOperation({ summary: 'Archive schedule template' })
+  deleteTemplate(
+    @Param('id') id: string,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.deleteTemplate(
+      id,
+      createAuditContext(req, this.auditLogService),
+    );
+  }
+
+  @Post('templates/:id/apply')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_APPLY, 'schedule-template')
+  @ApiOperation({ summary: 'Apply schedule template to a date range' })
+  applyTemplate(
+    @Param('id') id: string,
+    @Body() body: ApplyScheduleTemplateDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.applyTemplate(
+      id,
+      body,
+      createAuditContext(req, this.auditLogService),
+      req.user,
+    );
+  }
+
+  @Post('bulk')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_BULK_CREATE, 'schedule')
+  @ApiOperation({
+    summary: 'Bulk create schedule entries with conflict checks',
+  })
+  bulkCreate(
+    @Body() body: BulkCreateScheduleEntriesDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.bulkCreate(
+      body,
+      createAuditContext(req, this.auditLogService),
+      req.user,
+    );
+  }
+
+  @Post('bulk/cancel')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_BULK_CANCEL, 'schedule')
+  @ApiOperation({ summary: 'Bulk cancel schedule entries with one reason' })
+  bulkCancel(
+    @Body() body: BulkCancelScheduleEntriesDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.bulkCancel(
+      body,
+      createAuditContext(req, this.auditLogService),
+      req.user,
+    );
   }
 
   @Get(':id')
@@ -95,6 +205,7 @@ export class ScheduleController {
     return this.scheduleService.create(
       body,
       createAuditContext(req, this.auditLogService),
+      req.user,
     );
   }
 
@@ -112,6 +223,63 @@ export class ScheduleController {
       id,
       body,
       createAuditContext(req, this.auditLogService),
+      req.user,
+    );
+  }
+
+  @Post(':id/cancel')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_CANCEL, 'schedule')
+  @ApiOperation({ summary: 'Cancel schedule entry with a required reason' })
+  @ApiResponse({ status: 200, type: ScheduleEntryDto })
+  cancel(
+    @Param('id') id: string,
+    @Body() body: ScheduleReasonDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.cancel(
+      id,
+      body,
+      createAuditContext(req, this.auditLogService),
+      req.user,
+    );
+  }
+
+  @Post(':id/reschedule')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_RESCHEDULE, 'schedule')
+  @ApiOperation({ summary: 'Move schedule entry to a new slot' })
+  @ApiResponse({ status: 200, type: ScheduleEntryDto })
+  reschedule(
+    @Param('id') id: string,
+    @Body() body: RescheduleScheduleEntryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.reschedule(
+      id,
+      body,
+      createAuditContext(req, this.auditLogService),
+      req.user,
+    );
+  }
+
+  @Post(':id/substitution')
+  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_SUBSTITUTE, 'schedule')
+  @ApiOperation({
+    summary: 'Substitute teacher/course/classroom/time for entry',
+  })
+  @ApiResponse({ status: 200, type: ScheduleEntryDto })
+  substitute(
+    @Param('id') id: string,
+    @Body() body: SubstituteScheduleEntryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.scheduleService.substitute(
+      id,
+      body,
+      createAuditContext(req, this.auditLogService),
+      req.user,
     );
   }
 

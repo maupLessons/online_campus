@@ -215,9 +215,8 @@
 
 **Відповідальність:** зберігання та відображення розкладу; перевірка конфліктів
 (накладання по викладачу, аудиторії та групі); рольове й об'єктне обмеження
-видимості; сповіщення про створення, зміну або видалення заняття. Стани
-`cancelled` і `rescheduled` встановлюються через звичайне оновлення запису
-`PUT /schedule/:id`; окремих `/cancel` і `/reschedule` endpoints наразі немає.
+видимості; диспетчерські workflow для скасування, перенесення та заміни занять;
+шаблони й масові операції; CSV/XLSX-експорт; персональні сповіщення про зміни.
 
 **Ендпоінти та доступ:**
 
@@ -225,21 +224,36 @@
 | ------ | ----------------------------------------------------------------- | ---------------------------------------------------- |
 | GET    | `/schedule?date=&startDate=&endDate=&groupId=&teacherId=&status=` | авторизовані; результат обмежується академічним scope |
 | GET    | `/schedule/my`                                                    | авторизовані; особистий видимий розклад              |
-| GET    | `/schedule/export`                                                | авторизовані; CSV у межах видимого scope             |
+| GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`                 | авторизовані; CSV/XLSX у межах видимого scope        |
 | GET    | `/schedule/:id`                                                   | авторизовані; з object-level перевіркою доступу       |
 | POST   | `/schedule`                                                       | dispatcher, admin                                    |
 | PUT    | `/schedule/:id`                                                   | dispatcher, admin                                    |
+| POST   | `/schedule/:id/cancel`                                            | dispatcher, admin; обов'язкова причина               |
+| POST   | `/schedule/:id/reschedule`                                        | dispatcher, admin; новий час/аудиторія + причина     |
+| POST   | `/schedule/:id/substitution`                                      | dispatcher, admin; заміна дисципліни/аудиторії/часу  |
+| POST   | `/schedule/bulk`                                                  | dispatcher, admin; dry-run/skipConflicts             |
+| POST   | `/schedule/bulk/cancel`                                           | dispatcher, admin; масове скасування з причиною      |
+| GET    | `/schedule/templates`                                             | dispatcher, admin                                    |
+| POST   | `/schedule/templates`                                             | dispatcher, admin                                    |
+| PUT    | `/schedule/templates/:id`                                         | dispatcher, admin                                    |
+| DELETE | `/schedule/templates/:id`                                         | dispatcher, admin; архівація шаблону                 |
+| POST   | `/schedule/templates/:id/apply`                                   | dispatcher, admin; генерація розкладу за шаблоном    |
 | DELETE | `/schedule/:id`                                                   | dispatcher, admin                                    |
 
-**Перевірка конфліктів:** при POST/PUT перевіряє зайнятість викладача,
-аудиторії та групи. Скасовані записи не блокують часовий слот. Зміни
-розкладу створюють персональні сповіщення; для вибіркових дисциплін їх
-отримують лише викладач і фактично зараховані студенти.
+**Перевірка конфліктів:** при створенні, редагуванні, перенесенні, заміні,
+масовому створенні та застосуванні шаблонів перевіряється зайнятість
+викладача, аудиторії та групи. Скасовані записи не блокують часовий слот.
 
-**Поточний стан:** backend CRUD, конфлікти, CSV-експорт, audit та scoped
-visibility реалізовані. Окремий диспетчерський frontend для створення й
-редагування розкладу та спеціалізовані workflow endpoints
-`/cancel`/`/reschedule` залишаються подальшим покращенням.
+**Безпека й scope:** звичайні користувачі бачать лише свій академічний scope;
+фільтри поза дозволеним scope відхиляються. Для вибіркових дисциплін доступ,
+розклад і сповіщення використовують фактичне enrollment scope, а не лише
+належність до групи. Експорт обмежений 5000 записами, не кешується і проходить
+через спільну spreadsheet-sanitization інфраструктуру.
+
+**Frontend:** сторінка `SchedulePage` підтримує перегляд день/тиждень, статуси
+`scheduled`/`cancelled`/`rescheduled`/`substituted`, CSV/XLSX-експорт і
+повноцінну диспетчерську UI для створення, редагування, видалення, скасування,
+перенесення, замін, шаблонів та масового скасування.
 
 ---
 
@@ -910,7 +924,14 @@ Classroom
 ScheduleEntry
 └── id, courseAssignmentId, classroomId, date, startTime, endTime
     type: lecture|seminar|lab|exam|consultation
-    status: scheduled|cancelled|rescheduled
+    status: scheduled|cancelled|rescheduled|substituted
+    changeReason?, changedBy?, cancelledAt?, rescheduledAt?, substitutedAt?
+    changeHistory[]
+
+ScheduleTemplate
+└── id, title, courseAssignmentId, classroomId?, dayOfWeek, startTime, endTime
+    type: lecture|seminar|lab|exam|consultation
+    status: active|archived
 
 Material
 └── id, courseAssignmentId, title, description, category
@@ -999,15 +1020,26 @@ AuditLogEntry
 | ------ | ----------------------------------------------------------------- | ---------------------------------------------------- |
 | GET    | `/schedule?date=&startDate=&endDate=&groupId=&teacherId=&status=` | авторизовані; scoped visibility                      |
 | GET    | `/schedule/my`                                                    | авторизовані; scoped visibility                      |
-| GET    | `/schedule/export`                                                | авторизовані; CSV у межах scoped visibility          |
+| GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`                 | авторизовані; CSV/XLSX у межах scoped visibility     |
 | GET    | `/schedule/:id`                                                   | авторизовані; object-level authorization             |
 | POST   | `/schedule`                                                       | dispatcher, admin                                    |
-| PUT    | `/schedule/:id`                                                   | dispatcher, admin; у тому числі зміна status         |
+| PUT    | `/schedule/:id`                                                   | dispatcher, admin                                    |
+| POST   | `/schedule/:id/cancel`                                            | dispatcher, admin; причина скасування                |
+| POST   | `/schedule/:id/reschedule`                                        | dispatcher, admin; новий слот + причина              |
+| POST   | `/schedule/:id/substitution`                                      | dispatcher, admin; заміна + причина                  |
+| POST   | `/schedule/bulk`                                                  | dispatcher, admin; масове створення                  |
+| POST   | `/schedule/bulk/cancel`                                           | dispatcher, admin; масове скасування                 |
+| GET    | `/schedule/templates`                                             | dispatcher, admin                                    |
+| POST   | `/schedule/templates`                                             | dispatcher, admin                                    |
+| PUT    | `/schedule/templates/:id`                                         | dispatcher, admin                                    |
+| DELETE | `/schedule/templates/:id`                                         | dispatcher, admin; archive                           |
+| POST   | `/schedule/templates/:id/apply`                                   | dispatcher, admin; застосування шаблону              |
 | DELETE | `/schedule/:id`                                                   | dispatcher, admin                                    |
 
-Стани `scheduled`, `cancelled` і `rescheduled` є частиною
-`UpdateScheduleEntryDto`; спеціалізованих endpoints
-`/schedule/:id/cancel` та `/schedule/:id/reschedule` у поточному API немає.
+Стани `scheduled`, `cancelled`, `rescheduled` і `substituted` зберігаються в
+MongoDB разом із причиною, actor-метаданими та останніми 50 записами історії
+змін. Спеціалізовані workflow endpoints є основним шляхом для диспетчерських
+операцій, а `PUT /schedule/:id` використовується для звичайного редагування.
 
 ### Курси та навчання `/api/courses`
 
@@ -1200,7 +1232,7 @@ Student        (базовий доступ)
 | 3   | Demo fixtures для локального seed                        | ✅ Реалізовано; не runtime data layer       |
 | 4   | AuthModule (cookies, JWT rotation, CSRF, password reset) | ✅ Реалізовано                              |
 | 5   | RBAC Guards та академічна object-level authorization     | ✅ Реалізовано                              |
-| 6   | ScheduleModule backend CRUD, conflicts, audit, CSV       | 🟡 Core готовий; dispatcher UI ще відсутній |
+| 6   | ScheduleModule backend/frontend workflows, conflicts, audit, CSV/XLSX | ✅ Закрито: dispatcher UI, cancel/reschedule/substitution, templates, bulk |
 | 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
 | 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
 | 9   | NotificationsModule                                     | ✅ In-app сценарії реалізовано              |
@@ -1459,7 +1491,8 @@ online_campus/
         │   ├── surveysApi.ts
         │   ├── electivesApi.ts
         │   ├── reportsApi.ts
-        │   └── referencesApi.ts
+        │   ├── referencesApi.ts
+        │   └── scheduleApi.ts
         ├── store/
         │   └── authStore.ts
         ├── components/

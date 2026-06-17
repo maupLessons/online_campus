@@ -1,13 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState } from "react";
 import type {
   ChangeEvent,
   Dispatch,
   ReactNode,
   SetStateAction,
   SyntheticEvent,
-} from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+} from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BookOpen,
@@ -24,10 +24,11 @@ import {
   Upload,
   Users,
   X,
-} from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import api from '../../services/api';
-import { useAuthStore } from '../../store/authStore';
+} from "lucide-react";
+import { useTranslation } from "react-i18next";
+import api from "../../services/api";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
+import { useAuthStore } from "../../store/authStore";
 import {
   Role,
   type Assignment,
@@ -41,89 +42,89 @@ import {
   type ScheduleEntry,
   type Submission,
   type User,
-} from '../../types';
+} from "../../types";
 
 type TabType =
-  | 'materials'
-  | 'assignments'
-  | 'students'
-  | 'journal'
-  | 'submissions'
-  | 'grades';
-type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
+  | "materials"
+  | "assignments"
+  | "students"
+  | "journal"
+  | "submissions"
+  | "grades";
+type AttendanceStatus = "present" | "absent" | "late" | "excused";
 
 const COURSE_DETAIL_TABS: TabType[] = [
-  'materials',
-  'assignments',
-  'students',
-  'journal',
-  'submissions',
-  'grades',
+  "materials",
+  "assignments",
+  "students",
+  "journal",
+  "submissions",
+  "grades",
 ];
 
 const getInitialTab = (value: string | null): TabType =>
   COURSE_DETAIL_TABS.includes(value as TabType)
     ? (value as TabType)
-    : 'materials';
+    : "materials";
 
 const MATERIAL_CATEGORY_VALUES: MaterialCategory[] = [
-  'lecture',
-  'presentation',
-  'syllabus',
-  'work_program',
-  'external_resource',
-  'other',
+  "lecture",
+  "presentation",
+  "syllabus",
+  "work_program",
+  "external_resource",
+  "other",
 ];
 
 const ATTENDANCE_STATUS_VALUES: AttendanceStatus[] = [
-  'present',
-  'absent',
-  'late',
-  'excused',
+  "present",
+  "absent",
+  "late",
+  "excused",
 ];
 
 const LESSON_TYPE_VALUES = [
-  'lecture',
-  'seminar',
-  'lab',
-  'exam',
-  'consultation',
+  "lecture",
+  "seminar",
+  "lab",
+  "exam",
+  "consultation",
 ] as const;
 
-const GRADE_TYPE_VALUES = ['current', 'module', 'exam', 'final'] as const;
+const GRADE_TYPE_VALUES = ["current", "module", "exam", "final"] as const;
 
 const emptyMaterialForm = {
-  title: '',
-  description: '',
-  category: 'lecture' as MaterialCategory,
-  linkTitle: '',
-  linkUrl: '',
+  title: "",
+  description: "",
+  category: "lecture" as MaterialCategory,
+  linkTitle: "",
+  linkUrl: "",
 };
 
 const emptyAssignmentForm = {
-  title: '',
-  description: '',
-  criteria: '',
-  dueDate: '',
+  title: "",
+  description: "",
+  criteria: "",
+  dueDate: "",
   maxScore: 100,
-  linkTitle: '',
-  linkUrl: '',
+  linkTitle: "",
+  linkUrl: "",
 };
 
 const emptyJournalForm = {
-  scheduleEntryId: '',
+  scheduleEntryId: "",
   date: new Date().toISOString().slice(0, 10),
-  startTime: '',
-  endTime: '',
-  type: 'lecture',
-  topic: '',
-  description: '',
+  startTime: "",
+  endTime: "",
+  type: "lecture",
+  topic: "",
+  description: "",
 };
 
 const emptyGradeEditForm = {
-  type: 'current',
-  value: '',
-  comment: '',
+  type: "current",
+  value: "",
+  comment: "",
 };
 
 type RevisionTarget = {
@@ -135,33 +136,35 @@ type RevisionTarget = {
 const isTeacherLike = (role?: Role) =>
   Boolean(
     role &&
-      ([
+    (
+      [
         Role.TEACHER,
         Role.DEPARTMENT_HEAD,
         Role.DEAN,
         Role.ADMIN,
         Role.RECTOR,
         Role.PRESIDENT,
-      ] as Role[]).includes(role),
+      ] as Role[]
+    ).includes(role),
   );
 
 const formatTeacherName = (ca: CourseAssignment) => {
   if (ca.teacherName) return ca.teacherName;
-  if (!ca.teacher) return '';
+  if (!ca.teacher) return "";
 
   const { lastName, firstName, middleName } = ca.teacher;
-  return [lastName, firstName, middleName].filter(Boolean).join(' ');
+  return [lastName, firstName, middleName].filter(Boolean).join(" ");
 };
 
 const formatUserName = (user: User) =>
-  [user.lastName, user.firstName, user.middleName].filter(Boolean).join(' ');
+  [user.lastName, user.firstName, user.middleName].filter(Boolean).join(" ");
 
 const firstResourceLink = (
   links: Array<{ title: string; url: string }> | undefined,
-) => links?.[0] ?? { title: '', url: '' };
+) => links?.[0] ?? { title: "", url: "" };
 
 const toDateTimeLocal = (value: string) => {
-  if (!value) return '';
+  if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value.slice(0, 16);
   return date.toISOString().slice(0, 16);
@@ -169,10 +172,14 @@ const toDateTimeLocal = (value: string) => {
 
 async function uploadFile(file: File) {
   const formData = new FormData();
-  formData.append('file', file);
-  const { data } = await api.post<{ fileId: string }>('/files/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  formData.append("file", file);
+  const { data } = await api.post<{ fileId: string }>(
+    "/files/upload",
+    formData,
+    {
+      headers: { "Content-Type": "multipart/form-data" },
+    },
+  );
   return data.fileId;
 }
 
@@ -182,11 +189,11 @@ export default function CourseDetailPage() {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const locale = i18n.language === 'en' ? 'en-US' : 'uk-UA';
-  const initialTab = getInitialTab(searchParams.get('tab'));
-  const initialAssignmentId = searchParams.get('assignmentId') ?? '';
+  const locale = i18n.language === "en" ? "en-US" : "uk-UA";
+  const initialTab = getInitialTab(searchParams.get("tab"));
+  const initialAssignmentId = searchParams.get("assignmentId") ?? "";
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [statusMessage, setStatusMessage] = useAutoDismissState("");
   const [materialForm, setMaterialForm] = useState(emptyMaterialForm);
   const [materialFile, setMaterialFile] = useState<File | null>(null);
   const [editingMaterialId, setEditingMaterialId] = useState<string | null>(
@@ -215,14 +222,14 @@ export default function CourseDetailPage() {
   const [revisionTarget, setRevisionTarget] = useState<RevisionTarget | null>(
     null,
   );
-  const [revisionComment, setRevisionComment] = useState('');
+  const [revisionComment, setRevisionComment] = useState("");
 
   const {
     data: course,
     isLoading: isLoadingCourse,
     error: courseError,
   } = useQuery({
-    queryKey: ['courses', id],
+    queryKey: ["courses", id],
     queryFn: async () => {
       const { data } = await api.get<CourseAssignment>(
         `/courses/course-assignments/${id}`,
@@ -236,18 +243,18 @@ export default function CourseDetailPage() {
   const teacherMode = isTeacherLike(user?.role);
 
   const { data: materialsData, isLoading: isLoadingMaterials } = useQuery({
-    queryKey: ['courses', id, 'materials'],
+    queryKey: ["courses", id, "materials"],
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<Material>>(
         `/courses/${id}/materials`,
       );
       return data;
     },
-    enabled: Boolean(id) && activeTab === 'materials',
+    enabled: Boolean(id) && activeTab === "materials",
   });
 
   const { data: assignmentsData, isLoading: isLoadingAssignments } = useQuery({
-    queryKey: ['courses', id, 'assignments'],
+    queryKey: ["courses", id, "assignments"],
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<Assignment>>(
         `/courses/${id}/assignments`,
@@ -256,7 +263,7 @@ export default function CourseDetailPage() {
     },
     enabled:
       Boolean(id) &&
-      (activeTab === 'assignments' || activeTab === 'submissions'),
+      (activeTab === "assignments" || activeTab === "submissions"),
   });
 
   const assignments = assignmentsData?.docs ?? [];
@@ -266,13 +273,13 @@ export default function CourseDetailPage() {
       (assignment) => assignment.id === selectedSubmissionAssignmentId,
     )
       ? selectedSubmissionAssignmentId
-      : assignments[0]?.id ?? '';
+      : (assignments[0]?.id ?? "");
   const selectedSubmissionAssignment = assignments.find(
     (assignment) => assignment.id === currentSubmissionAssignmentId,
   );
 
   const { data: students = [], isLoading: isLoadingStudents } = useQuery({
-    queryKey: ['courses', id, 'students'],
+    queryKey: ["courses", id, "students"],
     queryFn: async () => {
       const { data } = await api.get<User[]>(
         `/courses/course-assignments/${id}/students`,
@@ -283,38 +290,38 @@ export default function CourseDetailPage() {
   });
 
   const { data: gradesData, isLoading: isLoadingGrades } = useQuery({
-    queryKey: ['courses', id, 'grades'],
+    queryKey: ["courses", id, "grades"],
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<GradeJournalResponse>>(
         `/courses/${id}/grades?limit=100`,
       );
       return data;
     },
-    enabled: Boolean(id) && teacherMode && activeTab === 'grades',
+    enabled: Boolean(id) && teacherMode && activeTab === "grades",
   });
 
   const { data: journalData, isLoading: isLoadingJournal } = useQuery({
-    queryKey: ['courses', id, 'journal'],
+    queryKey: ["courses", id, "journal"],
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<LessonJournalEntry>>(
         `/courses/${id}/journal?limit=50`,
       );
       return data;
     },
-    enabled: Boolean(id) && teacherMode && activeTab === 'journal',
+    enabled: Boolean(id) && teacherMode && activeTab === "journal",
   });
 
   const { data: scheduleEntries = [] } = useQuery({
-    queryKey: ['schedule', 'my', id],
+    queryKey: ["schedule", "my", id],
     queryFn: async () => {
-      const { data } = await api.get<ScheduleEntry[]>('/schedule/my');
+      const { data } = await api.get<ScheduleEntry[]>("/schedule/my");
       return data.filter((entry) => entry.courseAssignmentId === id);
     },
-    enabled: Boolean(id) && teacherMode && activeTab === 'journal',
+    enabled: Boolean(id) && teacherMode && activeTab === "journal",
   });
 
   const { data: submissionsData, isLoading: isLoadingSubmissions } = useQuery({
-    queryKey: ['courses', id, 'submissions', currentSubmissionAssignmentId],
+    queryKey: ["courses", id, "submissions", currentSubmissionAssignmentId],
     queryFn: async () => {
       const { data } = await api.get<PaginatedResponse<Submission>>(
         `/courses/assignments/${currentSubmissionAssignmentId}/submissions?limit=100`,
@@ -324,30 +331,30 @@ export default function CourseDetailPage() {
     enabled:
       Boolean(id) &&
       teacherMode &&
-      activeTab === 'submissions' &&
+      activeTab === "submissions" &&
       Boolean(currentSubmissionAssignmentId),
   });
 
   const tabs = useMemo(() => {
     const base: Array<{ id: TabType; label: string; icon: typeof BookOpen }> = [
-      { id: 'materials', label: t('courses.tabs.materials'), icon: BookOpen },
+      { id: "materials", label: t("courses.tabs.materials"), icon: BookOpen },
       {
-        id: 'assignments',
-        label: t('courses.tabs.assignments'),
+        id: "assignments",
+        label: t("courses.tabs.assignments"),
         icon: ClipboardList,
       },
     ];
 
     if (teacherMode) {
       base.push(
-        { id: 'students', label: t('courses.tabs.students'), icon: Users },
-        { id: 'journal', label: t('courses.tabs.journal'), icon: BookOpen },
+        { id: "students", label: t("courses.tabs.students"), icon: Users },
+        { id: "journal", label: t("courses.tabs.journal"), icon: BookOpen },
         {
-          id: 'submissions',
-          label: t('courses.tabs.submissions'),
+          id: "submissions",
+          label: t("courses.tabs.submissions"),
           icon: FileCheck2,
         },
-        { id: 'grades', label: t('courses.tabs.grades'), icon: GraduationCap },
+        { id: "grades", label: t("courses.tabs.grades"), icon: GraduationCap },
       );
     }
 
@@ -356,28 +363,27 @@ export default function CourseDetailPage() {
 
   const showStatus = (message: string) => {
     setStatusMessage(message);
-    window.setTimeout(() => {
-      setStatusMessage((current) => (current === message ? '' : current));
-    }, 5000);
   };
 
   const refreshCourseWork = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['courses', id, 'materials'] }),
+      queryClient.invalidateQueries({ queryKey: ["courses", id, "materials"] }),
       queryClient.invalidateQueries({
-        queryKey: ['courses', id, 'assignments'],
+        queryKey: ["courses", id, "assignments"],
       }),
-      queryClient.invalidateQueries({ queryKey: ['courses', id, 'journal'] }),
+      queryClient.invalidateQueries({ queryKey: ["courses", id, "journal"] }),
       queryClient.invalidateQueries({
-        queryKey: ['courses', id, 'submissions'],
+        queryKey: ["courses", id, "submissions"],
       }),
-      queryClient.invalidateQueries({ queryKey: ['courses', id, 'grades'] }),
+      queryClient.invalidateQueries({ queryKey: ["courses", id, "grades"] }),
     ]);
   };
 
   const saveMaterialMutation = useMutation({
     mutationFn: async () => {
-      const fileIds = materialFile ? [await uploadFile(materialFile)] : undefined;
+      const fileIds = materialFile
+        ? [await uploadFile(materialFile)]
+        : undefined;
       const resourceLinks =
         materialForm.linkTitle.trim() && materialForm.linkUrl.trim()
           ? [
@@ -407,13 +413,13 @@ export default function CourseDetailPage() {
       setMaterialForm(emptyMaterialForm);
       setMaterialFile(null);
       const messageKey = editingMaterialId
-        ? 'teacherCourse.materials.updated'
-        : 'teacherCourse.materials.created';
+        ? "teacherCourse.materials.updated"
+        : "teacherCourse.materials.created";
       setEditingMaterialId(null);
       showStatus(t(messageKey));
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.materials.saveError')),
+    onError: () => showStatus(t("teacherCourse.materials.saveError")),
   });
 
   const saveAssignmentMutation = useMutation({
@@ -452,20 +458,20 @@ export default function CourseDetailPage() {
       setAssignmentForm(emptyAssignmentForm);
       setAssignmentFile(null);
       const messageKey = editingAssignmentId
-        ? 'teacherCourse.assignments.updated'
-        : 'teacherCourse.assignments.created';
+        ? "teacherCourse.assignments.updated"
+        : "teacherCourse.assignments.created";
       setEditingAssignmentId(null);
       showStatus(t(messageKey));
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.assignments.saveError')),
+    onError: () => showStatus(t("teacherCourse.assignments.saveError")),
   });
 
   const saveJournalMutation = useMutation({
     mutationFn: async () => {
       const attendance = students.map((student) => ({
         studentId: student.id,
-        status: attendanceForm[student.id]?.status ?? 'present',
+        status: attendanceForm[student.id]?.status ?? "present",
         comment: attendanceForm[student.id]?.comment?.trim() || undefined,
       }));
       const grades = students
@@ -474,11 +480,11 @@ export default function CourseDetailPage() {
           value: gradeForm[student.id]?.value,
           comment: gradeForm[student.id]?.comment?.trim() || undefined,
         }))
-        .filter((grade) => grade.value !== undefined && grade.value !== '')
+        .filter((grade) => grade.value !== undefined && grade.value !== "")
         .map((grade) => ({
           studentId: grade.studentId,
           value: Number(grade.value),
-          type: 'current',
+          type: "current",
           comment: grade.comment,
         }));
 
@@ -509,13 +515,13 @@ export default function CourseDetailPage() {
       showStatus(
         t(
           editingJournalId
-            ? 'teacherCourse.journal.updated'
-            : 'teacherCourse.journal.saved',
+            ? "teacherCourse.journal.updated"
+            : "teacherCourse.journal.saved",
         ),
       );
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.journal.saveError')),
+    onError: () => showStatus(t("teacherCourse.journal.saveError")),
   });
 
   const deleteMaterialMutation = useMutation({
@@ -523,10 +529,10 @@ export default function CourseDetailPage() {
       await api.delete(`/courses/${id}/materials/${materialId}`);
     },
     onSuccess: async () => {
-      showStatus(t('teacherCourse.materials.deleted'));
+      showStatus(t("teacherCourse.materials.deleted"));
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.materials.deleteError')),
+    onError: () => showStatus(t("teacherCourse.materials.deleteError")),
   });
 
   const deleteAssignmentMutation = useMutation({
@@ -534,10 +540,10 @@ export default function CourseDetailPage() {
       await api.delete(`/courses/assignments/${assignmentId}`);
     },
     onSuccess: async () => {
-      showStatus(t('teacherCourse.assignments.deleted'));
+      showStatus(t("teacherCourse.assignments.deleted"));
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.assignments.deleteError')),
+    onError: () => showStatus(t("teacherCourse.assignments.deleteError")),
   });
 
   const deleteJournalMutation = useMutation({
@@ -545,10 +551,10 @@ export default function CourseDetailPage() {
       await api.delete(`/courses/journal/${journalId}`);
     },
     onSuccess: async () => {
-      showStatus(t('teacherCourse.journal.deleted'));
+      showStatus(t("teacherCourse.journal.deleted"));
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.journal.deleteError')),
+    onError: () => showStatus(t("teacherCourse.journal.deleteError")),
   });
 
   const updateGradeMutation = useMutation({
@@ -564,16 +570,16 @@ export default function CourseDetailPage() {
     onSuccess: async () => {
       setEditingGradeId(null);
       setGradeEditForm(emptyGradeEditForm);
-      showStatus(t('teacherCourse.grades.saved'));
+      showStatus(t("teacherCourse.grades.saved"));
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.grades.saveError')),
+    onError: () => showStatus(t("teacherCourse.grades.saveError")),
   });
 
   const gradeSubmissionMutation = useMutation({
     mutationFn: async (submission: Submission) => {
       const form = submissionGradeForm[submission.id];
-      const score = form?.score ?? String(submission.score ?? '');
+      const score = form?.score ?? String(submission.score ?? "");
 
       await api.post(`/courses/submissions/${submission.id}/grade`, {
         score: Number(score),
@@ -581,18 +587,18 @@ export default function CourseDetailPage() {
       });
     },
     onSuccess: async () => {
-      showStatus(t('teacherCourse.submissions.graded'));
+      showStatus(t("teacherCourse.submissions.graded"));
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: ['courses', id, 'submissions'],
+          queryKey: ["courses", id, "submissions"],
         }),
-        queryClient.invalidateQueries({ queryKey: ['courses', id, 'grades'] }),
+        queryClient.invalidateQueries({ queryKey: ["courses", id, "grades"] }),
         queryClient.invalidateQueries({
-          queryKey: ['courses', id, 'assignments'],
+          queryKey: ["courses", id, "assignments"],
         }),
       ]);
     },
-    onError: () => showStatus(t('teacherCourse.submissions.gradeError')),
+    onError: () => showStatus(t("teacherCourse.submissions.gradeError")),
   });
 
   const returnSubmissionMutation = useMutation({
@@ -609,13 +615,13 @@ export default function CourseDetailPage() {
     },
     onSuccess: async () => {
       setRevisionTarget(null);
-      setRevisionComment('');
+      setRevisionComment("");
       setEditingGradeId(null);
       setGradeEditForm(emptyGradeEditForm);
-      showStatus(t('teacherCourse.submissions.returned'));
+      showStatus(t("teacherCourse.submissions.returned"));
       await refreshCourseWork();
     },
-    onError: () => showStatus(t('teacherCourse.submissions.returnError')),
+    onError: () => showStatus(t("teacherCourse.submissions.returnError")),
   });
 
   const resetMaterialForm = () => {
@@ -629,8 +635,8 @@ export default function CourseDetailPage() {
     setEditingMaterialId(material.id);
     setMaterialForm({
       title: material.title,
-      description: material.description ?? '',
-      category: material.category ?? 'lecture',
+      description: material.description ?? "",
+      category: material.category ?? "lecture",
       linkTitle: link.title,
       linkUrl: link.url,
     });
@@ -649,7 +655,7 @@ export default function CourseDetailPage() {
     setAssignmentForm({
       title: assignment.title,
       description: assignment.description,
-      criteria: assignment.criteria ?? '',
+      criteria: assignment.criteria ?? "",
       dueDate: toDateTimeLocal(assignment.dueDate),
       maxScore: assignment.maxScore,
       linkTitle: link.title,
@@ -673,7 +679,7 @@ export default function CourseDetailPage() {
     for (const item of entry.attendance) {
       nextAttendance[item.studentId] = {
         status: item.status,
-        comment: item.comment ?? '',
+        comment: item.comment ?? "",
       };
     }
 
@@ -681,19 +687,19 @@ export default function CourseDetailPage() {
     for (const grade of entry.grades) {
       nextGrades[grade.studentId] = {
         value: String(grade.value),
-        comment: grade.comment ?? '',
+        comment: grade.comment ?? "",
       };
     }
 
     setEditingJournalId(entry.id);
     setJournalForm({
-      scheduleEntryId: entry.scheduleEntryId ?? '',
+      scheduleEntryId: entry.scheduleEntryId ?? "",
       date: entry.date.slice(0, 10),
-      startTime: entry.startTime ?? '',
-      endTime: entry.endTime ?? '',
-      type: entry.type ?? 'lecture',
+      startTime: entry.startTime ?? "",
+      endTime: entry.endTime ?? "",
+      type: entry.type ?? "lecture",
       topic: entry.topic,
-      description: entry.description ?? '',
+      description: entry.description ?? "",
     });
     setAttendanceForm(nextAttendance);
     setGradeForm(nextGrades);
@@ -704,7 +710,7 @@ export default function CourseDetailPage() {
     setGradeEditForm({
       type: grade.type,
       value: String(grade.value),
-      comment: grade.comment ?? '',
+      comment: grade.comment ?? "",
     });
   };
 
@@ -714,7 +720,7 @@ export default function CourseDetailPage() {
     assignmentTitle: string,
   ) => {
     setRevisionTarget({ submissionId, studentName, assignmentTitle });
-    setRevisionComment('');
+    setRevisionComment("");
   };
 
   const handleMaterialSubmit = (event: SyntheticEvent<HTMLFormElement>) => {
@@ -748,12 +754,12 @@ export default function CourseDetailPage() {
 
   const handleDownload = async (fileId: string, originalName: string) => {
     const response = await api.get(`/files/download/${fileId}`, {
-      responseType: 'blob',
+      responseType: "blob",
     });
     const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = url;
-    link.setAttribute('download', originalName);
+    link.setAttribute("download", originalName);
     document.body.appendChild(link);
     link.click();
     link.parentNode?.removeChild(link);
@@ -761,7 +767,7 @@ export default function CourseDetailPage() {
   };
 
   const dateLabel = (value?: string) =>
-    value ? new Date(value).toLocaleDateString(locale) : '-';
+    value ? new Date(value).toLocaleDateString(locale) : "-";
 
   if (isLoadingCourse) {
     return (
@@ -774,7 +780,7 @@ export default function CourseDetailPage() {
   if (courseError || !course) {
     return (
       <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-        {t('courses.notFound')}
+        {t("courses.notFound")}
       </div>
     );
   }
@@ -786,7 +792,8 @@ export default function CourseDetailPage() {
           <Link
             to="/courses"
             className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50"
-            title={t('common.back')}>
+            title={t("common.back")}
+          >
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div>
@@ -794,8 +801,8 @@ export default function CourseDetailPage() {
               {course.courseName}
             </h1>
             <p className="text-sm text-slate-500">
-              {course.courseCode} · {course.academicYear}, {course.semester}{' '}
-              {t('courses.semester')}
+              {course.courseCode} · {course.academicYear}, {course.semester}{" "}
+              {t("courses.semester")}
             </p>
           </div>
         </div>
@@ -807,8 +814,9 @@ export default function CourseDetailPage() {
           <button
             type="button"
             className="text-blue-700 underline-offset-4 hover:underline"
-            onClick={() => setStatusMessage('')}>
-            {t('teacherCourse.common.close')}
+            onClick={() => setStatusMessage("")}
+          >
+            {t("teacherCourse.common.close")}
           </button>
         </div>
       )}
@@ -816,11 +824,17 @@ export default function CourseDetailPage() {
       <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
           <div className="grid gap-3 text-sm md:grid-cols-4">
-            <InfoLine label={t('courses.teacher')} value={formatTeacherName(course)} />
-            <InfoLine label={t('courses.group')} value={course.groupCode} />
-            <InfoLine label={t('courses.credits')} value={String(course.credits ?? '-')} />
             <InfoLine
-              label={t('courses.semester')}
+              label={t("courses.teacher")}
+              value={formatTeacherName(course)}
+            />
+            <InfoLine label={t("courses.group")} value={course.groupCode} />
+            <InfoLine
+              label={t("courses.credits")}
+              value={String(course.credits ?? "-")}
+            />
+            <InfoLine
+              label={t("courses.semester")}
               value={`${course.academicYear}, ${course.semester}`}
             />
           </div>
@@ -839,9 +853,10 @@ export default function CourseDetailPage() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${
                     active
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'bg-white text-slate-600 hover:bg-slate-100'
-                  }`}>
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-white text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
                   <Icon className="h-4 w-4" />
                   {tab.label}
                 </button>
@@ -851,7 +866,7 @@ export default function CourseDetailPage() {
         </div>
 
         <div className="p-6">
-          {activeTab === 'materials' && (
+          {activeTab === "materials" && (
             <MaterialsTab
               teacherMode={teacherMode}
               form={materialForm}
@@ -863,7 +878,9 @@ export default function CourseDetailPage() {
               dateLabel={dateLabel}
               onSubmit={handleMaterialSubmit}
               onDownload={handleDownload}
-              onDelete={(materialId) => deleteMaterialMutation.mutate(materialId)}
+              onDelete={(materialId) =>
+                deleteMaterialMutation.mutate(materialId)
+              }
               onEdit={startEditMaterial}
               onCancelEdit={resetMaterialForm}
               editingId={editingMaterialId}
@@ -871,7 +888,7 @@ export default function CourseDetailPage() {
             />
           )}
 
-          {activeTab === 'assignments' && (
+          {activeTab === "assignments" && (
             <AssignmentsTab
               teacherMode={teacherMode}
               form={assignmentForm}
@@ -894,11 +911,11 @@ export default function CourseDetailPage() {
             />
           )}
 
-          {activeTab === 'students' && (
+          {activeTab === "students" && (
             <StudentsTab students={students} loading={isLoadingStudents} />
           )}
 
-          {activeTab === 'journal' && (
+          {activeTab === "journal" && (
             <JournalTab
               students={students}
               entries={journalData?.docs ?? []}
@@ -921,7 +938,7 @@ export default function CourseDetailPage() {
             />
           )}
 
-          {activeTab === 'submissions' && (
+          {activeTab === "submissions" && (
             <SubmissionsTab
               assignments={assignments}
               selectedAssignmentId={currentSubmissionAssignmentId}
@@ -946,7 +963,7 @@ export default function CourseDetailPage() {
                 openRevisionModal(
                   submission.id,
                   studentName,
-                  selectedSubmissionAssignment?.title ?? '',
+                  selectedSubmissionAssignment?.title ?? "",
                 )
               }
               returningSubmissionId={
@@ -958,7 +975,7 @@ export default function CourseDetailPage() {
             />
           )}
 
-          {activeTab === 'grades' && (
+          {activeTab === "grades" && (
             <GradesTab
               rows={gradesData?.docs ?? []}
               loading={isLoadingGrades}
@@ -977,7 +994,7 @@ export default function CourseDetailPage() {
                 openRevisionModal(
                   grade.submissionId,
                   studentName,
-                  grade.assignmentTitle ?? t('courses.tabs.assignments'),
+                  grade.assignmentTitle ?? t("courses.tabs.assignments"),
                 );
               }}
               returningSubmissionId={
@@ -999,7 +1016,7 @@ export default function CourseDetailPage() {
           saving={returnSubmissionMutation.isPending}
           onCancel={() => {
             setRevisionTarget(null);
-            setRevisionComment('');
+            setRevisionComment("");
           }}
           onSubmit={() =>
             void returnSubmissionMutation.mutateAsync({
@@ -1037,21 +1054,24 @@ function RevisionRequestModal({
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !saving) onCancel();
-      }}>
+      }}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="revision-modal-title"
-        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+        className="w-full max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-xl"
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2
               id="revision-modal-title"
-              className="text-lg font-semibold text-slate-900">
-              {t('teacherCourse.submissions.returnTitle')}
+              className="text-lg font-semibold text-slate-900"
+            >
+              {t("teacherCourse.submissions.returnTitle")}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              {t('teacherCourse.submissions.returnDescription', {
+              {t("teacherCourse.submissions.returnDescription", {
                 student: target.studentName,
                 assignment: target.assignmentTitle,
               })}
@@ -1062,13 +1082,14 @@ function RevisionRequestModal({
             onClick={onCancel}
             disabled={saving}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 disabled:opacity-50"
-            title={t('teacherCourse.common.close')}>
+            title={t("teacherCourse.common.close")}
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <label className="mt-5 grid gap-2 text-sm font-medium text-slate-700">
-          {t('teacherCourse.submissions.returnReason')}
+          {t("teacherCourse.submissions.returnReason")}
           <textarea
             value={comment}
             onChange={(event) => setComment(event.target.value)}
@@ -1076,9 +1097,7 @@ function RevisionRequestModal({
             rows={5}
             autoFocus
             className="resize-y rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-            placeholder={t(
-              'teacherCourse.submissions.returnReasonPlaceholder',
-            )}
+            placeholder={t("teacherCourse.submissions.returnReasonPlaceholder")}
           />
         </label>
 
@@ -1087,16 +1106,18 @@ function RevisionRequestModal({
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">
-            {t('teacherCourse.common.cancel')}
+            className="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
+          >
+            {t("teacherCourse.common.cancel")}
           </button>
           <button
             type="button"
             onClick={onSubmit}
             disabled={!canSubmit || saving}
-            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-amber-600 px-4 text-sm font-medium text-white transition hover:bg-amber-700 disabled:bg-slate-300">
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-amber-600 px-4 text-sm font-medium text-white transition hover:bg-amber-700 disabled:bg-slate-300"
+          >
             <RotateCcw className="h-4 w-4" />
-            {t('teacherCourse.submissions.return')}
+            {t("teacherCourse.submissions.return")}
           </button>
         </div>
       </div>
@@ -1107,8 +1128,10 @@ function RevisionRequestModal({
 function InfoLine({ label, value }: { label: string; value?: string }) {
   return (
     <div>
-      <div className="text-xs uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-1 font-medium text-slate-900">{value || '-'}</div>
+      <div className="text-xs uppercase tracking-wide text-slate-400">
+        {label}
+      </div>
+      <div className="mt-1 font-medium text-slate-900">{value || "-"}</div>
     </div>
   );
 }
@@ -1126,7 +1149,7 @@ function FileInput({
     <label className="flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-slate-300 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
       <Upload className="h-4 w-4" />
       <span className="truncate">
-        {file?.name ?? t('teacherCourse.common.file')}
+        {file?.name ?? t("teacherCourse.common.file")}
       </span>
       <input
         type="file"
@@ -1156,14 +1179,14 @@ function ResourceLinkFields({
         type="text"
         value={title}
         onChange={(event) => onTitleChange(event.target.value)}
-        placeholder={t('teacherCourse.common.linkTitle')}
+        placeholder={t("teacherCourse.common.linkTitle")}
         className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
       />
       <input
         type="url"
         value={url}
         onChange={(event) => onUrlChange(event.target.value)}
-        placeholder={t('teacherCourse.common.linkUrl')}
+        placeholder={t("teacherCourse.common.linkUrl")}
         className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
       />
     </div>
@@ -1210,20 +1233,22 @@ function MaterialsTab({
       {teacherMode && (
         <form
           onSubmit={onSubmit}
-          className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
+        >
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-slate-900">
               {editingId
-                ? t('teacherCourse.materials.formEdit')
-                : t('teacherCourse.materials.formCreate')}
+                ? t("teacherCourse.materials.formEdit")
+                : t("teacherCourse.materials.formCreate")}
             </h2>
             {editingId && (
               <button
                 type="button"
                 onClick={onCancelEdit}
-                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+              >
                 <X className="h-4 w-4" />
-                {t('teacherCourse.common.cancel')}
+                {t("teacherCourse.common.cancel")}
               </button>
             )}
           </div>
@@ -1233,8 +1258,10 @@ function MaterialsTab({
               required
               maxLength={160}
               value={form.title}
-              onChange={(event) => setForm({ ...form, title: event.target.value })}
-              placeholder={t('teacherCourse.materials.titlePlaceholder')}
+              onChange={(event) =>
+                setForm({ ...form, title: event.target.value })
+              }
+              placeholder={t("teacherCourse.materials.titlePlaceholder")}
               className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
             />
             <select
@@ -1245,7 +1272,8 @@ function MaterialsTab({
                   category: event.target.value as MaterialCategory,
                 })
               }
-              className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500">
+              className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
+            >
               {MATERIAL_CATEGORY_VALUES.map((category) => (
                 <option key={category} value={category}>
                   {t(`teacherCourse.materialCategories.${category}`)}
@@ -1258,7 +1286,7 @@ function MaterialsTab({
             onChange={(event) =>
               setForm({ ...form, description: event.target.value })
             }
-            placeholder={t('teacherCourse.materials.descriptionPlaceholder')}
+            placeholder={t("teacherCourse.materials.descriptionPlaceholder")}
             className="min-h-24 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500"
           />
           <ResourceLinkFields
@@ -1272,32 +1300,34 @@ function MaterialsTab({
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300">
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
+            >
               <Save className="h-4 w-4" />
               {editingId
-                ? t('teacherCourse.materials.update')
-                : t('teacherCourse.materials.save')}
+                ? t("teacherCourse.materials.update")
+                : t("teacherCourse.materials.save")}
             </button>
           </div>
         </form>
       )}
 
       {loading ? (
-        <EmptyState text={t('teacherCourse.materials.loading')} />
+        <EmptyState text={t("teacherCourse.materials.loading")} />
       ) : materials.length === 0 ? (
-        <EmptyState text={t('teacherCourse.materials.empty')} />
+        <EmptyState text={t("teacherCourse.materials.empty")} />
       ) : (
         <div className="grid gap-3">
           {materials.map((material) => (
             <article
               key={material.id}
-              className="rounded-xl border border-slate-200 bg-white p-4">
+              className="rounded-xl border border-slate-200 bg-white p-4"
+            >
               <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-blue-600">
                     {t(
                       `teacherCourse.materialCategories.${
-                        material.category ?? 'other'
+                        material.category ?? "other"
                       }`,
                     )}
                   </div>
@@ -1319,14 +1349,16 @@ function MaterialsTab({
                       type="button"
                       onClick={() => onEdit(material)}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
-                      title={t('teacherCourse.common.edit')}>
+                      title={t("teacherCourse.common.edit")}
+                    >
                       <Edit3 className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => onDelete(material.id)}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 text-red-600 transition hover:bg-red-50"
-                      title={t('teacherCourse.common.delete')}>
+                      title={t("teacherCourse.common.delete")}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -1387,20 +1419,22 @@ function AssignmentsTab({
       {teacherMode && (
         <form
           onSubmit={onSubmit}
-          className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4"
+        >
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-semibold text-slate-900">
               {editingId
-                ? t('teacherCourse.assignments.formEdit')
-                : t('teacherCourse.assignments.formCreate')}
+                ? t("teacherCourse.assignments.formEdit")
+                : t("teacherCourse.assignments.formCreate")}
             </h2>
             {editingId && (
               <button
                 type="button"
                 onClick={onCancelEdit}
-                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+                className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+              >
                 <X className="h-4 w-4" />
-                {t('teacherCourse.common.cancel')}
+                {t("teacherCourse.common.cancel")}
               </button>
             )}
           </div>
@@ -1409,8 +1443,10 @@ function AssignmentsTab({
               type="text"
               required
               value={form.title}
-              onChange={(event) => setForm({ ...form, title: event.target.value })}
-              placeholder={t('teacherCourse.assignments.titlePlaceholder')}
+              onChange={(event) =>
+                setForm({ ...form, title: event.target.value })
+              }
+              placeholder={t("teacherCourse.assignments.titlePlaceholder")}
               className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
             />
             <input
@@ -1440,7 +1476,7 @@ function AssignmentsTab({
             onChange={(event) =>
               setForm({ ...form, description: event.target.value })
             }
-            placeholder={t('teacherCourse.assignments.descriptionPlaceholder')}
+            placeholder={t("teacherCourse.assignments.descriptionPlaceholder")}
             className="min-h-24 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500"
           />
           <textarea
@@ -1448,7 +1484,7 @@ function AssignmentsTab({
             onChange={(event) =>
               setForm({ ...form, criteria: event.target.value })
             }
-            placeholder={t('teacherCourse.assignments.criteriaPlaceholder')}
+            placeholder={t("teacherCourse.assignments.criteriaPlaceholder")}
             className="min-h-24 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500"
           />
           <ResourceLinkFields
@@ -1462,20 +1498,21 @@ function AssignmentsTab({
             <button
               type="submit"
               disabled={saving}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300">
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300"
+            >
               <Plus className="h-4 w-4" />
               {editingId
-                ? t('teacherCourse.assignments.update')
-                : t('teacherCourse.assignments.publish')}
+                ? t("teacherCourse.assignments.update")
+                : t("teacherCourse.assignments.publish")}
             </button>
           </div>
         </form>
       )}
 
       {loading ? (
-        <EmptyState text={t('teacherCourse.assignments.loading')} />
+        <EmptyState text={t("teacherCourse.assignments.loading")} />
       ) : assignments.length === 0 ? (
-        <EmptyState text={t('teacherCourse.assignments.empty')} />
+        <EmptyState text={t("teacherCourse.assignments.empty")} />
       ) : (
         <div className="grid gap-3">
           {[...assignments]
@@ -1485,86 +1522,90 @@ function AssignmentsTab({
               return 0;
             })
             .map((assignment) => (
-            <article
-              key={assignment.id}
-              className={`rounded-xl border bg-white p-4 transition ${
-                assignment.id === highlightedAssignmentId
-                  ? 'border-blue-300 ring-2 ring-blue-100'
-                  : 'border-slate-200'
-              }`}>
-              <div className="flex flex-col gap-3 md:flex-row md:justify-between">
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-slate-900">
-                    {assignment.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {assignment.description}
-                  </p>
-                  {assignment.criteria && (
-                    <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                      {assignment.criteria}
+              <article
+                key={assignment.id}
+                className={`rounded-xl border bg-white p-4 transition ${
+                  assignment.id === highlightedAssignmentId
+                    ? "border-blue-300 ring-2 ring-blue-100"
+                    : "border-slate-200"
+                }`}
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-slate-900">
+                      {assignment.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {assignment.description}
                     </p>
-                  )}
-                  {!teacherMode &&
-                    assignment.submission?.status === 'returned' && (
-                      <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                        <div className="font-medium">
-                          {t('assignments.revisionReason')}
+                    {assignment.criteria && (
+                      <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                        {assignment.criteria}
+                      </p>
+                    )}
+                    {!teacherMode &&
+                      assignment.submission?.status === "returned" && (
+                        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                          <div className="font-medium">
+                            {t("assignments.revisionReason")}
+                          </div>
+                          <p className="mt-1 whitespace-pre-wrap">
+                            {assignment.submission.returnComment ||
+                              t("teacherCourse.common.noData")}
+                          </p>
+                          <Link
+                            to={`/assignments?assignmentId=${assignment.id}`}
+                            className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-600 px-3 font-medium text-white transition hover:bg-amber-700"
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                            {t("assignments.resubmit")}
+                          </Link>
                         </div>
-                        <p className="mt-1 whitespace-pre-wrap">
-                          {assignment.submission.returnComment ||
-                            t('teacherCourse.common.noData')}
-                        </p>
-                        <Link
-                          to={`/assignments?assignmentId=${assignment.id}`}
-                          className="mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg bg-amber-600 px-3 font-medium text-white transition hover:bg-amber-700">
-                          <RotateCcw className="h-4 w-4" />
-                          {t('assignments.resubmit')}
-                        </Link>
+                      )}
+                  </div>
+                  <div className="flex flex-col gap-2 md:items-end">
+                    {teacherMode && (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onEdit(assignment)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
+                          title={t("teacherCourse.common.edit")}
+                        >
+                          <Edit3 className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(assignment.id)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 text-red-600 transition hover:bg-red-50"
+                          title={t("teacherCourse.common.delete")}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     )}
-                </div>
-                <div className="flex flex-col gap-2 md:items-end">
-                  {teacherMode && (
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onEdit(assignment)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
-                        title={t('teacherCourse.common.edit')}>
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDelete(assignment.id)}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 text-red-600 transition hover:bg-red-50"
-                        title={t('teacherCourse.common.delete')}>
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                  <div className="grid w-full gap-2 sm:grid-cols-2 md:w-auto">
-                    {!teacherMode && (
-                      <AssignmentSubmissionSummary
+                    <div className="grid w-full gap-2 sm:grid-cols-2 md:w-auto">
+                      {!teacherMode && (
+                        <AssignmentSubmissionSummary
+                          assignment={assignment}
+                          dateLabel={dateLabel}
+                        />
+                      )}
+                      <AssignmentDeadlineSummary
                         assignment={assignment}
                         dateLabel={dateLabel}
+                        emphasizeOverdue={teacherMode}
                       />
-                    )}
-                    <AssignmentDeadlineSummary
-                      assignment={assignment}
-                      dateLabel={dateLabel}
-                      emphasizeOverdue={teacherMode}
-                    />
+                    </div>
                   </div>
                 </div>
-              </div>
-              <ResourceList
-                files={assignment.files ?? []}
-                resourceLinks={assignment.resourceLinks ?? []}
-                onDownload={onDownload}
-              />
-            </article>
-          ))}
+                <ResourceList
+                  files={assignment.files ?? []}
+                  resourceLinks={assignment.resourceLinks ?? []}
+                  onDownload={onDownload}
+                />
+              </article>
+            ))}
         </div>
       )}
     </div>
@@ -1590,17 +1631,17 @@ function AssignmentDeadlineSummary({
   return (
     <div
       className={`min-h-[72px] min-w-36 rounded-lg px-3 py-2 text-sm ${
-        overdue ? 'bg-red-50 text-red-800' : 'bg-blue-50 text-blue-800'
-      }`}>
-      <div className={`text-xs ${overdue ? 'text-red-500' : 'text-blue-500'}`}>
-        {t('teacherCourse.assignments.deadline')}
+        overdue ? "bg-red-50 text-red-800" : "bg-blue-50 text-blue-800"
+      }`}
+    >
+      <div className={`text-xs ${overdue ? "text-red-500" : "text-blue-500"}`}>
+        {t("teacherCourse.assignments.deadline")}
       </div>
       <div className="font-semibold">{dateLabel(assignment.dueDate)}</div>
       <div
-        className={`mt-1 text-xs ${
-          overdue ? 'text-red-500' : 'text-blue-500'
-        }`}>
-        {t('teacherCourse.assignments.points', {
+        className={`mt-1 text-xs ${overdue ? "text-red-500" : "text-blue-500"}`}
+      >
+        {t("teacherCourse.assignments.points", {
           count: assignment.maxScore,
         })}
       </div>
@@ -1624,71 +1665,78 @@ function AssignmentSubmissionSummary({
     return (
       <div
         className={`min-h-[72px] min-w-36 rounded-lg px-3 py-2 text-sm ${
-          overdue ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
-        }`}>
-        <div className={`text-xs ${overdue ? 'text-red-500' : 'text-amber-600'}`}>
-          {t('assignments.statusLabel')}
+          overdue ? "bg-red-50 text-red-800" : "bg-amber-50 text-amber-800"
+        }`}
+      >
+        <div
+          className={`text-xs ${overdue ? "text-red-500" : "text-amber-600"}`}
+        >
+          {t("assignments.statusLabel")}
         </div>
         <div className="font-semibold">
           {t(
             overdue
-              ? 'assignments.statusOverdue'
-              : 'assignments.statusNotSubmitted',
+              ? "assignments.statusOverdue"
+              : "assignments.statusNotSubmitted",
           )}
         </div>
         <div
           className={`mt-1 text-xs ${
-            overdue ? 'text-red-500' : 'text-amber-600'
-          }`}>
+            overdue ? "text-red-500" : "text-amber-600"
+          }`}
+        >
           {t(
             overdue
-              ? 'assignments.submissionClosed'
-              : 'assignments.awaitingSubmission',
+              ? "assignments.submissionClosed"
+              : "assignments.awaitingSubmission",
           )}
         </div>
       </div>
     );
   }
 
-  const graded = submission.status === 'graded';
-  const returned = submission.status === 'returned';
+  const graded = submission.status === "graded";
+  const returned = submission.status === "returned";
 
   return (
     <div
       className={`min-h-[72px] min-w-36 rounded-lg px-3 py-2 text-sm ${
         returned
-          ? 'bg-amber-50 text-amber-800'
+          ? "bg-amber-50 text-amber-800"
           : graded
-            ? 'bg-emerald-50 text-emerald-800'
-            : 'bg-sky-50 text-sky-800'
-      }`}>
+            ? "bg-emerald-50 text-emerald-800"
+            : "bg-sky-50 text-sky-800"
+      }`}
+    >
       <div
         className={`text-xs ${
           returned
-            ? 'text-amber-600'
+            ? "text-amber-600"
             : graded
-              ? 'text-emerald-600'
-              : 'text-sky-600'
-        }`}>
-        {t('assignments.submittedAt')}
+              ? "text-emerald-600"
+              : "text-sky-600"
+        }`}
+      >
+        {t("assignments.submittedAt")}
       </div>
       <div className="font-semibold">{dateLabel(submission.submittedAt)}</div>
       <div
         className={`mt-1 text-xs ${
           returned
-            ? 'text-amber-600'
+            ? "text-amber-600"
             : graded
-              ? 'text-emerald-600'
-              : 'text-sky-600'
-        }`}>
+              ? "text-emerald-600"
+              : "text-sky-600"
+        }`}
+      >
         {returned
-          ? t('assignments.statusReturned')
+          ? t("assignments.statusReturned")
           : graded && submission.score !== undefined
-            ? t('assignments.gradeResult', {
+            ? t("assignments.gradeResult", {
                 score: submission.score,
                 maxScore: assignment.maxScore,
               })
-            : t('assignments.statusPending')}
+            : t("assignments.statusPending")}
       </div>
     </div>
   );
@@ -1703,9 +1751,9 @@ function StudentsTab({
 }) {
   const { t } = useTranslation();
 
-  if (loading) return <EmptyState text={t('teacherCourse.students.loading')} />;
+  if (loading) return <EmptyState text={t("teacherCourse.students.loading")} />;
   if (students.length === 0) {
-    return <EmptyState text={t('teacherCourse.students.empty')} />;
+    return <EmptyState text={t("teacherCourse.students.empty")} />;
   }
 
   return (
@@ -1713,10 +1761,10 @@ function StudentsTab({
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           <tr>
-            <TableHead>{t('teacherCourse.students.fullName')}</TableHead>
+            <TableHead>{t("teacherCourse.students.fullName")}</TableHead>
             <TableHead>Email</TableHead>
-            <TableHead>{t('teacherCourse.students.recordBook')}</TableHead>
-            <TableHead>{t('teacherCourse.students.status')}</TableHead>
+            <TableHead>{t("teacherCourse.students.recordBook")}</TableHead>
+            <TableHead>{t("teacherCourse.students.status")}</TableHead>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 bg-white">
@@ -1724,7 +1772,9 @@ function StudentsTab({
             <tr key={student.id}>
               <TableCell strong>{formatUserName(student)}</TableCell>
               <TableCell>{student.email}</TableCell>
-              <TableCell>{student.studentProfile?.recordBookNumber ?? '-'}</TableCell>
+              <TableCell>
+                {student.studentProfile?.recordBookNumber ?? "-"}
+              </TableCell>
               <TableCell>{student.status}</TableCell>
             </tr>
           ))}
@@ -1764,7 +1814,9 @@ function JournalTab({
     value: Record<string, { status: AttendanceStatus; comment: string }>,
   ) => void;
   gradeForm: Record<string, { value: string; comment: string }>;
-  setGradeForm: (value: Record<string, { value: string; comment: string }>) => void;
+  setGradeForm: (
+    value: Record<string, { value: string; comment: string }>,
+  ) => void;
   loading: boolean;
   saving: boolean;
   dateLabel: (value?: string) => string;
@@ -1781,20 +1833,22 @@ function JournalTab({
     <div className="space-y-6">
       <form
         onSubmit={onSubmit}
-        className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        className="grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4"
+      >
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold text-slate-900">
             {editingId
-              ? t('teacherCourse.journal.formEdit')
-              : t('teacherCourse.journal.formCreate')}
+              ? t("teacherCourse.journal.formEdit")
+              : t("teacherCourse.journal.formCreate")}
           </h2>
           {editingId && (
             <button
               type="button"
               onClick={onCancelEdit}
-              className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50">
+              className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+            >
               <X className="h-4 w-4" />
-              {t('teacherCourse.common.cancel')}
+              {t("teacherCourse.common.cancel")}
             </button>
           )}
         </div>
@@ -1802,11 +1856,12 @@ function JournalTab({
           <select
             value={form.scheduleEntryId}
             onChange={onSchedulePick}
-            className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500">
-            <option value="">{t('teacherCourse.journal.noSchedule')}</option>
+            className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
+          >
+            <option value="">{t("teacherCourse.journal.noSchedule")}</option>
             {scheduleEntries.map((entry) => (
               <option key={entry.id} value={entry.id}>
-                {entry.date} {entry.startTime}-{entry.endTime} ·{' '}
+                {entry.date} {entry.startTime}-{entry.endTime} ·{" "}
                 {t(`teacherCourse.lessonTypes.${entry.type}`)}
               </option>
             ))}
@@ -1829,13 +1884,16 @@ function JournalTab({
           <input
             type="time"
             value={form.endTime}
-            onChange={(event) => setForm({ ...form, endTime: event.target.value })}
+            onChange={(event) =>
+              setForm({ ...form, endTime: event.target.value })
+            }
             className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
           />
           <select
             value={form.type}
             onChange={(event) => setForm({ ...form, type: event.target.value })}
-            className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500">
+            className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
+          >
             {LESSON_TYPE_VALUES.map((value) => (
               <option key={value} value={value}>
                 {t(`teacherCourse.lessonTypes.${value}`)}
@@ -1849,7 +1907,7 @@ function JournalTab({
           maxLength={300}
           value={form.topic}
           onChange={(event) => setForm({ ...form, topic: event.target.value })}
-          placeholder={t('teacherCourse.journal.topicPlaceholder')}
+          placeholder={t("teacherCourse.journal.topicPlaceholder")}
           className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-blue-500"
         />
         <textarea
@@ -1857,7 +1915,7 @@ function JournalTab({
           onChange={(event) =>
             setForm({ ...form, description: event.target.value })
           }
-          placeholder={t('teacherCourse.journal.notesPlaceholder')}
+          placeholder={t("teacherCourse.journal.notesPlaceholder")}
           className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500"
         />
 
@@ -1866,13 +1924,17 @@ function JournalTab({
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
-                  <TableHead>{t('teacherCourse.journal.student')}</TableHead>
-                  <TableHead>{t('teacherCourse.journal.attendance')}</TableHead>
+                  <TableHead>{t("teacherCourse.journal.student")}</TableHead>
+                  <TableHead>{t("teacherCourse.journal.attendance")}</TableHead>
                   <TableHead>
-                    {t('teacherCourse.journal.attendanceComment')}
+                    {t("teacherCourse.journal.attendanceComment")}
                   </TableHead>
-                  <TableHead>{t('teacherCourse.journal.currentGrade')}</TableHead>
-                  <TableHead>{t('teacherCourse.journal.gradeComment')}</TableHead>
+                  <TableHead>
+                    {t("teacherCourse.journal.currentGrade")}
+                  </TableHead>
+                  <TableHead>
+                    {t("teacherCourse.journal.gradeComment")}
+                  </TableHead>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
@@ -1881,17 +1943,19 @@ function JournalTab({
                     <TableCell strong>{formatUserName(student)}</TableCell>
                     <TableCell>
                       <select
-                        value={attendanceForm[student.id]?.status ?? 'present'}
+                        value={attendanceForm[student.id]?.status ?? "present"}
                         onChange={(event) =>
                           setAttendanceForm({
                             ...attendanceForm,
                             [student.id]: {
                               status: event.target.value as AttendanceStatus,
-                              comment: attendanceForm[student.id]?.comment ?? '',
+                              comment:
+                                attendanceForm[student.id]?.comment ?? "",
                             },
                           })
                         }
-                        className="min-h-10 w-full rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-blue-500">
+                        className="min-h-10 w-full rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-blue-500"
+                      >
                         {ATTENDANCE_STATUS_VALUES.map((value) => (
                           <option key={value} value={value}>
                             {t(`teacherCourse.attendance.${value}`)}
@@ -1902,13 +1966,13 @@ function JournalTab({
                     <TableCell>
                       <input
                         type="text"
-                        value={attendanceForm[student.id]?.comment ?? ''}
+                        value={attendanceForm[student.id]?.comment ?? ""}
                         onChange={(event) =>
                           setAttendanceForm({
                             ...attendanceForm,
                             [student.id]: {
                               status:
-                                attendanceForm[student.id]?.status ?? 'present',
+                                attendanceForm[student.id]?.status ?? "present",
                               comment: event.target.value,
                             },
                           })
@@ -1921,13 +1985,13 @@ function JournalTab({
                         type="number"
                         min={0}
                         max={100}
-                        value={gradeForm[student.id]?.value ?? ''}
+                        value={gradeForm[student.id]?.value ?? ""}
                         onChange={(event) =>
                           setGradeForm({
                             ...gradeForm,
                             [student.id]: {
                               value: event.target.value,
-                              comment: gradeForm[student.id]?.comment ?? '',
+                              comment: gradeForm[student.id]?.comment ?? "",
                             },
                           })
                         }
@@ -1937,12 +2001,12 @@ function JournalTab({
                     <TableCell>
                       <input
                         type="text"
-                        value={gradeForm[student.id]?.comment ?? ''}
+                        value={gradeForm[student.id]?.comment ?? ""}
                         onChange={(event) =>
                           setGradeForm({
                             ...gradeForm,
                             [student.id]: {
-                              value: gradeForm[student.id]?.value ?? '',
+                              value: gradeForm[student.id]?.value ?? "",
                               comment: event.target.value,
                             },
                           })
@@ -1960,31 +2024,33 @@ function JournalTab({
         <button
           type="submit"
           disabled={saving || students.length === 0}
-          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300 md:w-auto md:justify-self-end">
+          className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:bg-slate-300 md:w-auto md:justify-self-end"
+        >
           <Save className="h-4 w-4" />
           {editingId
-            ? t('teacherCourse.journal.update')
-            : t('teacherCourse.journal.save')}
+            ? t("teacherCourse.journal.update")
+            : t("teacherCourse.journal.save")}
         </button>
       </form>
 
       {loading ? (
-        <EmptyState text={t('teacherCourse.journal.loading')} />
+        <EmptyState text={t("teacherCourse.journal.loading")} />
       ) : entries.length === 0 ? (
-        <EmptyState text={t('teacherCourse.journal.empty')} />
+        <EmptyState text={t("teacherCourse.journal.empty")} />
       ) : (
         <div className="grid gap-3">
           {entries.map((entry) => (
             <article
               key={entry.id}
-              className="rounded-xl border border-slate-200 bg-white p-4">
+              className="rounded-xl border border-slate-200 bg-white p-4"
+            >
               <div className="flex flex-col gap-3 md:flex-row md:justify-between">
                 <div>
                   <div className="text-xs font-medium uppercase tracking-wide text-blue-600">
-                    {dateLabel(entry.date)} ·{' '}
+                    {dateLabel(entry.date)} ·{" "}
                     {entry.type
                       ? t(`teacherCourse.lessonTypes.${entry.type}`)
-                      : '-'}
+                      : "-"}
                   </div>
                   <h3 className="mt-1 font-semibold text-slate-900">
                     {entry.topic}
@@ -1997,21 +2063,23 @@ function JournalTab({
                 </div>
                 <div className="text-sm text-slate-500">
                   <div>
-                    {entry.startTime || '--:--'}-{entry.endTime || '--:--'}
+                    {entry.startTime || "--:--"}-{entry.endTime || "--:--"}
                   </div>
                   <div className="mt-2 flex justify-end gap-2">
                     <button
                       type="button"
                       onClick={() => onEdit(entry)}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
-                      title={t('teacherCourse.common.edit')}>
+                      title={t("teacherCourse.common.edit")}
+                    >
                       <Edit3 className="h-4 w-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => onDelete(entry.id)}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-100 text-red-600 transition hover:bg-red-50"
-                      title={t('teacherCourse.common.delete')}>
+                      title={t("teacherCourse.common.delete")}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -2019,7 +2087,7 @@ function JournalTab({
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <CompactList
-                  title={t('teacherCourse.journal.attendance')}
+                  title={t("teacherCourse.journal.attendance")}
                   items={entry.attendance.map(
                     (item) =>
                       `${item.studentName}: ${t(
@@ -2028,7 +2096,7 @@ function JournalTab({
                   )}
                 />
                 <CompactList
-                  title={t('courses.tabs.grades')}
+                  title={t("courses.tabs.grades")}
                   items={entry.grades.map(
                     (grade) => `${grade.studentName}: ${grade.value}`,
                   )}
@@ -2087,22 +2155,23 @@ function SubmissionsTab({
   const maxScore = selectedAssignment?.maxScore ?? 100;
 
   if (loadingAssignments) {
-    return <EmptyState text={t('teacherCourse.assignments.loading')} />;
+    return <EmptyState text={t("teacherCourse.assignments.loading")} />;
   }
 
   if (assignments.length === 0) {
-    return <EmptyState text={t('teacherCourse.assignments.empty')} />;
+    return <EmptyState text={t("teacherCourse.assignments.empty")} />;
   }
 
   return (
     <div className="space-y-5">
       <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
         <label className="grid gap-1 text-sm font-medium text-slate-700">
-          {t('teacherCourse.submissions.assignment')}
+          {t("teacherCourse.submissions.assignment")}
           <select
             value={selectedAssignmentId}
             onChange={(event) => onAssignmentChange(event.target.value)}
-            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500">
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none transition focus:border-blue-500"
+          >
             {assignments.map((assignment) => (
               <option key={assignment.id} value={assignment.id}>
                 {assignment.title}
@@ -2112,31 +2181,33 @@ function SubmissionsTab({
         </label>
         <div className="rounded-lg bg-white px-3 py-2 text-sm text-slate-600">
           <div className="text-xs font-medium uppercase tracking-wide text-slate-400">
-            {t('teacherCourse.assignments.points', { count: maxScore })}
+            {t("teacherCourse.assignments.points", { count: maxScore })}
           </div>
           <div className="mt-1 font-semibold text-slate-900">
             {selectedAssignment
               ? dateLabel(selectedAssignment.dueDate)
-              : t('teacherCourse.common.noData')}
+              : t("teacherCourse.common.noData")}
           </div>
         </div>
       </div>
 
       {loadingSubmissions ? (
-        <EmptyState text={t('teacherCourse.submissions.loading')} />
+        <EmptyState text={t("teacherCourse.submissions.loading")} />
       ) : submissions.length === 0 ? (
-        <EmptyState text={t('teacherCourse.submissions.empty')} />
+        <EmptyState text={t("teacherCourse.submissions.empty")} />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                <TableHead>{t('teacherCourse.grades.student')}</TableHead>
-                <TableHead>{t('teacherCourse.submissions.submittedAt')}</TableHead>
-                <TableHead>{t('teacherCourse.submissions.files')}</TableHead>
-                <TableHead>{t('grades.grade')}</TableHead>
-                <TableHead>{t('grades.comment')}</TableHead>
-                <TableHead>{t('teacherCourse.common.actions')}</TableHead>
+                <TableHead>{t("teacherCourse.grades.student")}</TableHead>
+                <TableHead>
+                  {t("teacherCourse.submissions.submittedAt")}
+                </TableHead>
+                <TableHead>{t("teacherCourse.submissions.files")}</TableHead>
+                <TableHead>{t("grades.grade")}</TableHead>
+                <TableHead>{t("grades.comment")}</TableHead>
+                <TableHead>{t("teacherCourse.common.actions")}</TableHead>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 bg-white">
@@ -2145,14 +2216,14 @@ function SubmissionsTab({
                 const studentName =
                   student !== undefined
                     ? formatUserName(student)
-                    : submission.studentName ?? submission.studentId;
+                    : (submission.studentName ?? submission.studentId);
                 const scoreValue =
                   gradeForm[submission.id]?.score ??
-                  (submission.score !== undefined ? String(submission.score) : '');
+                  (submission.score !== undefined
+                    ? String(submission.score)
+                    : "");
                 const commentValue =
-                  gradeForm[submission.id]?.comment ??
-                  submission.comment ??
-                  '';
+                  gradeForm[submission.id]?.comment ?? submission.comment ?? "";
                 const scoreNumber = Number(scoreValue);
                 const invalidScore =
                   !scoreValue ||
@@ -2167,18 +2238,18 @@ function SubmissionsTab({
                     <TableCell strong>
                       <div>{studentName}</div>
                       <div className="mt-1 text-xs font-normal text-slate-400">
-                        {submission.status === 'graded'
-                          ? t('teacherCourse.submissions.statusGraded')
-                          : t('teacherCourse.submissions.statusSubmitted')}
+                        {submission.status === "graded"
+                          ? t("teacherCourse.submissions.statusGraded")
+                          : t("teacherCourse.submissions.statusSubmitted")}
                       </div>
                       <div className="mt-1 text-xs font-normal text-slate-500">
-                        {t('teacherCourse.submissions.attempt', {
+                        {t("teacherCourse.submissions.attempt", {
                           count: submission.attemptNumber ?? 1,
                         })}
                       </div>
                       {submission.returnComment && (
                         <div className="mt-2 max-w-72 text-xs font-normal text-amber-700">
-                          {t('teacherCourse.submissions.previousReturn', {
+                          {t("teacherCourse.submissions.previousReturn", {
                             comment: submission.returnComment,
                           })}
                         </div>
@@ -2194,7 +2265,7 @@ function SubmissionsTab({
                         />
                       ) : (
                         <span className="text-slate-400">
-                          {t('teacherCourse.submissions.noFiles')}
+                          {t("teacherCourse.submissions.noFiles")}
                         </span>
                       )}
                     </TableCell>
@@ -2239,17 +2310,19 @@ function SubmissionsTab({
                           type="button"
                           disabled={isSaving || isReturning}
                           onClick={() => onReturn(submission, studentName)}
-                          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400">
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-800 transition hover:bg-amber-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                        >
                           <RotateCcw className="h-4 w-4" />
-                          {t('teacherCourse.submissions.return')}
+                          {t("teacherCourse.submissions.return")}
                         </button>
                         <button
                           type="button"
                           disabled={invalidScore || isSaving || isReturning}
                           onClick={() => onGrade(submission)}
-                          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-slate-300">
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-slate-300"
+                        >
                           <Save className="h-4 w-4" />
-                          {t('teacherCourse.submissions.grade')}
+                          {t("teacherCourse.submissions.grade")}
                         </button>
                       </div>
                     </TableCell>
@@ -2293,9 +2366,9 @@ function GradesTab({
 }) {
   const { t } = useTranslation();
 
-  if (loading) return <EmptyState text={t('teacherCourse.grades.loading')} />;
+  if (loading) return <EmptyState text={t("teacherCourse.grades.loading")} />;
   if (rows.length === 0) {
-    return <EmptyState text={t('teacherCourse.grades.empty')} />;
+    return <EmptyState text={t("teacherCourse.grades.empty")} />;
   }
 
   return (
@@ -2303,12 +2376,12 @@ function GradesTab({
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           <tr>
-            <TableHead>{t('teacherCourse.grades.student')}</TableHead>
-            <TableHead>{t('grades.date')}</TableHead>
-            <TableHead>{t('grades.type')}</TableHead>
-            <TableHead>{t('grades.grade')}</TableHead>
-            <TableHead>{t('grades.comment')}</TableHead>
-            <TableHead>{t('teacherCourse.common.actions')}</TableHead>
+            <TableHead>{t("teacherCourse.grades.student")}</TableHead>
+            <TableHead>{t("grades.date")}</TableHead>
+            <TableHead>{t("grades.type")}</TableHead>
+            <TableHead>{t("grades.grade")}</TableHead>
+            <TableHead>{t("grades.comment")}</TableHead>
+            <TableHead>{t("teacherCourse.common.actions")}</TableHead>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-200 bg-white">
@@ -2334,7 +2407,8 @@ function GradesTab({
                               type: event.target.value,
                             })
                           }
-                          className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-blue-500">
+                          className="min-h-10 rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-blue-500"
+                        >
                           {GRADE_TYPE_VALUES.map((type) => (
                             <option key={type} value={type}>
                               {t(`grades.types.${type}`)}
@@ -2378,7 +2452,7 @@ function GradesTab({
                           className="min-h-10 w-full rounded-lg border border-slate-300 px-2 text-sm outline-none focus:border-blue-500"
                         />
                       ) : (
-                        grade.comment || '-'
+                        grade.comment || "-"
                       )}
                     </TableCell>
                     <TableCell>
@@ -2389,15 +2463,17 @@ function GradesTab({
                               type="button"
                               onClick={onSaveGrade}
                               disabled={saving || !gradeEditForm.value}
-                              className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-slate-300">
+                              className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-600 px-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:bg-slate-300"
+                            >
                               <Save className="h-4 w-4" />
-                              {t('teacherCourse.grades.save')}
+                              {t("teacherCourse.grades.save")}
                             </button>
                             <button
                               type="button"
                               onClick={onCancelEdit}
                               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50"
-                              title={t('teacherCourse.common.cancel')}>
+                              title={t("teacherCourse.common.cancel")}
+                            >
                               <X className="h-4 w-4" />
                             </button>
                           </>
@@ -2410,9 +2486,10 @@ function GradesTab({
                               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:bg-slate-100 disabled:text-slate-300"
                               title={
                                 canModify
-                                  ? t('teacherCourse.common.edit')
-                                  : t('teacherCourse.grades.locked')
-                              }>
+                                  ? t("teacherCourse.common.edit")
+                                  : t("teacherCourse.grades.locked")
+                              }
+                            >
                               <Edit3 className="h-4 w-4" />
                             </button>
                             {grade.submissionId && (
@@ -2425,9 +2502,10 @@ function GradesTab({
                                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-amber-200 bg-amber-50 text-amber-700 transition hover:bg-amber-100 disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-300"
                                 title={
                                   canModify
-                                    ? t('teacherCourse.submissions.return')
-                                    : t('teacherCourse.grades.locked')
-                                }>
+                                    ? t("teacherCourse.submissions.return")
+                                    : t("teacherCourse.grades.locked")
+                                }
+                              >
                                 <RotateCcw className="h-4 w-4" />
                               </button>
                             )}
@@ -2477,7 +2555,8 @@ function ResourceList({
             key={fileId}
             type="button"
             onClick={() => void onDownload(fileId, file.originalName)}
-            className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200">
+            className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-200"
+          >
             <Download className="h-4 w-4" />
             {file.originalName}
           </button>
@@ -2489,7 +2568,8 @@ function ResourceList({
           href={link.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-50 px-3 text-sm font-medium text-blue-700 transition hover:bg-blue-100">
+          className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-blue-50 px-3 text-sm font-medium text-blue-700 transition hover:bg-blue-100"
+        >
           <LinkIcon className="h-4 w-4" />
           {link.title}
         </a>
@@ -2508,7 +2588,7 @@ function CompactList({ title, items }: { title: string; items: string[] }) {
       </h4>
       {items.length === 0 ? (
         <p className="mt-2 text-sm text-slate-400">
-          {t('teacherCourse.common.noData')}
+          {t("teacherCourse.common.noData")}
         </p>
       ) : (
         <ul className="mt-2 space-y-1 text-sm text-slate-700">
@@ -2542,8 +2622,9 @@ function TableCell({
   return (
     <td
       className={`px-4 py-3 text-sm ${
-        strong ? 'font-semibold text-slate-900' : 'text-slate-600'
-      }`}>
+        strong ? "font-semibold text-slate-900" : "text-slate-600"
+      }`}
+    >
       {children}
     </td>
   );

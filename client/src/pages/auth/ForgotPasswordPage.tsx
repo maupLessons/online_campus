@@ -17,6 +17,7 @@ import {
   Mail,
 } from "lucide-react";
 import api from "../../services/api";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import type {
   PasswordResetConfirmFormData,
   PasswordResetRequestFormData,
@@ -137,9 +138,7 @@ export default function ForgotPasswordPage() {
                       : "passwordReset.pageTitleRequest",
                   )}
                 </h1>
-                <p className="mt-1 text-sm text-blue-100">
-                  {t("app.title")}
-                </p>
+                <p className="mt-1 text-sm text-blue-100">{t("app.title")}</p>
               </div>
             </div>
           </div>
@@ -159,13 +158,10 @@ export default function ForgotPasswordPage() {
 
 function PasswordResetRequestForm() {
   const { t } = useTranslation();
-  const schema = useMemo(
-    () => createPasswordResetRequestSchema(t),
-    [t],
-  );
-  const [message, setMessage] = useState("");
+  const schema = useMemo(() => createPasswordResetRequestSchema(t), [t]);
+  const [message, setMessage] = useAutoDismissState("");
   const [devResetUrl, setDevResetUrl] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useAutoDismissState("");
   const [copied, setCopied] = useState(false);
 
   const {
@@ -196,9 +192,7 @@ function PasswordResetRequestForm() {
         setDevResetUrl(data.resetUrl);
       }
     } catch (err) {
-      setError(
-        getApiErrorMessage(err, t("passwordReset.requestError"), t),
-      );
+      setError(getApiErrorMessage(err, t("passwordReset.requestError"), t));
     }
   };
 
@@ -298,12 +292,9 @@ function PasswordResetRequestForm() {
 
 function PasswordResetConfirmForm({ initialToken }: { initialToken: string }) {
   const { t } = useTranslation();
-  const schema = useMemo(
-    () => createPasswordResetConfirmSchema(t),
-    [t],
-  );
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const schema = useMemo(() => createPasswordResetConfirmSchema(t), [t]);
+  const [message, setMessage] = useAutoDismissState("");
+  const [error, setError] = useAutoDismissState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 

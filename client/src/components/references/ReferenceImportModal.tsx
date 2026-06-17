@@ -2,6 +2,7 @@ import { FileSpreadsheet, X } from "lucide-react";
 import { useState } from "react";
 import type { ChangeEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import {
   referencesApi,
   type ReferenceImportMode,
@@ -25,7 +26,7 @@ export default function ReferenceImportModal({
   const [mode, setMode] = useState<ReferenceImportMode>("upsert");
   const [result, setResult] = useState<ReferenceImportResult | null>(null);
   const [processing, setProcessing] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useAutoDismissState("");
 
   const handleFile = (event: ChangeEvent<HTMLInputElement>) => {
     setFile(event.currentTarget.files?.[0] ?? null);

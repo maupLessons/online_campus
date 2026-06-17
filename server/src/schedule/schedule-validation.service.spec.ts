@@ -1,6 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { ScheduleEntryStatus, ScheduleEntryType } from './schemas';
+import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
 import { ScheduleMapper } from './schedule.mapper';
 import { ScheduleValidationService } from './schedule-validation.service';
 

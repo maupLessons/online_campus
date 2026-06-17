@@ -3,7 +3,7 @@ import {
   ScheduleChangeAction,
   ScheduleEntryStatus,
   ScheduleEntryType,
-} from '../schemas';
+} from '../schedule.enums';
 
 export class ScheduleChangeHistoryDto {
   @ApiProperty({ enum: ScheduleChangeAction })

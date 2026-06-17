@@ -16,7 +16,7 @@ import {
   ScheduleTemplateDto,
   UpdateScheduleTemplateDto,
 } from './dto';
-import { ScheduleEntryType } from './schemas';
+import { ScheduleEntryType } from './schedule.enums';
 import {
   ScheduleTemplate,
   ScheduleTemplateDocument,

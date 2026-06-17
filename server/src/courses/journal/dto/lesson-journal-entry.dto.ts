@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ScheduleEntryType } from '../../../schedule/schemas';
+import { ScheduleEntryType } from '../../../schedule/schedule.enums';
 import { AttendanceStatus } from '../../schemas';
 
 export class LessonJournalStudentDto {

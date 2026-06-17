@@ -1,7 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { Role } from '../common/types/roles.enum';
-import { ScheduleEntryStatus, ScheduleEntryType } from './schemas';
+import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
 import { ScheduleMapper } from './schedule.mapper';
 import { ScheduleReaderService } from './schedule-reader.service';
 

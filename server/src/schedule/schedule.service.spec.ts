@@ -12,7 +12,7 @@ import { ScheduleReaderService } from './schedule-reader.service';
 import { ScheduleService } from './schedule.service';
 import { ScheduleTemplatesService } from './schedule-templates.service';
 import { ScheduleValidationService } from './schedule-validation.service';
-import { ScheduleEntryStatus, ScheduleEntryType } from './schemas';
+import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
 import { DomainAuditEvent } from '../audit-log/audit-context';
 
 type QueryChain<T> = {

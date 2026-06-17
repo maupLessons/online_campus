@@ -3,11 +3,8 @@ import { Types } from 'mongoose';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { toId } from '../common/utils/to-id.util';
 import { ScheduleEntryDto, ScheduleTemplateDto } from './dto';
-import {
-  ScheduleChangeAction,
-  ScheduleChangeHistory,
-  ScheduleEntryDocument,
-} from './schemas';
+import { ScheduleChangeAction } from './schedule.enums';
+import { ScheduleChangeHistory, ScheduleEntryDocument } from './schemas';
 import {
   ClassroomLean,
   CourseAssignmentLean,

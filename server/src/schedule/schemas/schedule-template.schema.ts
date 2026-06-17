@@ -2,7 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 import { CourseAssignment } from '../../courses/schemas';
 import { Classroom } from '../../references/schemas';
-import { ScheduleEntryType } from './schedule-entry.schema';
+import { ScheduleEntryType } from '../schedule.enums';
 
 export enum ScheduleTemplateStatus {
   ACTIVE = 'active',

@@ -15,7 +15,7 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateScheduleEntryDto } from './create-schedule-entry.dto';
-import { ScheduleEntryType } from '../schemas';
+import { ScheduleEntryType } from '../schedule.enums';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;

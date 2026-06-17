@@ -13,7 +13,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
-import { ScheduleEntryType } from '../schemas';
+import { ScheduleEntryType } from '../schedule.enums';
 import { ScheduleTemplateStatus } from '../schemas';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

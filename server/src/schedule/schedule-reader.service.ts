@@ -11,11 +11,8 @@ import { Role } from '../common/types/roles.enum';
 import { toId } from '../common/utils/to-id.util';
 import { CourseAssignment, CourseAssignmentDocument } from '../courses/schemas';
 import { ScheduleEntryDto, ScheduleQueryDto } from './dto';
-import {
-  ScheduleEntry,
-  ScheduleEntryDocument,
-  ScheduleEntryStatus,
-} from './schemas';
+import { ScheduleEntryStatus } from './schedule.enums';
+import { ScheduleEntry, ScheduleEntryDocument } from './schemas';
 import { ScheduleMapper } from './schedule.mapper';
 import {
   CourseAssignmentFilter,

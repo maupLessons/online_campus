@@ -3,7 +3,7 @@ import { Types } from 'mongoose';
 import { DomainAuditEvent } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { Role } from '../common/types/roles.enum';
-import { ScheduleEntryStatus, ScheduleEntryType } from './schemas';
+import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
 import { ScheduleMapper } from './schedule.mapper';
 import { ScheduleMutationService } from './schedule-mutation.service';
 

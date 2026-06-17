@@ -8,12 +8,8 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { CourseAssignment, CourseAssignmentDocument } from '../courses/schemas';
 import { Classroom } from '../references/schemas';
-import {
-  ScheduleEntry,
-  ScheduleEntryDocument,
-  ScheduleEntryStatus,
-  ScheduleEntryType,
-} from './schemas';
+import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
+import { ScheduleEntry, ScheduleEntryDocument } from './schemas';
 import { ScheduleMapper } from './schedule.mapper';
 import {
   CourseAssignmentLean,

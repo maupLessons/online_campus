@@ -2,30 +2,11 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 import { CourseAssignment } from '../../courses/schemas';
 import { Classroom } from '../../references/schemas';
-
-export enum ScheduleEntryType {
-  LECTURE = 'lecture',
-  SEMINAR = 'seminar',
-  LAB = 'lab',
-  EXAM = 'exam',
-  CONSULTATION = 'consultation',
-}
-
-export enum ScheduleEntryStatus {
-  SCHEDULED = 'scheduled',
-  CANCELLED = 'cancelled',
-  RESCHEDULED = 'rescheduled',
-  SUBSTITUTED = 'substituted',
-}
-
-export enum ScheduleChangeAction {
-  CREATED = 'created',
-  UPDATED = 'updated',
-  CANCELLED = 'cancelled',
-  RESCHEDULED = 'rescheduled',
-  SUBSTITUTED = 'substituted',
-  DELETED = 'deleted',
-}
+import {
+  ScheduleChangeAction,
+  ScheduleEntryStatus,
+  ScheduleEntryType,
+} from '../schedule.enums';
 
 export class ScheduleChangeHistory {
   action: ScheduleChangeAction;

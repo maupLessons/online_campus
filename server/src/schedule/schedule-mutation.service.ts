@@ -21,12 +21,8 @@ import {
   SubstituteScheduleEntryDto,
   UpdateScheduleEntryDto,
 } from './dto';
-import {
-  ScheduleChangeAction,
-  ScheduleEntry,
-  ScheduleEntryDocument,
-  ScheduleEntryStatus,
-} from './schemas';
+import { ScheduleChangeAction, ScheduleEntryStatus } from './schedule.enums';
+import { ScheduleEntry, ScheduleEntryDocument } from './schemas';
 import { ScheduleMapper } from './schedule.mapper';
 import { ScheduleNotificationsService } from './schedule-notifications.service';
 import { ScheduleReaderService } from './schedule-reader.service';

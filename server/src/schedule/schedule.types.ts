@@ -1,10 +1,7 @@
 import { Types } from 'mongoose';
 import { ScheduleEntryDto } from './dto';
-import {
-  ScheduleChangeHistory,
-  ScheduleEntryStatus,
-  ScheduleEntryType,
-} from './schemas';
+import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
+import { ScheduleChangeHistory } from './schemas';
 import { ScheduleTemplateStatus } from './schemas';
 
 export type EntityObject = { _id?: unknown; id?: unknown };

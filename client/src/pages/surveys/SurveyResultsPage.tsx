@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
-import axios from 'axios';
+import { useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import axios from "axios";
 import {
   ArrowLeft,
   BarChart3,
@@ -12,11 +12,9 @@ import {
   ShieldCheck,
   Star,
   Users,
-} from 'lucide-react';
-import {
-  surveysApi,
-  type SurveyExportFormat,
-} from '../../services/surveysApi';
+} from "lucide-react";
+import { surveysApi, type SurveyExportFormat } from "../../services/surveysApi";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import {
   SurveyQuestionType,
   SurveyStatus,
@@ -24,8 +22,8 @@ import {
   type RatingQuestionResult,
   type SurveyQuestionResult,
   type TextQuestionResult,
-} from '../../types';
-import { downloadBlob } from '../../utils/spreadsheetExport';
+} from "../../types";
+import { downloadBlob } from "../../utils/spreadsheetExport";
 
 function barWidth(value: number) {
   return `${Math.max(0, Math.min(100, value))}%`;
@@ -34,8 +32,8 @@ function barWidth(value: number) {
 function getRequestErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(', ');
-    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.join(", ");
+    if (typeof message === "string") return message;
   }
 
   return fallback;
@@ -65,7 +63,7 @@ function ChoiceResultCard({ question }: { question: ChoiceQuestionResult }) {
 
       {question.totalAnswers === 0 && (
         <p className="text-sm text-slate-500">
-          {t('surveys.results.noAnswers')}
+          {t("surveys.results.noAnswers")}
         </p>
       )}
     </div>
@@ -80,30 +78,33 @@ function RatingResultCard({ question }: { question: RatingQuestionResult }) {
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg bg-slate-50 px-4 py-3">
           <p className="text-xs text-slate-500">
-            {t('surveys.results.average')}
+            {t("surveys.results.average")}
           </p>
           <p className="mt-1 flex items-center gap-2 text-xl font-bold text-slate-900">
             <Star className="h-5 w-5 text-amber-500" aria-hidden="true" />
-            {question.average ?? '—'}
+            {question.average ?? "—"}
           </p>
         </div>
         <div className="rounded-lg bg-slate-50 px-4 py-3">
-          <p className="text-xs text-slate-500">{t('surveys.results.min')}</p>
+          <p className="text-xs text-slate-500">{t("surveys.results.min")}</p>
           <p className="mt-1 text-xl font-bold text-slate-900">
-            {question.min ?? '—'}
+            {question.min ?? "—"}
           </p>
         </div>
         <div className="rounded-lg bg-slate-50 px-4 py-3">
-          <p className="text-xs text-slate-500">{t('surveys.results.max')}</p>
+          <p className="text-xs text-slate-500">{t("surveys.results.max")}</p>
           <p className="mt-1 text-xl font-bold text-slate-900">
-            {question.max ?? '—'}
+            {question.max ?? "—"}
           </p>
         </div>
       </div>
 
       <div className="space-y-2">
         {question.distribution.map((item) => (
-          <div key={item.rating} className="grid grid-cols-[40px_1fr_76px] gap-3">
+          <div
+            key={item.rating}
+            className="grid grid-cols-[40px_1fr_76px] gap-3"
+          >
             <span className="text-sm font-medium text-slate-700">
               {item.rating}
             </span>
@@ -135,9 +136,7 @@ function TextResultCard({ question }: { question: TextQuestionResult }) {
 
   if (question.answers.length === 0) {
     return (
-      <p className="text-sm text-slate-500">
-        {t('surveys.results.noAnswers')}
-      </p>
+      <p className="text-sm text-slate-500">{t("surveys.results.noAnswers")}</p>
     );
   }
 
@@ -157,7 +156,7 @@ function TextResultCard({ question }: { question: TextQuestionResult }) {
       {pageCount > 1 && (
         <div className="flex items-center justify-between gap-3 text-sm text-slate-600">
           <span>
-            {t('surveys.results.page')} {page} / {pageCount}
+            {t("surveys.results.page")} {page} / {pageCount}
           </span>
           <div className="flex gap-2">
             <button
@@ -166,7 +165,7 @@ function TextResultCard({ question }: { question: TextQuestionResult }) {
               onClick={() => setPage((current) => Math.max(1, current - 1))}
               className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
             >
-              {t('auditLog.previous')}
+              {t("auditLog.previous")}
             </button>
             <button
               type="button"
@@ -176,7 +175,7 @@ function TextResultCard({ question }: { question: TextQuestionResult }) {
               }
               className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
             >
-              {t('auditLog.next')}
+              {t("auditLog.next")}
             </button>
           </div>
         </div>
@@ -185,11 +184,7 @@ function TextResultCard({ question }: { question: TextQuestionResult }) {
   );
 }
 
-function QuestionResultCard({
-  question,
-}: {
-  question: SurveyQuestionResult;
-}) {
+function QuestionResultCard({ question }: { question: SurveyQuestionResult }) {
   const { t } = useTranslation();
 
   return (
@@ -202,7 +197,7 @@ function QuestionResultCard({
             </span>
             {question.required && (
               <span className="rounded-md bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                {t('surveys.required')}
+                {t("surveys.required")}
               </span>
             )}
           </div>
@@ -212,7 +207,7 @@ function QuestionResultCard({
         </div>
 
         <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
-          {question.totalAnswers} {t('surveys.results.answersCount')}
+          {question.totalAnswers} {t("surveys.results.answersCount")}
         </div>
       </div>
 
@@ -235,7 +230,7 @@ function QuestionResultCard({
 export default function SurveyResultsPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
-  const [exportError, setExportError] = useState('');
+  const [exportError, setExportError] = useAutoDismissState("");
   const [exportingFormat, setExportingFormat] =
     useState<SurveyExportFormat | null>(null);
 
@@ -244,7 +239,7 @@ export default function SurveyResultsPage() {
     isLoading,
     isError,
   } = useQuery({
-    queryKey: ['surveys', id, 'results'],
+    queryKey: ["surveys", id, "results"],
     enabled: Boolean(id),
     queryFn: () => surveysApi.getResults(id as string),
     refetchInterval: (query) =>
@@ -255,14 +250,14 @@ export default function SurveyResultsPage() {
     if (!id) return;
 
     setExportingFormat(format);
-    setExportError('');
+    setExportError("");
 
     try {
       const blob = await surveysApi.exportResults(id, format);
       downloadBlob(blob, `survey-${id}-results.${format}`);
     } catch (error) {
       setExportError(
-        getRequestErrorMessage(error, t('surveys.results.exportError')),
+        getRequestErrorMessage(error, t("surveys.results.exportError")),
       );
     } finally {
       setExportingFormat(null);
@@ -285,10 +280,10 @@ export default function SurveyResultsPage() {
           className="inline-flex items-center gap-2 text-sm font-medium text-blue-700"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          {t('common.back')}
+          {t("common.back")}
         </Link>
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {t('surveys.results.loadError')}
+          {t("surveys.results.loadError")}
         </div>
       </div>
     );
@@ -303,7 +298,7 @@ export default function SurveyResultsPage() {
         className="inline-flex items-center gap-2 text-sm font-medium text-blue-700"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        {t('common.back')}
+        {t("common.back")}
       </Link>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -312,13 +307,13 @@ export default function SurveyResultsPage() {
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
                 <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
-                {t('surveys.results.title')}
+                {t("surveys.results.title")}
               </span>
               <span
                 className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
                   canExport
-                    ? 'bg-slate-100 text-slate-700'
-                    : 'bg-emerald-50 text-emerald-700'
+                    ? "bg-slate-100 text-slate-700"
+                    : "bg-emerald-50 text-emerald-700"
                 }`}
               >
                 {t(`surveys.statuses.${results.survey.status}`)}
@@ -326,7 +321,7 @@ export default function SurveyResultsPage() {
               {results.anonymous && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t('surveys.anonymous')}
+                  {t("surveys.anonymous")}
                 </span>
               )}
             </div>
@@ -346,25 +341,25 @@ export default function SurveyResultsPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => handleExport('csv')}
+                onClick={() => handleExport("csv")}
                 disabled={exportingFormat !== null}
                 className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
               >
                 <Download className="h-4 w-4" aria-hidden="true" />
-                {exportingFormat === 'csv'
-                  ? t('surveys.results.exporting')
-                  : t('surveys.results.exportCsv')}
+                {exportingFormat === "csv"
+                  ? t("surveys.results.exporting")
+                  : t("surveys.results.exportCsv")}
               </button>
               <button
                 type="button"
-                onClick={() => handleExport('xlsx')}
+                onClick={() => handleExport("xlsx")}
                 disabled={exportingFormat !== null}
                 className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
               >
                 <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
-                {exportingFormat === 'xlsx'
-                  ? t('surveys.results.exporting')
-                  : t('surveys.results.exportXlsx')}
+                {exportingFormat === "xlsx"
+                  ? t("surveys.results.exporting")
+                  : t("surveys.results.exportXlsx")}
               </button>
             </div>
           )}
@@ -372,7 +367,7 @@ export default function SurveyResultsPage() {
 
         {!canExport && (
           <div className="mt-5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            {t('surveys.results.liveNotice')}
+            {t("surveys.results.liveNotice")}
           </div>
         )}
 
@@ -380,7 +375,7 @@ export default function SurveyResultsPage() {
           <div className="rounded-lg bg-slate-50 px-4 py-3">
             <p className="flex items-center gap-2 text-xs text-slate-500">
               <Users className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.results.expectedRecipients')}
+              {t("surveys.results.expectedRecipients")}
             </p>
             <p className="mt-1 text-2xl font-bold text-slate-900">
               {results.expectedRecipients}
@@ -389,10 +384,10 @@ export default function SurveyResultsPage() {
           <div className="rounded-lg bg-slate-50 px-4 py-3">
             <p className="flex items-center gap-2 text-xs text-slate-500">
               <Users className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.results.totalCompletions')}
+              {t("surveys.results.totalCompletions")}
             </p>
             <p className="mt-1 text-2xl font-bold text-slate-900">
-              {results.totalCompletions}{' '}
+              {results.totalCompletions}{" "}
               <span className="text-sm font-semibold text-slate-500">
                 ({results.completionRate}%)
               </span>
@@ -401,16 +396,14 @@ export default function SurveyResultsPage() {
           <div className="rounded-lg bg-slate-50 px-4 py-3">
             <p className="flex items-center gap-2 text-xs text-slate-500">
               <FileText className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.results.totalResponses')}
+              {t("surveys.results.totalResponses")}
             </p>
             <p className="mt-1 text-2xl font-bold text-slate-900">
               {results.totalResponses}
             </p>
           </div>
           <div className="rounded-lg bg-slate-50 px-4 py-3">
-            <p className="text-xs text-slate-500">
-              {t('surveys.questions')}
-            </p>
+            <p className="text-xs text-slate-500">{t("surveys.questions")}</p>
             <p className="mt-1 text-2xl font-bold text-slate-900">
               {results.questions.length}
             </p>

@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useState } from 'react';
-import type { SyntheticEvent } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Fragment, useEffect, useState } from "react";
+import type { SyntheticEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
   ChevronLeft,
@@ -12,19 +12,20 @@ import {
   Search,
   ShieldAlert,
   ShieldCheck,
-} from 'lucide-react';
-import api from '../../services/api';
-import { ROLE_LABEL_KEYS } from '../../types';
+} from "lucide-react";
+import api from "../../services/api";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
+import { ROLE_LABEL_KEYS } from "../../types";
 import type {
   AuditLogEntry,
   AuditLogResult,
   PaginatedResponse,
-} from '../../types';
+} from "../../types";
 
 type AuditLogFilters = {
   userLogin: string;
   action: string;
-  result: '' | AuditLogResult;
+  result: "" | AuditLogResult;
   dateFrom: string;
   dateTo: string;
   requestId: string;
@@ -32,24 +33,24 @@ type AuditLogFilters = {
 };
 
 const DEFAULT_FILTERS: AuditLogFilters = {
-  userLogin: '',
-  action: '',
-  result: '',
-  dateFrom: '',
-  dateTo: '',
-  requestId: '',
+  userLogin: "",
+  action: "",
+  result: "",
+  dateFrom: "",
+  dateTo: "",
+  requestId: "",
   limit: 10,
 };
 
 function toBoundaryIsoDate(
   value: string,
-  boundary: 'start' | 'end',
+  boundary: "start" | "end",
 ): string | undefined {
   if (!value) {
     return undefined;
   }
 
-  const time = boundary === 'start' ? '00:00:00.000' : '23:59:59.999';
+  const time = boundary === "start" ? "00:00:00.000" : "23:59:59.999";
   return new Date(`${value}T${time}`).toISOString();
 }
 
@@ -60,30 +61,30 @@ function buildAuditLogParams(filters: AuditLogFilters, page: number) {
   });
 
   if (filters.userLogin.trim()) {
-    params.set('userLogin', filters.userLogin.trim());
+    params.set("userLogin", filters.userLogin.trim());
   }
 
   if (filters.action.trim()) {
-    params.set('action', filters.action.trim());
+    params.set("action", filters.action.trim());
   }
 
   if (filters.result) {
-    params.set('result', filters.result);
+    params.set("result", filters.result);
   }
 
   if (filters.requestId.trim()) {
-    params.set('requestId', filters.requestId.trim());
+    params.set("requestId", filters.requestId.trim());
   }
 
-  const from = toBoundaryIsoDate(filters.dateFrom, 'start');
-  const to = toBoundaryIsoDate(filters.dateTo, 'end');
+  const from = toBoundaryIsoDate(filters.dateFrom, "start");
+  const to = toBoundaryIsoDate(filters.dateTo, "end");
 
   if (from) {
-    params.set('from', from);
+    params.set("from", from);
   }
 
   if (to) {
-    params.set('to', to);
+    params.set("to", to);
   }
 
   return params;
@@ -103,19 +104,18 @@ export default function AuditLogPage() {
   const [requestVersion, setRequestVersion] = useState(0);
   const [auditLog, setAuditLog] =
     useState<PaginatedResponse<AuditLogEntry> | null>(null);
-  const [expandedId, setExpandedId] =
-    useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useAutoDismissState("");
 
-  const locale = i18n.language.startsWith('en') ? 'en-US' : 'uk-UA';
+  const locale = i18n.language.startsWith("en") ? "en-US" : "uk-UA";
 
   useEffect(() => {
     let mounted = true;
     const controller = new AbortController();
 
     api
-      .get<PaginatedResponse<AuditLogEntry>>('/audit-log', {
+      .get<PaginatedResponse<AuditLogEntry>>("/audit-log", {
         params: buildAuditLogParams(appliedFilters, page),
         signal: controller.signal,
       })
@@ -127,7 +127,7 @@ export default function AuditLogPage() {
       })
       .catch(() => {
         if (mounted) {
-          setError(t('auditLog.error'));
+          setError(t("auditLog.error"));
         }
       })
       .finally(() => {
@@ -140,11 +140,11 @@ export default function AuditLogPage() {
       mounted = false;
       controller.abort();
     };
-  }, [appliedFilters, page, requestVersion, t]);
+  }, [appliedFilters, page, requestVersion, setError, t]);
 
   const prepareRequest = () => {
     setLoading(true);
-    setError('');
+    setError("");
     setRequestVersion((current) => current + 1);
   };
 
@@ -178,12 +178,12 @@ export default function AuditLogPage() {
 
   const formatDateTime = (value: string) =>
     new Intl.DateTimeFormat(locale, {
-      dateStyle: 'short',
-      timeStyle: 'medium',
+      dateStyle: "short",
+      timeStyle: "medium",
     }).format(new Date(value));
 
   const totalPages = auditLog?.totalPages ?? 0;
-  const currentPage = totalPages === 0 ? 0 : auditLog?.page ?? page;
+  const currentPage = totalPages === 0 ? 0 : (auditLog?.page ?? page);
   const logs = auditLog?.docs ?? [];
 
   return (
@@ -195,12 +195,12 @@ export default function AuditLogPage() {
           </div>
 
           <h1 className="text-2xl font-bold text-gray-900">
-            {t('auditLog.title')}
+            {t("auditLog.title")}
           </h1>
         </div>
 
         <label className="flex items-center gap-2 text-sm text-gray-600">
-          {t('auditLog.rowsPerPage')}
+          {t("auditLog.rowsPerPage")}
           <select
             value={draftFilters.limit}
             onChange={(event) => handleLimitChange(Number(event.target.value))}
@@ -221,12 +221,12 @@ export default function AuditLogPage() {
       >
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-gray-700">
           <Filter className="h-4 w-4" aria-hidden="true" />
-          {t('auditLog.filters')}
+          {t("auditLog.filters")}
         </div>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <label className="space-y-1 text-sm text-gray-600">
-            <span>{t('auditLog.userLogin')}</span>
+            <span>{t("auditLog.userLogin")}</span>
             <input
               value={draftFilters.userLogin}
               onChange={(event) =>
@@ -235,13 +235,13 @@ export default function AuditLogPage() {
                   userLogin: event.target.value,
                 }))
               }
-              placeholder={t('auditLog.userPlaceholder')}
+              placeholder={t("auditLog.userPlaceholder")}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
 
           <label className="space-y-1 text-sm text-gray-600">
-            <span>{t('auditLog.action')}</span>
+            <span>{t("auditLog.action")}</span>
             <input
               value={draftFilters.action}
               onChange={(event) =>
@@ -250,31 +250,31 @@ export default function AuditLogPage() {
                   action: event.target.value,
                 }))
               }
-              placeholder={t('auditLog.actionPlaceholder')}
+              placeholder={t("auditLog.actionPlaceholder")}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
 
           <label className="space-y-1 text-sm text-gray-600">
-            <span>{t('auditLog.result')}</span>
+            <span>{t("auditLog.result")}</span>
             <select
               value={draftFilters.result}
               onChange={(event) =>
                 setDraftFilters((current) => ({
                   ...current,
-                  result: event.target.value as '' | AuditLogResult,
+                  result: event.target.value as "" | AuditLogResult,
                 }))
               }
               className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">{t('auditLog.allResults')}</option>
-              <option value="success">{t('auditLog.success')}</option>
-              <option value="failure">{t('auditLog.failure')}</option>
+              <option value="">{t("auditLog.allResults")}</option>
+              <option value="success">{t("auditLog.success")}</option>
+              <option value="failure">{t("auditLog.failure")}</option>
             </select>
           </label>
 
           <label className="space-y-1 text-sm text-gray-600">
-            <span>{t('auditLog.dateFrom')}</span>
+            <span>{t("auditLog.dateFrom")}</span>
             <input
               type="date"
               value={draftFilters.dateFrom}
@@ -289,7 +289,7 @@ export default function AuditLogPage() {
           </label>
 
           <label className="space-y-1 text-sm text-gray-600">
-            <span>{t('auditLog.dateTo')}</span>
+            <span>{t("auditLog.dateTo")}</span>
             <input
               type="date"
               value={draftFilters.dateTo}
@@ -304,7 +304,7 @@ export default function AuditLogPage() {
           </label>
 
           <label className="space-y-1 text-sm text-gray-600">
-            <span>{t('auditLog.requestId')}</span>
+            <span>{t("auditLog.requestId")}</span>
             <input
               value={draftFilters.requestId}
               onChange={(event) =>
@@ -313,7 +313,7 @@ export default function AuditLogPage() {
                   requestId: event.target.value,
                 }))
               }
-              placeholder={t('auditLog.requestPlaceholder')}
+              placeholder={t("auditLog.requestPlaceholder")}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
@@ -326,7 +326,7 @@ export default function AuditLogPage() {
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
           >
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            {t('auditLog.resetFilters')}
+            {t("auditLog.resetFilters")}
           </button>
 
           <button
@@ -334,7 +334,7 @@ export default function AuditLogPage() {
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
           >
             <Search className="h-4 w-4" aria-hidden="true" />
-            {t('auditLog.applyFilters')}
+            {t("auditLog.applyFilters")}
           </button>
         </div>
       </form>
@@ -350,25 +350,25 @@ export default function AuditLogPage() {
           <thead className="border-b bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                {t('auditLog.timestamp')}
+                {t("auditLog.timestamp")}
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                {t('auditLog.actor')}
+                {t("auditLog.actor")}
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                {t('auditLog.action')}
+                {t("auditLog.action")}
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                {t('auditLog.target')}
+                {t("auditLog.target")}
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                {t('auditLog.result')}
+                {t("auditLog.result")}
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                {t('auditLog.ipAddress')}
+                {t("auditLog.ipAddress")}
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                {t('auditLog.details')}
+                {t("auditLog.details")}
               </th>
             </tr>
           </thead>
@@ -387,11 +387,11 @@ export default function AuditLogPage() {
 
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-gray-900">
-                        {log.userLogin || t('auditLog.systemUser')}
+                        {log.userLogin || t("auditLog.systemUser")}
                       </div>
 
                       <div className="text-xs text-gray-500">
-                        {log.userRole ? t(ROLE_LABEL_KEYS[log.userRole]) : '-'}
+                        {log.userRole ? t(ROLE_LABEL_KEYS[log.userRole]) : "-"}
                       </div>
                     </td>
 
@@ -413,7 +413,7 @@ export default function AuditLogPage() {
                         </div>
                       ) : (
                         <span className="text-gray-400">
-                          {t('auditLog.noTarget')}
+                          {t("auditLog.noTarget")}
                         </span>
                       )}
                     </td>
@@ -421,15 +421,21 @@ export default function AuditLogPage() {
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium ${
-                          log.result === 'success'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
+                          log.result === "success"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
                         }`}
                       >
-                        {log.result === 'success' ? (
-                          <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                        {log.result === "success" ? (
+                          <ShieldCheck
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
                         ) : (
-                          <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                          <ShieldAlert
+                            className="h-3.5 w-3.5"
+                            aria-hidden="true"
+                          />
                         )}
                         {t(`auditLog.${log.result}`)}
                       </span>
@@ -455,8 +461,8 @@ export default function AuditLogPage() {
                         }
                         title={
                           expanded
-                            ? t('auditLog.hideDetails')
-                            : t('auditLog.showDetails')
+                            ? t("auditLog.hideDetails")
+                            : t("auditLog.showDetails")
                         }
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-300 text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300"
                       >
@@ -484,16 +490,22 @@ export default function AuditLogPage() {
 
             {!loading && logs.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-500">
-                  {t('auditLog.empty')}
+                <td
+                  colSpan={7}
+                  className="px-4 py-10 text-center text-sm text-gray-500"
+                >
+                  {t("auditLog.empty")}
                 </td>
               </tr>
             )}
 
             {loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-sm text-gray-500">
-                  {t('auditLog.loading')}
+                <td
+                  colSpan={7}
+                  className="px-4 py-10 text-center text-sm text-gray-500"
+                >
+                  {t("auditLog.loading")}
                 </td>
               </tr>
             )}
@@ -503,7 +515,7 @@ export default function AuditLogPage() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-gray-600">
-          {t('auditLog.pageInfo', {
+          {t("auditLog.pageInfo", {
             page: currentPage,
             total: totalPages,
             count: auditLog?.totalDocs ?? 0,
@@ -518,7 +530,7 @@ export default function AuditLogPage() {
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden="true" />
-            {t('auditLog.previous')}
+            {t("auditLog.previous")}
           </button>
 
           <button
@@ -527,7 +539,7 @@ export default function AuditLogPage() {
             disabled={!auditLog?.hasNextPage || loading}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300"
           >
-            {t('auditLog.next')}
+            {t("auditLog.next")}
             <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>

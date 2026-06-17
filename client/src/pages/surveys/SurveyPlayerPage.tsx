@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { SyntheticEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
-import axios from 'axios';
+import { useMemo, useState } from "react";
+import type { SyntheticEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import axios from "axios";
 import {
   ArrowLeft,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
   ShieldCheck,
-} from 'lucide-react';
-import { surveysApi } from '../../services/surveysApi';
+} from "lucide-react";
+import { surveysApi } from "../../services/surveysApi";
 import {
   SurveyQuestionType,
   SurveyStatus,
@@ -19,25 +19,26 @@ import {
   type SurveyAnswerValue,
   type SurveyMyResponse,
   type SurveyQuestion,
-} from '../../types';
+} from "../../types";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 
 type AnswersState = Record<string, SurveyAnswerValue | undefined>;
 
 function isAnswerProvided(value: SurveyAnswerValue | undefined) {
   if (value === undefined) return false;
-  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.length > 0;
   return Number.isInteger(value);
 }
 
 function normalizeAnswer(question: SurveyQuestion, value: SurveyAnswerValue) {
-  if (question.type === SurveyQuestionType.TEXT && typeof value === 'string') {
+  if (question.type === SurveyQuestionType.TEXT && typeof value === "string") {
     return value.trim();
   }
 
   if (
     question.type === SurveyQuestionType.SINGLE &&
-    typeof value === 'string'
+    typeof value === "string"
   ) {
     return value.trim();
   }
@@ -52,8 +53,8 @@ function normalizeAnswer(question: SurveyQuestion, value: SurveyAnswerValue) {
 function getRequestErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(', ');
-    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.join(", ");
+    if (typeof message === "string") return message;
   }
 
   return fallback;
@@ -71,7 +72,7 @@ function PreviousAnswer({
   if (!answer) {
     return (
       <p className="text-sm text-slate-500">
-        {t('surveys.player.noSavedAnswer')}
+        {t("surveys.player.noSavedAnswer")}
       </p>
     );
   }
@@ -114,12 +115,12 @@ export default function SurveyPlayerPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [answers, setAnswers] = useState<AnswersState>({});
-  const [formError, setFormError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const myResponseQueryKey = ['surveys', id, 'my-response'] as const;
+  const [formError, setFormError] = useAutoDismissState("");
+  const [successMessage, setSuccessMessage] = useAutoDismissState("");
+  const myResponseQueryKey = ["surveys", id, "my-response"] as const;
 
   const surveyQuery = useQuery({
-    queryKey: ['surveys', id],
+    queryKey: ["surveys", id],
     enabled: Boolean(id),
     queryFn: () => surveysApi.getById(id as string),
   });
@@ -142,17 +143,17 @@ export default function SurveyPlayerPage() {
           response: current?.response ?? null,
         }),
       );
-      setSuccessMessage(t('surveys.player.submitSuccess'));
-      setFormError('');
+      setSuccessMessage(t("surveys.player.submitSuccess"));
+      setFormError("");
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['surveys', 'active'] }),
+        queryClient.invalidateQueries({ queryKey: ["surveys", "active"] }),
         queryClient.invalidateQueries({ queryKey: myResponseQueryKey }),
       ]);
     },
     onError: (error) => {
-      setSuccessMessage('');
+      setSuccessMessage("");
       setFormError(
-        getRequestErrorMessage(error, t('surveys.player.submitError')),
+        getRequestErrorMessage(error, t("surveys.player.submitError")),
       );
     },
   });
@@ -206,19 +207,12 @@ export default function SurveyPlayerPage() {
       : Math.round((progressAnsweredCount / progressTotalCount) * 100);
   const progressCaption =
     !completed && progressTotalCount === 0
-      ? t('surveys.player.noRequiredQuestions')
+      ? t("surveys.player.noRequiredQuestions")
       : `${progressAnsweredCount} / ${progressTotalCount} ${
           completed
-            ? t('surveys.player.answered')
-            : t('surveys.player.requiredAnswered')
+            ? t("surveys.player.answered")
+            : t("surveys.player.requiredAnswered")
         }`;
-
-  useEffect(() => {
-    if (!successMessage) return undefined;
-
-    const timeoutId = window.setTimeout(() => setSuccessMessage(''), 5000);
-    return () => window.clearTimeout(timeoutId);
-  }, [successMessage]);
 
   const updateAnswer = (
     questionId: string,
@@ -228,7 +222,7 @@ export default function SurveyPlayerPage() {
       ...current,
       [questionId]: value,
     }));
-    setFormError('');
+    setFormError("");
   };
 
   const toggleMultipleAnswer = (questionId: string, option: string) => {
@@ -249,12 +243,13 @@ export default function SurveyPlayerPage() {
     if (!id || !survey) return;
 
     const missingQuestion = sortedQuestions.find(
-      (question) => question.required && !isAnswerProvided(answers[question.id]),
+      (question) =>
+        question.required && !isAnswerProvided(answers[question.id]),
     );
 
     if (missingQuestion) {
-      setSuccessMessage('');
-      setFormError(t('surveys.player.requiredError'));
+      setSuccessMessage("");
+      setFormError(t("surveys.player.requiredError"));
       return;
     }
 
@@ -272,7 +267,7 @@ export default function SurveyPlayerPage() {
       return acc;
     }, []);
 
-    if (!window.confirm(t('surveys.player.confirmSubmit'))) {
+    if (!window.confirm(t("surveys.player.confirmSubmit"))) {
       return;
     }
 
@@ -298,10 +293,10 @@ export default function SurveyPlayerPage() {
           className="inline-flex items-center gap-2 text-sm font-medium text-blue-700"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          {t('common.back')}
+          {t("common.back")}
         </Link>
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {t('surveys.player.loadError')}
+          {t("surveys.player.loadError")}
         </div>
       </div>
     );
@@ -314,7 +309,7 @@ export default function SurveyPlayerPage() {
         className="inline-flex items-center gap-2 text-sm font-medium text-blue-700"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-        {t('common.back')}
+        {t("common.back")}
       </Link>
 
       <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -324,14 +319,14 @@ export default function SurveyPlayerPage() {
               {survey.anonymous && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t('surveys.anonymous')}
+                  {t("surveys.anonymous")}
                 </span>
               )}
 
               {completed && (
                 <span className="inline-flex items-center gap-1 rounded-md bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-700">
                   <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  {t('surveys.statusCompleted')}
+                  {t("surveys.statusCompleted")}
                 </span>
               )}
             </div>
@@ -349,7 +344,7 @@ export default function SurveyPlayerPage() {
 
           <div className="min-w-52 rounded-lg bg-slate-50 px-4 py-3">
             <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-500">
-              <span>{t('surveys.player.progress')}</span>
+              <span>{t("surveys.player.progress")}</span>
               <span>{progress}%</span>
             </div>
             <div className="h-2 rounded-full bg-slate-200">
@@ -358,9 +353,7 @@ export default function SurveyPlayerPage() {
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {progressCaption}
-            </p>
+            <p className="mt-2 text-xs text-slate-500">{progressCaption}</p>
           </div>
         </div>
       </section>
@@ -373,12 +366,12 @@ export default function SurveyPlayerPage() {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
-                {t('surveys.player.completedTitle')}
+                {t("surveys.player.completedTitle")}
               </h2>
               <p className="text-sm text-slate-500">
                 {responseQuery.data?.anonymous
-                  ? t('surveys.player.anonymousCompleted')
-                  : t('surveys.player.savedAnswers')}
+                  ? t("surveys.player.anonymousCompleted")
+                  : t("surveys.player.savedAnswers")}
               </p>
             </div>
           </div>
@@ -408,8 +401,8 @@ export default function SurveyPlayerPage() {
             <div
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${
                 isScheduled
-                  ? 'bg-blue-100 text-blue-700'
-                  : 'bg-slate-100 text-slate-700'
+                  ? "bg-blue-100 text-blue-700"
+                  : "bg-slate-100 text-slate-700"
               }`}
             >
               <Clock3 className="h-5 w-5" aria-hidden="true" />
@@ -417,18 +410,18 @@ export default function SurveyPlayerPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
                 {isScheduled
-                  ? t('surveys.player.scheduledTitle')
-                  : t('surveys.player.closedTitle')}
+                  ? t("surveys.player.scheduledTitle")
+                  : t("surveys.player.closedTitle")}
               </h2>
               <p className="mt-1 text-sm leading-6 text-slate-600">
                 {isScheduled && survey.startDate
-                  ? t('surveys.player.scheduledDescription', {
+                  ? t("surveys.player.scheduledDescription", {
                       date: new Intl.DateTimeFormat(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
+                        dateStyle: "medium",
+                        timeStyle: "short",
                       }).format(new Date(survey.startDate)),
                     })
-                  : t('surveys.player.closedDescription')}
+                  : t("surveys.player.closedDescription")}
               </p>
             </div>
           </div>
@@ -442,9 +435,7 @@ export default function SurveyPlayerPage() {
             >
               <legend className="sr-only">
                 {index + 1}. {question.text}
-                {question.required && (
-                  <span> *</span>
-                )}
+                {question.required && <span> *</span>}
               </legend>
               <div className="mb-4 flex min-w-0 items-start gap-1 text-base font-semibold text-slate-900">
                 <span className="shrink-0">{index + 1}.</span>
@@ -514,8 +505,8 @@ export default function SurveyPlayerPage() {
                       onClick={() => updateAnswer(question.id, rating)}
                       className={`flex h-11 w-11 items-center justify-center rounded-lg border text-sm font-semibold transition ${
                         answers[question.id] === rating
-                          ? 'border-blue-600 bg-blue-600 text-white'
-                          : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                          ? "border-blue-600 bg-blue-600 text-white"
+                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                       }`}
                     >
                       {rating}
@@ -527,9 +518,9 @@ export default function SurveyPlayerPage() {
               {question.type === SurveyQuestionType.TEXT && (
                 <textarea
                   value={
-                    typeof answers[question.id] === 'string'
+                    typeof answers[question.id] === "string"
                       ? (answers[question.id] as string)
-                      : ''
+                      : ""
                   }
                   onChange={(event) =>
                     updateAnswer(question.id, event.target.value)
@@ -537,7 +528,7 @@ export default function SurveyPlayerPage() {
                   maxLength={5000}
                   rows={5}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  placeholder={t('surveys.player.textPlaceholder')}
+                  placeholder={t("surveys.player.textPlaceholder")}
                 />
               )}
             </fieldset>
@@ -562,8 +553,8 @@ export default function SurveyPlayerPage() {
               className="inline-flex min-h-11 items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
               {submitMutation.isPending
-                ? t('surveys.player.submitting')
-                : t('surveys.player.submit')}
+                ? t("surveys.player.submitting")
+                : t("surveys.player.submit")}
             </button>
           </div>
         </form>

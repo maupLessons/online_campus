@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { SyntheticEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
-import axios from 'axios';
+import { useEffect, useMemo, useState } from "react";
+import type { SyntheticEvent } from "react";
+import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import axios from "axios";
 import {
   ArrowDown,
   ArrowUp,
@@ -18,9 +18,13 @@ import {
   SquarePen,
   Trash2,
   XCircle,
-} from 'lucide-react';
-import { surveysApi, type SurveyListFilters } from '../../services/surveysApi';
-import { useAuthStore } from '../../store/authStore';
+} from "lucide-react";
+import { surveysApi, type SurveyListFilters } from "../../services/surveysApi";
+import { useAuthStore } from "../../store/authStore";
+import {
+  AUTO_DISMISS_MESSAGE_MS,
+  useAutoDismissState,
+} from "../../hooks/useAutoDismissState";
 import {
   Role,
   SurveyQuestionType,
@@ -29,7 +33,7 @@ import {
   type CreateSurveyInput,
   type CreateSurveyQuestionInput,
   type Survey,
-} from '../../types';
+} from "../../types";
 
 type BuilderQuestion = {
   localId: string;
@@ -60,19 +64,19 @@ function createLocalId() {
 const createQuestion = (): BuilderQuestion => ({
   localId: createLocalId(),
   type: SurveyQuestionType.SINGLE,
-  text: '',
-  options: ['', ''],
+  text: "",
+  options: ["", ""],
   required: true,
 });
 
 const initialForm = (): SurveyFormState => ({
-  title: '',
-  description: '',
+  title: "",
+  description: "",
   anonymous: true,
   targetType: SurveyTargetType.ALL,
   targetIds: [],
-  startDate: '',
-  endDate: '',
+  startDate: "",
+  endDate: "",
   questions: [createQuestion()],
 });
 
@@ -91,10 +95,10 @@ function toIsoDateTime(value: string) {
 }
 
 function toDateTimeLocalValue(value?: string) {
-  if (!value) return '';
+  if (!value) return "";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
+  if (Number.isNaN(date.getTime())) return "";
 
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return localDate.toISOString().slice(0, 16);
@@ -103,8 +107,8 @@ function toDateTimeLocalValue(value?: string) {
 function getRequestErrorMessage(error: unknown, fallback: string) {
   if (axios.isAxiosError(error)) {
     const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(', ');
-    if (typeof message === 'string') return message;
+    if (Array.isArray(message)) return message.join(", ");
+    if (typeof message === "string") return message;
   }
 
   return fallback;
@@ -122,14 +126,14 @@ function surveyToFormState(survey: Survey): SurveyFormState {
         question.type === SurveyQuestionType.MULTIPLE
           ? question.options.length > 0
             ? question.options
-            : ['', '']
+            : ["", ""]
           : [],
       required: question.required,
     }));
 
   return {
     title: survey.title,
-    description: survey.description ?? '',
+    description: survey.description ?? "",
     anonymous: survey.anonymous,
     targetType: survey.targetType,
     targetIds: [...survey.targetIds],
@@ -182,24 +186,24 @@ function buildSurveyPayload(form: SurveyFormState): CreateSurveyInput {
 
 function validateSurveyForm(form: SurveyFormState, t: (key: string) => string) {
   if (!form.title.trim()) {
-    return t('surveys.admin.validation.titleRequired');
+    return t("surveys.admin.validation.titleRequired");
   }
 
   if (
     surveyTargetTypeRequiresIds(form.targetType) &&
     form.targetIds.length === 0
   ) {
-    return t('surveys.admin.validation.targetRequired');
+    return t("surveys.admin.validation.targetRequired");
   }
 
   if (!form.startDate || !form.endDate) {
-    return t('surveys.admin.validation.datesRequired');
+    return t("surveys.admin.validation.datesRequired");
   }
 
   const start = new Date(form.startDate).getTime();
   const end = new Date(form.endDate).getTime();
   if (!Number.isNaN(start) && !Number.isNaN(end) && end <= start) {
-    return t('surveys.admin.validation.endAfterStart');
+    return t("surveys.admin.validation.endAfterStart");
   }
 
   const invalidQuestion = form.questions.find((question) => {
@@ -220,22 +224,22 @@ function validateSurveyForm(form: SurveyFormState, t: (key: string) => string) {
   });
 
   if (invalidQuestion) {
-    return t('surveys.admin.validation.questionInvalid');
+    return t("surveys.admin.validation.questionInvalid");
   }
 
-  return '';
+  return "";
 }
 
 function statusBadgeClass(status: SurveyStatus) {
   if (status === SurveyStatus.ACTIVE) {
-    return 'bg-green-100 text-green-700';
+    return "bg-green-100 text-green-700";
   }
 
   if (status === SurveyStatus.CLOSED) {
-    return 'bg-slate-200 text-slate-700';
+    return "bg-slate-200 text-slate-700";
   }
 
-  return 'bg-amber-100 text-amber-700';
+  return "bg-amber-100 text-amber-700";
 }
 
 function SurveyManagementRow({
@@ -256,7 +260,7 @@ function SurveyManagementRow({
   isWorking: boolean;
 }) {
   const { t, i18n } = useTranslation();
-  const locale = i18n.language.startsWith('en') ? 'en-US' : 'uk-UA';
+  const locale = i18n.language.startsWith("en") ? "en-US" : "uk-UA";
   const isScheduled =
     survey.status === SurveyStatus.ACTIVE &&
     Boolean(survey.startDate) &&
@@ -267,11 +271,11 @@ function SurveyManagementRow({
   const formatDate = (value?: string) =>
     value
       ? new Intl.DateTimeFormat(locale, {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
+          day: "numeric",
+          month: "short",
+          year: "numeric",
         }).format(new Date(value))
-      : '—';
+      : "—";
 
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -284,7 +288,7 @@ function SurveyManagementRow({
               )}`}
             >
               {isScheduled
-                ? t('surveys.statuses.scheduled')
+                ? t("surveys.statuses.scheduled")
                 : t(`surveys.statuses.${survey.status}`)}
             </span>
             <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
@@ -292,7 +296,7 @@ function SurveyManagementRow({
             </span>
             {survey.anonymous && (
               <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                {t('surveys.anonymous')}
+                {t("surveys.anonymous")}
               </span>
             )}
           </div>
@@ -308,13 +312,13 @@ function SurveyManagementRow({
 
           <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-500">
             <span>
-              {t('surveys.questions')}: {survey.questions.length}
+              {t("surveys.questions")}: {survey.questions.length}
             </span>
             <span>
-              {t('surveys.startsAt')}: {formatDate(survey.startDate)}
+              {t("surveys.startsAt")}: {formatDate(survey.startDate)}
             </span>
             <span>
-              {t('surveys.endsAt')}: {formatDate(survey.endDate)}
+              {t("surveys.endsAt")}: {formatDate(survey.endDate)}
             </span>
           </div>
         </div>
@@ -326,7 +330,7 @@ function SurveyManagementRow({
               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
             >
               <BarChart3 className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.admin.results')}
+              {t("surveys.admin.results")}
             </Link>
           )}
 
@@ -338,7 +342,7 @@ function SurveyManagementRow({
               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
             >
               <SquarePen className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.admin.edit')}
+              {t("surveys.admin.edit")}
             </button>
           )}
 
@@ -350,7 +354,7 @@ function SurveyManagementRow({
               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
             >
               <Rocket className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.admin.publish')}
+              {t("surveys.admin.publish")}
             </button>
           )}
 
@@ -362,7 +366,7 @@ function SurveyManagementRow({
               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
             >
               <XCircle className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.admin.close')}
+              {t("surveys.admin.close")}
             </button>
           )}
 
@@ -374,7 +378,7 @@ function SurveyManagementRow({
               className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:text-red-300"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.admin.delete')}
+              {t("surveys.admin.delete")}
             </button>
           )}
         </div>
@@ -388,15 +392,15 @@ export default function SurveyAdminPage() {
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const [filters, setFilters] = useState<SurveyListFilters>({
-    search: '',
-    status: '',
-    targetType: '',
+    search: "",
+    status: "",
+    targetType: "",
   });
   const [form, setForm] = useState<SurveyFormState>(() => initialForm());
   const [editingSurvey, setEditingSurvey] = useState<Survey | null>(null);
-  const [formError, setFormError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [formError, setFormError] = useAutoDismissState("");
+  const [notice, setNotice] = useAutoDismissState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const effectiveFilters = useMemo(
     () => ({ ...filters, search: debouncedSearch }),
     [debouncedSearch, filters],
@@ -404,8 +408,8 @@ export default function SurveyAdminPage() {
 
   const queryKey = useMemo(
     () => [
-      'surveys',
-      'managed',
+      "surveys",
+      "managed",
       debouncedSearch,
       filters.status,
       filters.targetType,
@@ -422,12 +426,12 @@ export default function SurveyAdminPage() {
     queryFn: () => surveysApi.listManaged(effectiveFilters),
   });
   const groupsQuery = useQuery({
-    queryKey: ['surveys', 'target-options', 'groups'],
+    queryKey: ["surveys", "target-options", "groups"],
     enabled: form.targetType === SurveyTargetType.GROUPS,
     queryFn: surveysApi.listTargetGroups,
   });
   const coursesQuery = useQuery({
-    queryKey: ['surveys', 'target-options', 'courses'],
+    queryKey: ["surveys", "target-options", "courses"],
     enabled: form.targetType === SurveyTargetType.COURSE,
     queryFn: surveysApi.listTargetCourses,
   });
@@ -453,55 +457,45 @@ export default function SurveyAdminPage() {
         .filter((id) => !knownIds.has(id))
         .map((id) => ({ id, label: id })),
     ];
-  }, [
-    coursesQuery.data,
-    form.targetIds,
-    form.targetType,
-    groupsQuery.data,
-  ]);
+  }, [coursesQuery.data, form.targetIds, form.targetType, groupsQuery.data]);
   const isLoadingTargetOptions =
     groupsQuery.isLoading || coursesQuery.isLoading;
   const hasTargetOptionsError = groupsQuery.isError || coursesQuery.isError;
 
   const invalidateSurveys = () =>
-    queryClient.invalidateQueries({ queryKey: ['surveys'] });
+    queryClient.invalidateQueries({ queryKey: ["surveys"] });
 
   const createMutation = useMutation({
     mutationFn: surveysApi.create,
     onSuccess: async () => {
       setForm(initialForm());
       setEditingSurvey(null);
-      setFormError('');
-      setNotice(t('surveys.admin.createSuccess'));
+      setFormError("");
+      setNotice(t("surveys.admin.createSuccess"));
       await invalidateSurveys();
     },
     onError: (error) => {
-      setNotice('');
+      setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t('surveys.admin.createError')),
+        getRequestErrorMessage(error, t("surveys.admin.createError")),
       );
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      payload,
-    }: {
-      id: string;
-      payload: CreateSurveyInput;
-    }) => surveysApi.update(id, payload),
+    mutationFn: ({ id, payload }: { id: string; payload: CreateSurveyInput }) =>
+      surveysApi.update(id, payload),
     onSuccess: async () => {
       setForm(initialForm());
       setEditingSurvey(null);
-      setFormError('');
-      setNotice(t('surveys.admin.updateSuccess'));
+      setFormError("");
+      setNotice(t("surveys.admin.updateSuccess"));
       await invalidateSurveys();
     },
     onError: (error) => {
-      setNotice('');
+      setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t('surveys.admin.updateError')),
+        getRequestErrorMessage(error, t("surveys.admin.updateError")),
       );
     },
   });
@@ -509,7 +503,7 @@ export default function SurveyAdminPage() {
   const publishMutation = useMutation({
     mutationFn: surveysApi.publish,
     onSuccess: async () => {
-      setNotice(t('surveys.admin.publishSuccess'));
+      setNotice(t("surveys.admin.publishSuccess"));
       await invalidateSurveys();
     },
   });
@@ -517,7 +511,7 @@ export default function SurveyAdminPage() {
   const closeMutation = useMutation({
     mutationFn: surveysApi.close,
     onSuccess: async () => {
-      setNotice(t('surveys.admin.closeSuccess'));
+      setNotice(t("surveys.admin.closeSuccess"));
       await invalidateSurveys();
     },
   });
@@ -525,7 +519,7 @@ export default function SurveyAdminPage() {
   const removeMutation = useMutation({
     mutationFn: surveysApi.remove,
     onSuccess: async () => {
-      setNotice(t('surveys.admin.deleteSuccess'));
+      setNotice(t("surveys.admin.deleteSuccess"));
       await invalidateSurveys();
     },
   });
@@ -533,8 +527,8 @@ export default function SurveyAdminPage() {
   const actionError =
     publishMutation.error || closeMutation.error || removeMutation.error;
   const actionErrorMessage = actionError
-    ? getRequestErrorMessage(actionError, t('surveys.admin.actionError'))
-    : '';
+    ? getRequestErrorMessage(actionError, t("surveys.admin.actionError"))
+    : "";
   const isWorking =
     createMutation.isPending ||
     updateMutation.isPending ||
@@ -543,41 +537,39 @@ export default function SurveyAdminPage() {
     removeMutation.isPending;
 
   useEffect(() => {
-    if (!notice) return undefined;
+    if (!actionError) return undefined;
 
-    const timeoutId = window.setTimeout(() => setNotice(''), 5000);
+    const timeoutId = window.setTimeout(() => {
+      publishMutation.reset();
+      closeMutation.reset();
+      removeMutation.reset();
+    }, AUTO_DISMISS_MESSAGE_MS);
+
     return () => window.clearTimeout(timeoutId);
-  }, [notice]);
+  }, [actionError, closeMutation, publishMutation, removeMutation]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(
-      () => setDebouncedSearch(filters.search ?? ''),
+      () => setDebouncedSearch(filters.search ?? ""),
       300,
     );
     return () => window.clearTimeout(timeoutId);
   }, [filters.search]);
 
-  const updateQuestion = (
-    localId: string,
-    patch: Partial<BuilderQuestion>,
-  ) => {
+  const updateQuestion = (localId: string, patch: Partial<BuilderQuestion>) => {
     setForm((current) => ({
       ...current,
       questions: current.questions.map((question) =>
         question.localId === localId ? { ...question, ...patch } : question,
       ),
     }));
-    setFormError('');
+    setFormError("");
   };
 
-  const updateQuestionType = (
-    localId: string,
-    type: SurveyQuestionType,
-  ) => {
+  const updateQuestionType = (localId: string, type: SurveyQuestionType) => {
     const options =
-      type === SurveyQuestionType.SINGLE ||
-      type === SurveyQuestionType.MULTIPLE
-        ? ['', '']
+      type === SurveyQuestionType.SINGLE || type === SurveyQuestionType.MULTIPLE
+        ? ["", ""]
         : [];
     updateQuestion(localId, { type, options });
   };
@@ -600,7 +592,7 @@ export default function SurveyAdminPage() {
         };
       }),
     }));
-    setFormError('');
+    setFormError("");
   };
 
   const addQuestionOption = (localId: string) => {
@@ -608,7 +600,7 @@ export default function SurveyAdminPage() {
       ...current,
       questions: current.questions.map((question) =>
         question.localId === localId
-          ? { ...question, options: [...question.options, ''] }
+          ? { ...question, options: [...question.options, ""] }
           : question,
       ),
     }));
@@ -643,7 +635,9 @@ export default function SurveyAdminPage() {
       questions:
         current.questions.length === 1
           ? current.questions
-          : current.questions.filter((question) => question.localId !== localId),
+          : current.questions.filter(
+              (question) => question.localId !== localId,
+            ),
     }));
   };
 
@@ -680,7 +674,7 @@ export default function SurveyAdminPage() {
 
     const validationError = validateSurveyForm(form, t);
     if (validationError) {
-      setNotice('');
+      setNotice("");
       setFormError(validationError);
       return;
     }
@@ -697,14 +691,14 @@ export default function SurveyAdminPage() {
   const handleEditSurvey = (survey: Survey) => {
     setEditingSurvey(survey);
     setForm(surveyToFormState(survey));
-    setFormError('');
-    setNotice('');
+    setFormError("");
+    setNotice("");
   };
 
   const handleCancelEdit = () => {
     setEditingSurvey(null);
     setForm(initialForm());
-    setFormError('');
+    setFormError("");
   };
 
   const handleFilterChange = (
@@ -724,7 +718,7 @@ export default function SurveyAdminPage() {
         ? current.targetIds.filter((id) => id !== targetId)
         : [...current.targetIds, targetId],
     }));
-    setFormError('');
+    setFormError("");
   };
 
   const canDelete = user?.role === Role.ADMIN;
@@ -738,10 +732,10 @@ export default function SurveyAdminPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {t('surveys.admin.title')}
+              {t("surveys.admin.title")}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              {t('surveys.admin.subtitle')}
+              {t("surveys.admin.subtitle")}
             </p>
           </div>
         </div>
@@ -756,14 +750,14 @@ export default function SurveyAdminPage() {
             <FilePlus2 className="h-5 w-5 text-blue-700" aria-hidden="true" />
             <h2 className="text-lg font-semibold text-slate-900">
               {editingSurvey
-                ? t('surveys.admin.editTitle')
-                : t('surveys.admin.createTitle')}
+                ? t("surveys.admin.editTitle")
+                : t("surveys.admin.createTitle")}
             </h2>
           </div>
 
           <div className="grid gap-4">
             <label className="space-y-1 text-sm text-slate-600">
-              <span>{t('surveys.admin.fields.title')}</span>
+              <span>{t("surveys.admin.fields.title")}</span>
               <input
                 value={form.title}
                 onChange={(event) =>
@@ -778,7 +772,7 @@ export default function SurveyAdminPage() {
             </label>
 
             <label className="space-y-1 text-sm text-slate-600">
-              <span>{t('surveys.admin.fields.description')}</span>
+              <span>{t("surveys.admin.fields.description")}</span>
               <textarea
                 value={form.description}
                 onChange={(event) =>
@@ -795,7 +789,7 @@ export default function SurveyAdminPage() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm text-slate-600">
-                <span>{t('surveys.admin.fields.targetType')}</span>
+                <span>{t("surveys.admin.fields.targetType")}</span>
                 <select
                   value={form.targetType}
                   onChange={(event) => {
@@ -822,7 +816,7 @@ export default function SurveyAdminPage() {
 
               <label className="space-y-1 text-sm text-slate-600">
                 <span className="invisible select-none" aria-hidden="true">
-                  {t('surveys.admin.fields.anonymous')}
+                  {t("surveys.admin.fields.anonymous")}
                 </span>
                 <span className="flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-slate-700">
                   <input
@@ -836,7 +830,7 @@ export default function SurveyAdminPage() {
                     }
                     className="h-4 w-4 shrink-0 rounded text-blue-600"
                   />
-                  {t('surveys.admin.fields.anonymous')}
+                  {t("surveys.admin.fields.anonymous")}
                 </span>
               </label>
             </div>
@@ -844,24 +838,24 @@ export default function SurveyAdminPage() {
             {surveyTargetTypeRequiresIds(form.targetType) && (
               <fieldset className="space-y-2">
                 <legend className="text-sm text-slate-600">
-                  {t('surveys.admin.fields.targetIds')}
+                  {t("surveys.admin.fields.targetIds")}
                 </legend>
                 <div className="max-h-52 space-y-1 overflow-y-auto rounded-lg border border-slate-300 p-2">
                   {isLoadingTargetOptions && (
                     <p className="px-2 py-3 text-sm text-slate-500">
-                      {t('common.loading')}
+                      {t("common.loading")}
                     </p>
                   )}
                   {hasTargetOptionsError && (
                     <p className="px-2 py-3 text-sm text-red-700">
-                      {t('surveys.admin.targetOptionsError')}
+                      {t("surveys.admin.targetOptionsError")}
                     </p>
                   )}
                   {!isLoadingTargetOptions &&
                     !hasTargetOptionsError &&
                     targetOptions.length === 0 && (
                       <p className="px-2 py-3 text-sm text-slate-500">
-                        {t('surveys.admin.targetOptionsEmpty')}
+                        {t("surveys.admin.targetOptionsEmpty")}
                       </p>
                     )}
                   {targetOptions.map((option) => (
@@ -882,7 +876,7 @@ export default function SurveyAdminPage() {
                   ))}
                 </div>
                 <p className="text-xs text-slate-500">
-                  {t('surveys.admin.selectedTargets', {
+                  {t("surveys.admin.selectedTargets", {
                     count: form.targetIds.length,
                   })}
                 </p>
@@ -892,7 +886,8 @@ export default function SurveyAdminPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm text-slate-600">
                 <span>
-                  {t('surveys.startsAt')} <span className="text-red-600">*</span>
+                  {t("surveys.startsAt")}{" "}
+                  <span className="text-red-600">*</span>
                 </span>
                 <input
                   type="datetime-local"
@@ -910,7 +905,7 @@ export default function SurveyAdminPage() {
 
               <label className="space-y-1 text-sm text-slate-600">
                 <span>
-                  {t('surveys.endsAt')} <span className="text-red-600">*</span>
+                  {t("surveys.endsAt")} <span className="text-red-600">*</span>
                 </span>
                 <input
                   type="datetime-local"
@@ -931,7 +926,7 @@ export default function SurveyAdminPage() {
           <div className="space-y-3 border-t border-slate-100 pt-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-slate-900">
-                {t('surveys.admin.questionsTitle')}
+                {t("surveys.admin.questionsTitle")}
               </h3>
               <button
                 type="button"
@@ -939,7 +934,7 @@ export default function SurveyAdminPage() {
                 className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 <Plus className="h-4 w-4" aria-hidden="true" />
-                {t('surveys.admin.addQuestion')}
+                {t("surveys.admin.addQuestion")}
               </button>
             </div>
 
@@ -956,7 +951,7 @@ export default function SurveyAdminPage() {
                   <div className="mb-3 flex items-center justify-between gap-3">
                     <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
                       <SquarePen className="h-4 w-4" aria-hidden="true" />
-                      {t('surveys.admin.question')} {index + 1}
+                      {t("surveys.admin.question")} {index + 1}
                     </div>
                     <div className="flex gap-1">
                       <button
@@ -964,7 +959,7 @@ export default function SurveyAdminPage() {
                         onClick={() => moveQuestion(question.localId, -1)}
                         disabled={index === 0}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
-                        title={t('surveys.admin.moveUp')}
+                        title={t("surveys.admin.moveUp")}
                       >
                         <ArrowUp className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -973,7 +968,7 @@ export default function SurveyAdminPage() {
                         onClick={() => moveQuestion(question.localId, 1)}
                         disabled={index === form.questions.length - 1}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
-                        title={t('surveys.admin.moveDown')}
+                        title={t("surveys.admin.moveDown")}
                       >
                         <ArrowDown className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -982,7 +977,7 @@ export default function SurveyAdminPage() {
                         onClick={() => removeQuestion(question.localId)}
                         disabled={form.questions.length === 1}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-300 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
-                        title={t('surveys.admin.delete')}
+                        title={t("surveys.admin.delete")}
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -991,7 +986,7 @@ export default function SurveyAdminPage() {
 
                   <div className="grid gap-3">
                     <label className="space-y-1 text-sm text-slate-600">
-                      <span>{t('surveys.admin.fields.questionText')}</span>
+                      <span>{t("surveys.admin.fields.questionText")}</span>
                       <input
                         value={question.text}
                         onChange={(event) =>
@@ -1006,7 +1001,7 @@ export default function SurveyAdminPage() {
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="space-y-1 text-sm text-slate-600">
-                        <span>{t('surveys.admin.fields.questionType')}</span>
+                        <span>{t("surveys.admin.fields.questionType")}</span>
                         <select
                           value={question.type}
                           onChange={(event) =>
@@ -1026,8 +1021,11 @@ export default function SurveyAdminPage() {
                       </label>
 
                       <label className="space-y-1 text-sm text-slate-600">
-                        <span className="invisible select-none" aria-hidden="true">
-                          {t('surveys.admin.fields.required')}
+                        <span
+                          className="invisible select-none"
+                          aria-hidden="true"
+                        >
+                          {t("surveys.admin.fields.required")}
                         </span>
                         <span className="flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-slate-700">
                           <input
@@ -1040,7 +1038,7 @@ export default function SurveyAdminPage() {
                             }
                             className="h-4 w-4 shrink-0 rounded text-blue-600"
                           />
-                          {t('surveys.admin.fields.required')}
+                          {t("surveys.admin.fields.required")}
                         </span>
                       </label>
                     </div>
@@ -1049,14 +1047,14 @@ export default function SurveyAdminPage() {
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium text-slate-700">
-                            {t('surveys.admin.options')}
+                            {t("surveys.admin.options")}
                           </span>
                           <button
                             type="button"
                             onClick={() => addQuestionOption(question.localId)}
                             className="text-sm font-medium text-blue-700 hover:text-blue-800"
                           >
-                            {t('surveys.admin.addOption')}
+                            {t("surveys.admin.addOption")}
                           </button>
                         </div>
 
@@ -1104,7 +1102,7 @@ export default function SurveyAdminPage() {
                         className="inline-flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 sm:w-auto"
                       >
                         <Plus className="h-4 w-4" aria-hidden="true" />
-                        {t('surveys.admin.addQuestion')}
+                        {t("surveys.admin.addQuestion")}
                       </button>
                     </div>
                   )}
@@ -1133,7 +1131,7 @@ export default function SurveyAdminPage() {
                 disabled={isWorking}
                 className="inline-flex min-h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
               >
-                {t('surveys.admin.cancelEdit')}
+                {t("surveys.admin.cancelEdit")}
               </button>
             )}
             <button
@@ -1144,11 +1142,11 @@ export default function SurveyAdminPage() {
               <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
               {editingSurvey
                 ? updateMutation.isPending
-                  ? t('surveys.admin.updating')
-                  : t('surveys.admin.update')
+                  ? t("surveys.admin.updating")
+                  : t("surveys.admin.update")
                 : createMutation.isPending
-                  ? t('surveys.admin.creating')
-                  : t('surveys.admin.create')}
+                  ? t("surveys.admin.creating")
+                  : t("surveys.admin.create")}
             </button>
           </div>
         </form>
@@ -1157,7 +1155,7 @@ export default function SurveyAdminPage() {
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
               <Filter className="h-4 w-4" aria-hidden="true" />
-              {t('surveys.admin.filters')}
+              {t("surveys.admin.filters")}
             </div>
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1fr)]">
               <label className="relative">
@@ -1167,7 +1165,7 @@ export default function SurveyAdminPage() {
                 />
                 <input
                   type="search"
-                  value={filters.search ?? ''}
+                  value={filters.search ?? ""}
                   onChange={(event) =>
                     setFilters((current) => ({
                       ...current,
@@ -1175,16 +1173,16 @@ export default function SurveyAdminPage() {
                     }))
                   }
                   maxLength={100}
-                  placeholder={t('surveys.admin.searchPlaceholder')}
+                  placeholder={t("surveys.admin.searchPlaceholder")}
                   className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 />
               </label>
               <select
                 value={filters.status}
-                onChange={(event) => handleFilterChange('status', event)}
+                onChange={(event) => handleFilterChange("status", event)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               >
-                <option value="">{t('surveys.admin.allStatuses')}</option>
+                <option value="">{t("surveys.admin.allStatuses")}</option>
                 {Object.values(SurveyStatus).map((status) => (
                   <option key={status} value={status}>
                     {t(`surveys.statuses.${status}`)}
@@ -1194,10 +1192,10 @@ export default function SurveyAdminPage() {
 
               <select
                 value={filters.targetType}
-                onChange={(event) => handleFilterChange('targetType', event)}
+                onChange={(event) => handleFilterChange("targetType", event)}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               >
-                <option value="">{t('surveys.admin.allTargets')}</option>
+                <option value="">{t("surveys.admin.allTargets")}</option>
                 {Object.values(SurveyTargetType).map((targetType) => (
                   <option key={targetType} value={targetType}>
                     {t(`surveys.targetTypes.${targetType}`)}
@@ -1215,7 +1213,7 @@ export default function SurveyAdminPage() {
 
           {isError && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {t('surveys.admin.loadError')}
+              {t("surveys.admin.loadError")}
             </div>
           )}
 
@@ -1225,7 +1223,7 @@ export default function SurveyAdminPage() {
             </div>
           ) : surveys.length === 0 ? (
             <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-              {t('surveys.admin.empty')}
+              {t("surveys.admin.empty")}
             </div>
           ) : (
             <div className="space-y-3">
@@ -1236,18 +1234,18 @@ export default function SurveyAdminPage() {
                   canDelete={canDelete}
                   isWorking={isWorking}
                   onPublish={(surveyId) => {
-                    if (window.confirm(t('surveys.admin.publishConfirm'))) {
+                    if (window.confirm(t("surveys.admin.publishConfirm"))) {
                       publishMutation.mutate(surveyId);
                     }
                   }}
                   onClose={(surveyId) => {
-                    if (window.confirm(t('surveys.admin.closeConfirm'))) {
+                    if (window.confirm(t("surveys.admin.closeConfirm"))) {
                       closeMutation.mutate(surveyId);
                     }
                   }}
                   onEdit={handleEditSurvey}
                   onRemove={(surveyId) => {
-                    if (window.confirm(t('surveys.admin.deleteConfirm'))) {
+                    if (window.confirm(t("surveys.admin.deleteConfirm"))) {
                       removeMutation.mutate(surveyId);
                     }
                   }}

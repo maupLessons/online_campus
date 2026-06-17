@@ -11,6 +11,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { electivesApi } from '../../services/electivesApi';
+import { AUTO_DISMISS_MESSAGE_MS } from '../../hooks/useAutoDismissState';
 import type {
   ActiveElectivePeriod,
   ElectiveDiscipline,
@@ -368,6 +369,17 @@ export default function ElectivesPage() {
       : '';
 
   const actionError = selectMutation.error ?? cancelMutation.error;
+
+  useEffect(() => {
+    if (!actionError) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      selectMutation.reset();
+      cancelMutation.reset();
+    }, AUTO_DISMISS_MESSAGE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [actionError, cancelMutation, selectMutation]);
 
   if (isLoading) {
     return (

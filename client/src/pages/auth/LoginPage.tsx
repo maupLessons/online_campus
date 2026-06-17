@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useAuthStore } from '../../store/authStore';
-import { loginSchema, type LoginFormData } from '../../schemas/authSchema';
-import { Eye, EyeOff } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import LanguageSwitcher from '../../components/LanguageSwitcher';
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useAuthStore } from "../../store/authStore";
+import { loginSchema, type LoginFormData } from "../../schemas/authSchema";
+import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import LanguageSwitcher from "../../components/LanguageSwitcher";
+import { AUTO_DISMISS_MESSAGE_MS } from "../../hooks/useAutoDismissState";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function LoginPage() {
     isAuthChecked,
     isLoading,
     error,
+    clearError,
   } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -27,21 +29,30 @@ export default function LoginPage() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      login: '',
-      password: '',
+      login: "",
+      password: "",
     },
   });
 
   useEffect(() => {
     if (isAuthChecked && isAuthenticated) {
-      navigate('/dashboard', { replace: true });
+      navigate("/dashboard", { replace: true });
     }
   }, [isAuthChecked, isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (!error) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(clearError, AUTO_DISMISS_MESSAGE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [clearError, error]);
 
   const onSubmit = async (values: LoginFormData) => {
     try {
       await doLogin(values.login, values.password);
-      navigate('/dashboard');
+      navigate("/dashboard");
     } catch {
       // помилка вже обробляється в authStore
     }
@@ -53,8 +64,9 @@ export default function LoginPage() {
       style={{
         backgroundImage:
           "linear-gradient(rgba(10,25,47,0.30), rgba(10,25,47,0.30)), url('/login-bg.webp')",
-        backgroundPosition: 'center 5%',
-      }}>
+        backgroundPosition: "center 5%",
+      }}
+    >
       <div className="absolute top-4 right-4 z-20">
         <LanguageSwitcher showLabel={false} />
       </div>
@@ -66,29 +78,29 @@ export default function LoginPage() {
               <div className="w-20 h-20 rounded-lg bg-white flex items-center justify-center shadow-lg">
                 <img
                   src="/maup_logo.svg"
-                  alt={t('login.logoAlt')}
+                  alt={t("login.logoAlt")}
                   className="w-16 h-16 object-contain"
                 />
               </div>
 
               <div>
                 <h1 className="text-2xl font-bold tracking-wide">
-                  {t('login.logoAlt')}
+                  {t("login.logoAlt")}
                 </h1>
 
                 <p className="text-sm text-slate-300 leading-snug mt-1 max-w-xs whitespace-pre-line">
-                  {t('login.left.academyFull')}
+                  {t("login.left.academyFull")}
                 </p>
               </div>
             </div>
 
             <div className="space-y-4">
               <p className="text-blue-100 text-base leading-relaxed">
-                {t('login.left.tagline1')}
+                {t("login.left.tagline1")}
               </p>
 
               <p className="text-blue-100 text-base leading-relaxed">
-                {t('login.left.tagline2')}
+                {t("login.left.tagline2")}
               </p>
             </div>
           </div>
@@ -99,7 +111,7 @@ export default function LoginPage() {
                 10 000+
               </div>
               <div className="text-xs text-blue-100 mt-1">
-                {t('login.stats.students')}
+                {t("login.stats.students")}
               </div>
             </div>
 
@@ -108,7 +120,7 @@ export default function LoginPage() {
                 24/7
               </div>
               <div className="text-xs text-blue-100 mt-1">
-                {t('login.stats.access')}
+                {t("login.stats.access")}
               </div>
             </div>
 
@@ -117,7 +129,7 @@ export default function LoginPage() {
                 450+
               </div>
               <div className="text-xs text-blue-100 mt-1">
-                {t('login.stats.courses')}
+                {t("login.stats.courses")}
               </div>
             </div>
           </div>
@@ -126,10 +138,10 @@ export default function LoginPage() {
         <div className="p-8 sm:p-10">
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900">
-              {t('auth.title')}
+              {t("auth.title")}
             </h2>
 
-            <p className="text-gray-500 mt-2">{t('auth.subtitle')}</p>
+            <p className="text-gray-500 mt-2">{t("auth.subtitle")}</p>
           </div>
 
           {error && (
@@ -141,13 +153,13 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('auth.loginLabel')}
+                {t("auth.loginLabel")}
               </label>
               <input
                 type="text"
-                {...register('login')}
+                {...register("login")}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                placeholder={t('auth.loginPlaceholder')}
+                placeholder={t("auth.loginPlaceholder")}
               />
               {errors.login && (
                 <p className="text-sm text-red-600 mt-1">
@@ -158,21 +170,22 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('auth.passwordLabel')}
+                {t("auth.passwordLabel")}
               </label>
 
               <div className="relative">
                 <input
-                  type={showPassword ? 'text' : 'password'}
-                  {...register('password')}
+                  type={showPassword ? "text" : "password"}
+                  {...register("password")}
                   className="w-full px-4 py-3 pr-20 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  placeholder={t('auth.passwordPlaceholder')}
+                  placeholder={t("auth.passwordPlaceholder")}
                 />
 
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-700 transition-colors">
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-700 transition-colors"
+                >
                   {showPassword ? (
                     <EyeOff className="w-5 h-5" />
                   ) : (
@@ -191,16 +204,18 @@ export default function LoginPage() {
             <div className="flex justify-end">
               <Link
                 to="/forgot-password"
-                className="text-sm text-blue-700 hover:text-blue-900 hover:underline transition-colors">
-                {t('auth.forgotPassword')}
+                className="text-sm text-blue-700 hover:text-blue-900 hover:underline transition-colors"
+              >
+                {t("auth.forgotPassword")}
               </Link>
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-blue-700 text-white py-3 rounded-xl hover:bg-blue-800 transition-colors disabled:opacity-50 font-medium">
-              {isLoading ? t('auth.loading') : t('auth.submit')}
+              className="w-full bg-blue-700 text-white py-3 rounded-xl hover:bg-blue-800 transition-colors disabled:opacity-50 font-medium"
+            >
+              {isLoading ? t("auth.loading") : t("auth.submit")}
             </button>
           </form>
         </div>

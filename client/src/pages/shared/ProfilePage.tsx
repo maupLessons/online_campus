@@ -1,10 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useAuthStore } from '../../store/authStore';
-import { ROLE_LABEL_KEYS } from '../../types';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { useAuthStore } from "../../store/authStore";
+import { ROLE_LABEL_KEYS } from "../../types";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Eye, EyeOff } from "lucide-react";
+import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 
 type InfoRowProps = {
   label: string;
@@ -17,7 +18,7 @@ function InfoRow({ label, value }: InfoRowProps) {
       <span className="font-medium text-gray-700">{label}:</span>
 
       <span className="min-w-0 break-words text-right text-gray-900">
-        {value || '—'}
+        {value || "—"}
       </span>
     </div>
   );
@@ -26,7 +27,7 @@ function InfoRow({ label, value }: InfoRowProps) {
 import {
   changePasswordSchema,
   type ChangePasswordFormData,
-} from '../../schemas/authSchema';
+} from "../../schemas/authSchema";
 
 export default function ProfilePage() {
   const { t } = useTranslation();
@@ -34,8 +35,12 @@ export default function ProfilePage() {
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
   const { changePassword } = useAuthStore();
 
-  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
-  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useAutoDismissState<
+    string | null
+  >(null);
+  const [passwordError, setPasswordError] = useAutoDismissState<string | null>(
+    null,
+  );
 
   const [showPasswords, setShowPasswords] = useState({
     oldPassword: false,
@@ -58,9 +63,9 @@ export default function ProfilePage() {
   } = useForm<ChangePasswordFormData>({
     resolver: zodResolver(changePasswordSchema),
     defaultValues: {
-      oldPassword: '',
-      newPassword: '',
-      confirmPassword: '',
+      oldPassword: "",
+      newPassword: "",
+      confirmPassword: "",
     },
   });
 
@@ -77,9 +82,7 @@ export default function ProfilePage() {
       reset();
     } catch (err) {
       setPasswordError(
-        err instanceof Error
-          ? err.message
-          : t('profile.changePasswordError'),
+        err instanceof Error ? err.message : t("profile.changePasswordError"),
       );
     }
   };
@@ -93,14 +96,14 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <p className="text-gray-500">{t('profile.loading')}</p>
+        <p className="text-gray-500">{t("profile.loading")}</p>
       </div>
     );
   }
 
   const fullName = [user.lastName, user.firstName, user.middleName]
     .filter(Boolean)
-    .join(' ');
+    .join(" ");
 
   return (
     <div className="mx-auto w-full max-w-[1320px] space-y-6">
@@ -113,7 +116,7 @@ export default function ProfilePage() {
 
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-gray-900">
-              {t('profile.title')}
+              {t("profile.title")}
             </h1>
 
             <p className="mt-1 break-words text-lg text-gray-700">{fullName}</p>
@@ -127,41 +130,43 @@ export default function ProfilePage() {
         <button
           type="button"
           onClick={() => setIsPasswordFormOpen((prev) => !prev)}
-          className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-blue-600 px-5 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 sm:absolute sm:right-6 sm:top-6 sm:mt-0 sm:w-auto">
+          className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-blue-600 px-5 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 sm:absolute sm:right-6 sm:top-6 sm:mt-0 sm:w-auto"
+        >
           {isPasswordFormOpen
-            ? t('profile.hidePasswordForm')
-            : t('profile.changePassword')}
+            ? t("profile.hidePasswordForm")
+            : t("profile.changePassword")}
         </button>
       </section>
 
       {isPasswordFormOpen && (
         <section className="rounded-3xl bg-white p-6 shadow-sm">
           <h2 className="mb-5 text-lg font-semibold text-gray-900">
-            {t('profile.changePassword')}
+            {t("profile.changePassword")}
           </h2>
 
           <form onSubmit={handleSubmit(onChangePassword)} className="space-y-4">
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                {t('profile.currentPassword')}
+                {t("profile.currentPassword")}
               </label>
 
               <div className="relative">
                 <input
-                  type={showPasswords.oldPassword ? 'text' : 'password'}
-                  {...register('oldPassword')}
+                  type={showPasswords.oldPassword ? "text" : "password"}
+                  {...register("oldPassword")}
                   className="w-full rounded-xl border border-gray-300 px-4 py-2 pr-12 text-sm outline-none focus:border-blue-500"
                 />
 
                 <button
                   type="button"
-                  onClick={() => togglePasswordVisibility('oldPassword')}
+                  onClick={() => togglePasswordVisibility("oldPassword")}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-blue-700"
                   aria-label={
                     showPasswords.oldPassword
-                      ? t('profile.hidePassword')
-                      : t('profile.showPassword')
-                  }>
+                      ? t("profile.hidePassword")
+                      : t("profile.showPassword")
+                  }
+                >
                   {showPasswords.oldPassword ? (
                     <EyeOff className="h-5 w-5" />
                   ) : (
@@ -179,25 +184,26 @@ export default function ProfilePage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                {t('profile.newPassword')}
+                {t("profile.newPassword")}
               </label>
 
               <div className="relative">
                 <input
-                  type={showPasswords.newPassword ? 'text' : 'password'}
-                  {...register('newPassword')}
+                  type={showPasswords.newPassword ? "text" : "password"}
+                  {...register("newPassword")}
                   className="w-full rounded-xl border border-gray-300 px-4 py-2 pr-12 text-sm outline-none focus:border-blue-500"
                 />
 
                 <button
                   type="button"
-                  onClick={() => togglePasswordVisibility('newPassword')}
+                  onClick={() => togglePasswordVisibility("newPassword")}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-blue-700"
                   aria-label={
                     showPasswords.newPassword
-                      ? t('profile.hidePassword')
-                      : t('profile.showPassword')
-                  }>
+                      ? t("profile.hidePassword")
+                      : t("profile.showPassword")
+                  }
+                >
                   {showPasswords.newPassword ? (
                     <EyeOff className="h-5 w-5" />
                   ) : (
@@ -215,25 +221,26 @@ export default function ProfilePage() {
 
             <div>
               <label className="mb-1 block text-sm font-medium text-gray-700">
-                {t('profile.confirmNewPassword')}
+                {t("profile.confirmNewPassword")}
               </label>
 
               <div className="relative">
                 <input
-                  type={showPasswords.confirmPassword ? 'text' : 'password'}
-                  {...register('confirmPassword')}
+                  type={showPasswords.confirmPassword ? "text" : "password"}
+                  {...register("confirmPassword")}
                   className="w-full rounded-xl border border-gray-300 px-4 py-2 pr-12 text-sm outline-none focus:border-blue-500"
                 />
 
                 <button
                   type="button"
-                  onClick={() => togglePasswordVisibility('confirmPassword')}
+                  onClick={() => togglePasswordVisibility("confirmPassword")}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-blue-700"
                   aria-label={
                     showPasswords.confirmPassword
-                      ? t('profile.hidePassword')
-                      : t('profile.showPassword')
-                  }>
+                      ? t("profile.hidePassword")
+                      : t("profile.showPassword")
+                  }
+                >
                   {showPasswords.confirmPassword ? (
                     <EyeOff className="h-5 w-5" />
                   ) : (
@@ -264,10 +271,11 @@ export default function ProfilePage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-xl bg-blue-700 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60">
+              className="rounded-xl bg-blue-700 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
               {isSubmitting
-                ? t('profile.changePasswordLoading')
-                : t('profile.changePassword')}
+                ? t("profile.changePasswordLoading")
+                : t("profile.changePassword")}
             </button>
           </form>
         </section>
@@ -276,27 +284,27 @@ export default function ProfilePage() {
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="rounded-3xl bg-white p-6 shadow-sm">
           <h2 className="mb-5 text-lg font-semibold text-gray-900">
-            {t('profile.commonInfo')}
+            {t("profile.commonInfo")}
           </h2>
 
           <div className="space-y-3 text-sm">
-            <InfoRow label={t('profile.login')} value={user.login} />
+            <InfoRow label={t("profile.login")} value={user.login} />
 
-            <InfoRow label={t('profile.email')} value={user.email || '—'} />
+            <InfoRow label={t("profile.email")} value={user.email || "—"} />
 
-            <InfoRow label={t('profile.phone')} value={user.phone || '—'} />
+            <InfoRow label={t("profile.phone")} value={user.phone || "—"} />
 
             <InfoRow
-              label={t('profile.status')}
+              label={t("profile.status")}
               value={
-                user.status === 'active'
-                  ? t('status.active')
-                  : t('status.blocked')
+                user.status === "active"
+                  ? t("status.active")
+                  : t("status.blocked")
               }
             />
 
             <InfoRow
-              label={t('profile.role')}
+              label={t("profile.role")}
               value={t(ROLE_LABEL_KEYS[user.role])}
             />
           </div>
@@ -305,23 +313,23 @@ export default function ProfilePage() {
         {user.studentProfile && (
           <section className="rounded-3xl bg-white p-6 shadow-sm">
             <h2 className="mb-5 text-lg font-semibold text-gray-900">
-              {t('profile.studentInfo')}
+              {t("profile.studentInfo")}
             </h2>
 
             <div className="space-y-3 text-sm">
               <InfoRow
-                label={t('profile.recordBookNumber')}
-                value={user.studentProfile.recordBookNumber || '—'}
+                label={t("profile.recordBookNumber")}
+                value={user.studentProfile.recordBookNumber || "—"}
               />
 
               <InfoRow
-                label={t('profile.year')}
-                value={user.studentProfile.year ?? '—'}
+                label={t("profile.year")}
+                value={user.studentProfile.year ?? "—"}
               />
 
               <InfoRow
-                label={t('profile.groupId')}
-                value={user.studentProfile.group || '—'}
+                label={t("profile.groupId")}
+                value={user.studentProfile.group || "—"}
               />
             </div>
           </section>
@@ -330,18 +338,18 @@ export default function ProfilePage() {
         {user.teacherProfile && (
           <section className="rounded-3xl bg-white p-6 shadow-sm">
             <h2 className="mb-5 text-lg font-semibold text-gray-900">
-              {t('profile.teacherInfo')}
+              {t("profile.teacherInfo")}
             </h2>
 
             <div className="space-y-3 text-sm">
               <InfoRow
-                label={t('profile.position')}
-                value={user.teacherProfile.position || '—'}
+                label={t("profile.position")}
+                value={user.teacherProfile.position || "—"}
               />
 
               <InfoRow
-                label={t('profile.departmentId')}
-                value={user.teacherProfile.department || '—'}
+                label={t("profile.departmentId")}
+                value={user.teacherProfile.department || "—"}
               />
             </div>
           </section>

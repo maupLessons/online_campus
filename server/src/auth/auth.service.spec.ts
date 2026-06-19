@@ -62,6 +62,7 @@ describe('AuthService', () => {
       | 'findByIdWithPassword'
       | 'addRefreshTokenHash'
       | 'removeRefreshTokenHash'
+      | 'rotateRefreshTokenHash'
       | 'removeAllRefreshTokenHashes'
       | 'updatePassword'
       | 'findOne'
@@ -85,6 +86,7 @@ describe('AuthService', () => {
       findByIdWithPassword: jest.fn(),
       addRefreshTokenHash: jest.fn(),
       removeRefreshTokenHash: jest.fn(),
+      rotateRefreshTokenHash: jest.fn().mockResolvedValue(true),
       removeAllRefreshTokenHashes: jest.fn(),
       updatePassword: jest.fn(),
       findOne: jest.fn(),
@@ -191,12 +193,9 @@ describe('AuthService', () => {
       refreshToken: 'new-refresh-token',
     });
 
-    expect(usersService.removeRefreshTokenHash).toHaveBeenCalledWith(
+    expect(usersService.rotateRefreshTokenHash).toHaveBeenCalledWith(
       user.id,
       tokenHash('old-refresh-token'),
-    );
-    expect(usersService.addRefreshTokenHash).toHaveBeenCalledWith(
-      user.id,
       tokenHash('new-refresh-token'),
     );
 

@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -177,9 +177,12 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: this.accessTokenExpiresIn,
     });
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.refreshTokenExpiresIn,
-    });
+    const refreshToken = this.jwtService.sign(
+      { ...payload, jti: randomUUID() },
+      {
+        expiresIn: this.refreshTokenExpiresIn,
+      },
+    );
 
     await this.usersService.addRefreshTokenHash(
       user.id,
@@ -429,8 +432,6 @@ export class AuthService {
       throw new UnauthorizedException('Невірний refresh token');
     }
 
-    await this.usersService.removeRefreshTokenHash(user.id, tokenHash);
-
     const newPayload: ValidJwtPayload = {
       sub: user.id,
       login: user.login,
@@ -439,14 +440,29 @@ export class AuthService {
     const newAccessToken = this.jwtService.sign(newPayload, {
       expiresIn: this.accessTokenExpiresIn,
     });
-    const newRefreshToken = this.jwtService.sign(newPayload, {
-      expiresIn: this.refreshTokenExpiresIn,
-    });
+    const newRefreshToken = this.jwtService.sign(
+      { ...newPayload, jti: randomUUID() },
+      { expiresIn: this.refreshTokenExpiresIn },
+    );
 
-    await this.usersService.addRefreshTokenHash(
+    const rotated = await this.usersService.rotateRefreshTokenHash(
       user.id,
+      tokenHash,
       hashToken(newRefreshToken),
     );
+    if (!rotated) {
+      await this.auditLogService.logAction({
+        userId: user.id,
+        userLogin: user.login,
+        action: 'auth.refresh',
+        ipAddress,
+        userAgent,
+        result: 'failure',
+        details: { reason: 'Concurrent refresh token reuse detected' },
+        requestId,
+      });
+      throw new UnauthorizedException('Невірний refresh token');
+    }
 
     await this.auditLogService.logAction({
       userId: user.id,

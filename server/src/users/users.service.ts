@@ -81,6 +81,20 @@ export class UsersService {
       .exec();
   }
 
+  async rotateRefreshTokenHash(
+    userId: string,
+    currentHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    const result = await this.userModel
+      .updateOne(
+        { _id: userId, refreshTokenHashes: currentHash },
+        { $set: { 'refreshTokenHashes.$': nextHash } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
   async removeAllRefreshTokenHashes(userId: string): Promise<void> {
     await this.userModel
       .updateOne({ _id: userId }, { $set: { refreshTokenHashes: [] } })

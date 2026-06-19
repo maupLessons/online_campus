@@ -11,6 +11,13 @@ function productionEnvironment(): Record<string, string> {
     AUTH_COOKIE_SAMESITE: 'strict',
     SWAGGER_ENABLED: 'false',
     PASSWORD_RESET_EXPOSE_TOKEN: 'false',
+    PASSWORD_RESET_EMAIL_ENABLED: 'true',
+    EMAIL_FROM: 'campus@example.edu',
+    SMTP_HOST: 'smtp.example.edu',
+    SMTP_PORT: '587',
+    SMTP_SECURE: 'false',
+    SMTP_USER: 'campus',
+    SMTP_PASSWORD: 'smtp-app-password',
     MONGO_ROOT_USERNAME: 'campus',
     MONGO_ROOT_PASSWORD: 'm'.repeat(32),
     MONGO_DATABASE: 'campus',
@@ -71,6 +78,18 @@ describe('validateEnvironment', () => {
     expect(result.PASSWORD_RESET_EXPOSE_TOKEN).toBe('true');
     expect(result.AUDIT_TRANSACTIONAL_OUTBOX).toBe('false');
     expect(result.DB_MIGRATIONS_ENABLED).toBe('false');
+    expect(result.PASSWORD_RESET_EMAIL_ENABLED).toBe('false');
+  });
+
+  it('requires an authenticated password-reset email transport in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment(),
+        SMTP_HOST: '',
+        SMTP_USER: '',
+        SMTP_PASSWORD: '',
+      }),
+    ).toThrow(/SMTP_HOST is required/);
   });
 
   it('rejects an unauthenticated standalone MongoDB URI in production', () => {

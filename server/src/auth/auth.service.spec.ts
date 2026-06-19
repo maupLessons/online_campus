@@ -12,6 +12,7 @@ import { Role } from '../common/types/roles.enum';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthService } from './auth.service';
+import { PasswordResetEmailService } from './password-reset-email.service';
 
 type MockUser = {
   id: string;
@@ -70,6 +71,9 @@ describe('AuthService', () => {
     >
   >;
   let auditLogService: jest.Mocked<Pick<AuditLogService, 'logAction'>>;
+  let passwordResetEmailService: jest.Mocked<
+    Pick<PasswordResetEmailService, 'sendPasswordReset' | 'isEnabled'>
+  >;
 
   beforeEach(() => {
     jwtService = {
@@ -91,6 +95,10 @@ describe('AuthService', () => {
     auditLogService = {
       logAction: jest.fn(),
     };
+    passwordResetEmailService = {
+      sendPasswordReset: jest.fn(),
+      isEnabled: jest.fn().mockReturnValue(false),
+    };
 
     const configService = {
       get: jest.fn((key: string) => {
@@ -107,6 +115,7 @@ describe('AuthService', () => {
       jwtService as unknown as JwtService,
       usersService as unknown as UsersService,
       auditLogService as unknown as AuditLogService,
+      passwordResetEmailService as unknown as PasswordResetEmailService,
       configService,
     );
   });
@@ -248,6 +257,15 @@ describe('AuthService', () => {
     expect(typeof result.resetToken).toBe('string');
     expect(result.resetUrl).toContain('/reset-password?token=');
     expect(typeof result.expiresAt).toBe('string');
+    const resetEmail =
+      passwordResetEmailService.sendPasswordReset.mock.calls[0]?.[0];
+    expect(resetEmail).toEqual(
+      expect.objectContaining({
+        to: 'admin@maup.com.ua',
+        login: user.login,
+      }),
+    );
+    expect(resetEmail?.resetUrl).toContain('/reset-password?token=');
     expect(auditLogService.logAction).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.password_reset.request',
@@ -302,6 +320,31 @@ describe('AuthService', () => {
         result: 'success',
         userId: user.id,
       }),
+    );
+  });
+
+  it('does not reveal an SMTP delivery failure to password-reset callers', async () => {
+    const user = createUser();
+    usersService.findPasswordResetCandidate.mockResolvedValue({
+      id: user.id,
+      login: user.login,
+      email: 'admin@maup.com.ua',
+      role: Role.ADMIN,
+      status: 'active',
+    });
+    passwordResetEmailService.sendPasswordReset.mockRejectedValue(
+      new Error('SMTP unavailable'),
+    );
+
+    const result = await service.requestPasswordReset({ identifier: 'admin' });
+
+    expect(typeof result.message).toBe('string');
+    const deliveryAudit = auditLogService.logAction.mock.calls.find(
+      ([entry]) => entry.action === 'auth.password_reset.request',
+    )?.[0];
+    expect(deliveryAudit?.result).toBe('success');
+    expect(deliveryAudit?.details).toEqual(
+      expect.objectContaining({ delivery: 'failed' }),
     );
   });
 

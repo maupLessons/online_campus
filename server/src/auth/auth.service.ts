@@ -13,6 +13,7 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
+import { PasswordResetEmailService } from './password-reset-email.service';
 
 interface AuthUser {
   id: string;
@@ -90,6 +91,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
     private readonly auditLogService: AuditLogService,
+    private readonly passwordResetEmailService: PasswordResetEmailService,
     configService: ConfigService,
   ) {
     this.accessTokenExpiresIn =
@@ -248,6 +250,23 @@ export class AuthService {
       expiresAt,
     );
 
+    const resetUrl = this.buildPasswordResetUrl(resetToken);
+    let delivery: 'smtp' | 'development-response' | 'failed' = this
+      .exposePasswordResetToken
+      ? 'development-response'
+      : 'smtp';
+
+    try {
+      await this.passwordResetEmailService.sendPasswordReset({
+        to: candidate.email,
+        login: candidate.login,
+        resetUrl,
+        expiresAt,
+      });
+    } catch {
+      delivery = 'failed';
+    }
+
     await this.auditLogService.logAction({
       userId: candidate.id,
       userLogin: candidate.login,
@@ -258,6 +277,7 @@ export class AuthService {
       result: 'success',
       details: {
         expiresAt: expiresAt.toISOString(),
+        delivery,
       },
       requestId,
     });
@@ -268,7 +288,7 @@ export class AuthService {
 
     if (this.exposePasswordResetToken) {
       response.resetToken = resetToken;
-      response.resetUrl = this.buildPasswordResetUrl(resetToken);
+      response.resetUrl = resetUrl;
       response.expiresAt = expiresAt.toISOString();
     }
 

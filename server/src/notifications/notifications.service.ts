@@ -17,6 +17,7 @@ import {
   NotificationDocument,
 } from './schemas/notification.schema';
 import { NotificationsRealtimeService } from './notifications-realtime.service';
+import { NotificationQueryDto } from './dto/notification-query.dto';
 
 type NotificationPayload = {
   title: string;
@@ -144,12 +145,20 @@ export class NotificationsService {
     return this.formatNotification(notification, actorObjId);
   }
 
-  async findByUser(userId: string): Promise<NotificationView[]> {
+  async findByUser(
+    userId: string,
+    query: NotificationQueryDto = {},
+  ): Promise<NotificationView[]> {
     const userObjId = this.toObjectId(userId);
     const visibility = await this.getNotificationVisibilityContext(userId);
 
     const notifications = await this.notificationModel
-      .find(this.buildVisibleFilter(userObjId, userId, visibility))
+      .find(
+        this.combineFilters(
+          this.buildVisibleFilter(userObjId, userId, visibility),
+          this.buildListFilter(query, userObjId, userId),
+        ),
+      )
       .sort({ createdAt: -1 })
       .lean<NotificationObject[]>()
       .exec();
@@ -157,10 +166,13 @@ export class NotificationsService {
     return notifications.map((n) => this.formatNotification(n, userObjId));
   }
 
-  async findAllForAdmin(actorId: string): Promise<NotificationView[]> {
+  async findAllForAdmin(
+    actorId: string,
+    query: NotificationQueryDto = {},
+  ): Promise<NotificationView[]> {
     const actorObjId = this.toObjectId(actorId);
     const notifications = await this.notificationModel
-      .find()
+      .find(this.buildListFilter(query, actorObjId, actorId))
       .sort({ createdAt: -1 })
       .lean<NotificationObject[]>()
       .exec();
@@ -450,6 +462,49 @@ export class NotificationsService {
       $or: visibleTargets,
       dismissedBy: { $nin: [userObjId, userId] },
     };
+  }
+
+  private buildListFilter(
+    query: NotificationQueryDto,
+    actorObjId: Types.ObjectId,
+    actorId: string,
+  ): Record<string, unknown> {
+    const filter: Record<string, unknown> = {};
+
+    if (query.search) {
+      const pattern = new RegExp(this.escapeRegex(query.search), 'i');
+      filter.$or = [{ title: pattern }, { message: pattern }];
+    }
+    if (query.type) {
+      filter.type = query.type;
+    }
+    if (query.important !== undefined) {
+      filter.important = query.important;
+    }
+    if (query.targetType) {
+      filter.targetType = query.targetType;
+    }
+    if (query.readState === 'read') {
+      filter.readBy = { $in: [actorObjId, actorId] };
+    }
+    if (query.readState === 'unread') {
+      filter.readBy = { $nin: [actorObjId, actorId] };
+    }
+
+    return filter;
+  }
+
+  private combineFilters(
+    ...filters: Array<Record<string, unknown>>
+  ): Record<string, unknown> {
+    const active = filters.filter((filter) => Object.keys(filter).length > 0);
+    if (active.length === 0) return {};
+    if (active.length === 1) return active[0];
+    return { $and: active };
+  }
+
+  private escapeRegex(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private async getNotificationVisibilityContext(

@@ -8,6 +8,7 @@ import {
   Post,
   Body,
   Request,
+  Query,
   Sse,
   UseGuards,
 } from '@nestjs/common';
@@ -22,6 +23,7 @@ import { Role } from '../common/types/roles.enum';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { NotificationsRealtimeService } from './notifications-realtime.service';
+import { NotificationQueryDto } from './dto/notification-query.dto';
 
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -43,8 +45,11 @@ export class NotificationsController {
   }
 
   @Get()
-  findMy(@Request() req: AuthenticatedRequest) {
-    return this.notificationsService.findByUser(req.user.sub);
+  findMy(
+    @Query() query: NotificationQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.notificationsService.findByUser(req.user.sub, query);
   }
 
   @Get('unread-count')
@@ -56,8 +61,11 @@ export class NotificationsController {
   @Get('admin')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  findAllForAdmin(@Request() req: AuthenticatedRequest) {
-    return this.notificationsService.findAllForAdmin(req.user.sub);
+  findAllForAdmin(
+    @Query() query: NotificationQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.notificationsService.findAllForAdmin(req.user.sub, query);
   }
 
   @Post()

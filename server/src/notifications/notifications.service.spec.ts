@@ -3,6 +3,7 @@ import { Role } from '../common/types/roles.enum';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from './notifications.service';
 import { NotificationsRealtimeService } from './notifications-realtime.service';
+import { NotificationType } from './dto/create-notification.dto';
 
 type QueryMock<T> = {
   exec: jest.Mock<Promise<T>, []>;
@@ -268,7 +269,7 @@ describe('NotificationsService', () => {
 
     const result = await service.findAllForAdmin(userId);
 
-    expect(notificationModel.find).toHaveBeenCalledWith();
+    expect(notificationModel.find).toHaveBeenCalledWith({});
     expect(result).toEqual([
       expect.objectContaining({
         id: notificationId,
@@ -283,6 +284,34 @@ describe('NotificationsService', () => {
         readFlag: false,
       }),
     ]);
+  });
+
+  it('combines visibility with search, type, importance, and read filters', async () => {
+    notificationModel.find.mockReturnValueOnce(sortLeanQuery([]));
+
+    await service.findByUser(userId, {
+      search: 'schedule (updated)',
+      type: NotificationType.SCHEDULE_CHANGE,
+      important: true,
+      readState: 'unread',
+    });
+
+    const [findFilter] = notificationModel.find.mock.calls[0];
+    const filters = findFilter.$and as Array<Record<string, unknown>>;
+    expect(filters).toHaveLength(2);
+    expect(filters[0]).toHaveProperty('$or');
+    expect(filters[1]).toMatchObject({
+      type: NotificationType.SCHEDULE_CHANGE,
+      important: true,
+    });
+    const readBy = filters[1].readBy as { $nin: unknown[] };
+    expect(readBy.$nin).toContain(userId);
+    const searchBranches = filters[1].$or as Array<{
+      title?: RegExp;
+      message?: RegExp;
+    }>;
+    expect(searchBranches[0]?.title?.test('Schedule (updated)')).toBe(true);
+    expect(searchBranches[1]?.message?.test('Schedule updated')).toBe(false);
   });
 
   it('deletes notifications globally for admins', async () => {

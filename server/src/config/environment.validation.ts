@@ -47,6 +47,9 @@ export function validateEnvironment(input: Environment): Environment {
   env.AUDIT_TRANSACTIONAL_OUTBOX = String(
     readBoolean(env, 'AUDIT_TRANSACTIONAL_OUTBOX', !isTest, errors),
   );
+  env.DB_MIGRATIONS_ENABLED = String(
+    readBoolean(env, 'DB_MIGRATIONS_ENABLED', !isTest, errors),
+  );
 
   const jwtSecret = readSecret(
     env,
@@ -105,6 +108,7 @@ export function validateEnvironment(input: Environment): Environment {
     assertProductionBoolean(env, 'AUTH_COOKIE_SECURE', true, errors);
     assertProductionBoolean(env, 'SEED_DEMO_DATA', false, errors);
     assertProductionBoolean(env, 'SEED_DEMO_DATA_IN_PRODUCTION', false, errors);
+    assertProductionBoolean(env, 'DB_MIGRATIONS_ENABLED', true, errors);
   }
 
   validateMongoConfiguration(env, isProduction, isTest, errors);
@@ -210,6 +214,9 @@ function validatePositiveTuning(env: Environment, errors: string[]): void {
     ['AUDIT_OUTBOX_POLL_INTERVAL_MS', 500, 100, 60_000],
     ['AUDIT_OUTBOX_LOCK_TIMEOUT_MS', 30_000, 1000, 600_000],
     ['AUDIT_OUTBOX_MAX_ATTEMPTS', 10, 1, 100],
+    ['DB_MIGRATION_LOCK_TTL_MS', 300_000, 5_000, 3_600_000],
+    ['DB_MIGRATION_WAIT_TIMEOUT_MS', 60_000, 1_000, 600_000],
+    ['DB_MIGRATION_POLL_INTERVAL_MS', 1_000, 100, 10_000],
   ];
 
   for (const [key, fallback, min, max] of definitions) {

@@ -23,6 +23,8 @@ import { ElectiveDisciplinesModule } from './elective-disciplines/elective-disci
 import { ReportsModule } from './reports/reports.module';
 import { TransactionInterceptor } from './audit-log/transaction.interceptor';
 import { validateEnvironment } from './config/environment.validation';
+import { DatabaseMigrationsModule } from './database-migrations/database-migrations.module';
+import { HealthController } from './health.controller';
 
 mongoose.set('transactionAsyncLocalStorage', true);
 
@@ -96,6 +98,7 @@ function buildMongoUri(config: ConfigService): string {
         };
       },
     }),
+    DatabaseMigrationsModule,
     AuthModule,
     UsersModule,
     ScheduleModule,
@@ -109,6 +112,7 @@ function buildMongoUri(config: ConfigService): string {
     ElectiveDisciplinesModule,
     ReportsModule,
   ],
+  controllers: [HealthController],
   providers: [
     { provide: APP_GUARD, useClass: CsrfGuard },
     { provide: APP_GUARD, useClass: UserAwareThrottlerGuard },

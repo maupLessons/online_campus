@@ -21,6 +21,7 @@ function productionEnvironment(): Record<string, string> {
     AUDIT_TRANSACTIONAL_OUTBOX: 'true',
     SEED_DEMO_DATA: 'false',
     SEED_DEMO_DATA_IN_PRODUCTION: 'false',
+    DB_MIGRATIONS_ENABLED: 'true',
   };
 }
 
@@ -69,6 +70,7 @@ describe('validateEnvironment', () => {
     expect(result.AUTH_COOKIE_SECURE).toBe('false');
     expect(result.PASSWORD_RESET_EXPOSE_TOKEN).toBe('true');
     expect(result.AUDIT_TRANSACTIONAL_OUTBOX).toBe('false');
+    expect(result.DB_MIGRATIONS_ENABLED).toBe('false');
   });
 
   it('rejects an unauthenticated standalone MongoDB URI in production', () => {

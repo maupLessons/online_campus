@@ -63,14 +63,8 @@ jobs:
       - name: E2E smoke tests
         run: npm run test:e2e
 
-      - name: Academic access database E2E tests
-        run: npm run test:e2e:db -- academic-access.e2e-spec.ts
-
-      - name: Elective disciplines database E2E tests
-        run: npm run test:e2e:db -- electives.e2e-spec.ts
-
-      - name: Surveys database E2E tests
-        run: npm run test:e2e:db -- surveys.e2e-spec.ts
+      - name: Database E2E tests
+        run: npm run test:e2e:db
 
   client:
     name: Client

@@ -17,7 +17,7 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT }}
-          envs: MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_DATABASE,MONGO_HOST,MONGO_PORT,MONGO_REPLICA_SET_NAME,MONGO_REPLICA_SET_KEY,JWT_SECRET,PORT,CLIENT_URL,SWAGGER_ENABLED,AUTH_ACCESS_COOKIE_NAME,AUTH_REFRESH_COOKIE_NAME,AUTH_ACCESS_COOKIE_PATH,AUTH_REFRESH_COOKIE_PATH,AUTH_CSRF_SECRET,AUTH_CSRF_COOKIE_NAME,AUTH_CSRF_COOKIE_PATH,AUTH_CSRF_BINDING_COOKIE_NAME,AUTH_CSRF_BINDING_COOKIE_PATH,AUTH_CSRF_HEADER_NAME,AUTH_COOKIE_SAMESITE,AUTH_COOKIE_SECURE,PASSWORD_RESET_EMAIL_ENABLED,EMAIL_FROM,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASSWORD,AUDIT_TRANSACTIONAL_OUTBOX,AUDIT_OUTBOX_POLL_INTERVAL_MS,AUDIT_OUTBOX_LOCK_TIMEOUT_MS,AUDIT_OUTBOX_MAX_ATTEMPTS,DB_MIGRATIONS_ENABLED,DB_MIGRATION_LOCK_TTL_MS,DB_MIGRATION_WAIT_TIMEOUT_MS,DB_MIGRATION_POLL_INTERVAL_MS
+          envs: MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_DATABASE,MONGO_HOST,MONGO_PORT,MONGO_REPLICA_SET_NAME,MONGO_REPLICA_SET_KEY,JWT_SECRET,PORT,CLIENT_URL,DEPLOYMENT_ENV,SWAGGER_ENABLED,AUTH_ACCESS_COOKIE_NAME,AUTH_REFRESH_COOKIE_NAME,AUTH_ACCESS_COOKIE_PATH,AUTH_REFRESH_COOKIE_PATH,AUTH_CSRF_SECRET,AUTH_CSRF_COOKIE_NAME,AUTH_CSRF_COOKIE_PATH,AUTH_CSRF_BINDING_COOKIE_NAME,AUTH_CSRF_BINDING_COOKIE_PATH,AUTH_CSRF_HEADER_NAME,AUTH_COOKIE_SAMESITE,AUTH_COOKIE_SECURE,PASSWORD_RESET_EXPOSE_TOKEN,PASSWORD_RESET_EMAIL_ENABLED,EMAIL_FROM,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASSWORD,SMTP_CONNECTION_TIMEOUT_MS,AUDIT_TRANSACTIONAL_OUTBOX,AUDIT_OUTBOX_POLL_INTERVAL_MS,AUDIT_OUTBOX_LOCK_TIMEOUT_MS,AUDIT_OUTBOX_MAX_ATTEMPTS,DB_MIGRATIONS_ENABLED,DB_MIGRATION_LOCK_TTL_MS,DB_MIGRATION_WAIT_TIMEOUT_MS,DB_MIGRATION_POLL_INTERVAL_MS
           script: |
             cd /opt/online_campus
             git pull origin master
@@ -56,6 +56,8 @@ jobs:
             write_required_env PORT "$PORT"
             write_required_env CLIENT_URL "$CLIENT_URL"
             write_required_env NODE_ENV production
+            deployment_env="${DEPLOYMENT_ENV:-production}"
+            write_required_env DEPLOYMENT_ENV "$deployment_env"
             write_required_env SEED_DEMO_DATA false
             write_required_env SEED_DEMO_DATA_IN_PRODUCTION false
             append_env SWAGGER_ENABLED "$SWAGGER_ENABLED"
@@ -71,13 +73,29 @@ jobs:
             append_env AUTH_CSRF_HEADER_NAME "$AUTH_CSRF_HEADER_NAME"
             append_env AUTH_COOKIE_SAMESITE "$AUTH_COOKIE_SAMESITE"
             append_env AUTH_COOKIE_SECURE "${AUTH_COOKIE_SECURE:-true}"
-            write_required_env PASSWORD_RESET_EMAIL_ENABLED "${PASSWORD_RESET_EMAIL_ENABLED:-true}"
-            write_required_env EMAIL_FROM "$EMAIL_FROM"
-            write_required_env SMTP_HOST "$SMTP_HOST"
-            append_env SMTP_PORT "${SMTP_PORT:-587}"
-            append_env SMTP_SECURE "${SMTP_SECURE:-false}"
-            write_required_env SMTP_USER "$SMTP_USER"
-            write_required_env SMTP_PASSWORD "$SMTP_PASSWORD"
+            append_env PASSWORD_RESET_EXPOSE_TOKEN "${PASSWORD_RESET_EXPOSE_TOKEN:-false}"
+            if [ -n "${PASSWORD_RESET_EMAIL_ENABLED:-}" ]; then
+              password_reset_email_enabled="$PASSWORD_RESET_EMAIL_ENABLED"
+            elif [ "$deployment_env" = "production" ]; then
+              password_reset_email_enabled=true
+            else
+              password_reset_email_enabled=false
+            fi
+            write_required_env PASSWORD_RESET_EMAIL_ENABLED "$password_reset_email_enabled"
+            if [ "$password_reset_email_enabled" = "true" ]; then
+              write_required_env EMAIL_FROM "$EMAIL_FROM"
+              write_required_env SMTP_HOST "$SMTP_HOST"
+              append_env SMTP_PORT "${SMTP_PORT:-587}"
+              append_env SMTP_SECURE "${SMTP_SECURE:-false}"
+              append_env SMTP_CONNECTION_TIMEOUT_MS "${SMTP_CONNECTION_TIMEOUT_MS:-10000}"
+              if [ "$deployment_env" = "production" ]; then
+                write_required_env SMTP_USER "$SMTP_USER"
+                write_required_env SMTP_PASSWORD "$SMTP_PASSWORD"
+              else
+                append_env SMTP_USER "$SMTP_USER"
+                append_env SMTP_PASSWORD "$SMTP_PASSWORD"
+              fi
+            fi
             append_env AUDIT_TRANSACTIONAL_OUTBOX "${AUDIT_TRANSACTIONAL_OUTBOX:-true}"
             append_env AUDIT_OUTBOX_POLL_INTERVAL_MS "${AUDIT_OUTBOX_POLL_INTERVAL_MS:-500}"
             append_env AUDIT_OUTBOX_LOCK_TIMEOUT_MS "${AUDIT_OUTBOX_LOCK_TIMEOUT_MS:-30000}"
@@ -100,6 +118,7 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           PORT: ${{ secrets.PORT }}
           CLIENT_URL: ${{ secrets.CLIENT_URL }}
+          DEPLOYMENT_ENV: ${{ secrets.DEPLOYMENT_ENV }}
           SWAGGER_ENABLED: ${{ secrets.SWAGGER_ENABLED }}
           AUTH_ACCESS_COOKIE_NAME: ${{ secrets.AUTH_ACCESS_COOKIE_NAME }}
           AUTH_REFRESH_COOKIE_NAME: ${{ secrets.AUTH_REFRESH_COOKIE_NAME }}
@@ -113,6 +132,7 @@ jobs:
           AUTH_CSRF_HEADER_NAME: ${{ secrets.AUTH_CSRF_HEADER_NAME }}
           AUTH_COOKIE_SAMESITE: ${{ secrets.AUTH_COOKIE_SAMESITE }}
           AUTH_COOKIE_SECURE: ${{ secrets.AUTH_COOKIE_SECURE }}
+          PASSWORD_RESET_EXPOSE_TOKEN: ${{ secrets.PASSWORD_RESET_EXPOSE_TOKEN }}
           PASSWORD_RESET_EMAIL_ENABLED: ${{ secrets.PASSWORD_RESET_EMAIL_ENABLED }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -120,6 +140,7 @@ jobs:
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          SMTP_CONNECTION_TIMEOUT_MS: ${{ secrets.SMTP_CONNECTION_TIMEOUT_MS }}
           AUDIT_TRANSACTIONAL_OUTBOX: ${{ secrets.AUDIT_TRANSACTIONAL_OUTBOX }}
           AUDIT_OUTBOX_POLL_INTERVAL_MS: ${{ secrets.AUDIT_OUTBOX_POLL_INTERVAL_MS }}
           AUDIT_OUTBOX_LOCK_TIMEOUT_MS: ${{ secrets.AUDIT_OUTBOX_LOCK_TIMEOUT_MS }}

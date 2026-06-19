@@ -1640,7 +1640,23 @@ SEED_DEMO_DATA_IN_PRODUCTION=false
 # Production
 PORT=3000
 NODE_ENV=production
+DEPLOYMENT_ENV=production
 ```
+
+Для dev-сервера без SMTP застосунок може залишатися у production runtime mode,
+але повинен мати окремий профіль розгортання:
+
+```env
+NODE_ENV=production
+DEPLOYMENT_ENV=development
+PASSWORD_RESET_EMAIL_ENABLED=false
+PASSWORD_RESET_EXPOSE_TOKEN=false
+```
+
+У цьому режимі SMTP-змінні не потрібні. Якщо на закритому dev-сервері потрібно
+тестувати reset flow без пошти, `PASSWORD_RESET_EXPOSE_TOKEN=true` поверне token
+у відповіді API. Для `DEPLOYMENT_ENV=production` це значення завжди заборонене,
+а authenticated SMTP залишається обов'язковим.
 
 Demo seeders копіюють fixture-дані з `server/src/common/mock-data` у MongoDB
 лише коли `SEED_DEMO_DATA=true`. У production seeders заблоковані за
@@ -1777,7 +1793,8 @@ Deploy workflow передає обов'язкові `MONGO_*`, `JWT_SECRET`, `P
 для кожного середовища. Порожні optional secrets не записуються в `.env`,
 тому застосунок використовує кодові defaults; `AUTH_COOKIE_SECURE` та
 `AUDIT_TRANSACTIONAL_OUTBOX` для deploy за замовчуванням записуються як
-`true`.
+`true`. `DEPLOYMENT_ENV` за замовчуванням дорівнює `production`; SMTP secrets
+вимагаються лише коли `PASSWORD_RESET_EMAIL_ENABLED=true`.
 
 ```yaml
 name: Deploy
@@ -1823,6 +1840,7 @@ jobs:
 | `JWT_SECRET` | секрет для JWT |
 | `PORT` | порт backend |
 | `CLIENT_URL` | URL frontend для CORS і reset links |
+| `DEPLOYMENT_ENV` | `development` для dev-сервера без SMTP; `production` або unset для production |
 | `AUTH_ACCESS_COOKIE_NAME` | назва HttpOnly cookie для access token |
 | `AUTH_REFRESH_COOKIE_NAME` | назва HttpOnly cookie для refresh token |
 | `AUTH_ACCESS_COOKIE_PATH` | path access cookie (`/api` за замовчуванням) |
@@ -1835,6 +1853,14 @@ jobs:
 | `AUTH_CSRF_BINDING_COOKIE_NAME` | назва HttpOnly binding cookie, до якої прив'язано CSRF token |
 | `AUTH_CSRF_BINDING_COOKIE_PATH` | path HttpOnly CSRF binding cookie (`/api` за замовчуванням) |
 | `AUTH_CSRF_HEADER_NAME` | header, який frontend надсилає для unsafe методів (`x-csrf-token`) |
+| `PASSWORD_RESET_EMAIL_ENABLED` | `false` або unset для dev-сервера без SMTP; у production обов'язково `true` |
+| `PASSWORD_RESET_EXPOSE_TOKEN` | optional; `true` лише для закритого dev-сервера, у production заборонено |
+| `EMAIL_FROM` | обов'язковий sender, коли SMTP увімкнений |
+| `SMTP_HOST` | обов'язковий hostname, коли SMTP увімкнений |
+| `SMTP_PORT` | optional; `587` за замовчуванням |
+| `SMTP_SECURE` | optional; `true` для SMTPS/465, інакше `false` |
+| `SMTP_USER` | обов'язковий у production, коли SMTP увімкнений |
+| `SMTP_PASSWORD` | обов'язковий у production, коли SMTP увімкнений |
 | `AUDIT_TRANSACTIONAL_OUTBOX` | `true` для атомарного доменного запису та аудиту |
 | `AUDIT_OUTBOX_POLL_INTERVAL_MS` | optional; інтервал доставки audit-подій |
 | `AUDIT_OUTBOX_LOCK_TIMEOUT_MS` | optional; timeout відновлення завислого worker lock |
@@ -1846,8 +1872,9 @@ jobs:
 `ConfigModule` застосовує централізовану fail-fast схему. Для
 `NODE_ENV=production` застосунок не запуститься зі слабкими або placeholder
 JWT/CSRF/Mongo secrets, HTTP `CLIENT_URL`, `AUTH_COOKIE_SECURE=false`,
-увімкненим Swagger/reset-token exposure, некоректними cookie paths чи
-MongoDB без автентифікації та replica-set configuration.
+увімкненим Swagger, некоректними cookie paths чи MongoDB без автентифікації та
+replica-set configuration. Додатково `DEPLOYMENT_ENV=production` забороняє
+reset-token exposure та вимагає authenticated SMTP.
 
 ### Правила роботи із залежностями
 

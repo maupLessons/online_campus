@@ -20,8 +20,17 @@ export function validateEnvironment(input: Environment): Environment {
   );
   const isProduction = nodeEnv === 'production';
   const isTest = nodeEnv === 'test';
+  const deploymentEnv = readEnum(
+    env,
+    'DEPLOYMENT_ENV',
+    ['development', 'staging', 'production'],
+    isProduction ? 'production' : 'development',
+    errors,
+  );
+  const isProductionDeployment = deploymentEnv === 'production';
 
   env.NODE_ENV = nodeEnv;
+  env.DEPLOYMENT_ENV = deploymentEnv;
   env.PORT = String(readInteger(env, 'PORT', 3000, 1, 65535, errors));
   env.CLIENT_URL = readClientUrl(
     env,
@@ -39,7 +48,12 @@ export function validateEnvironment(input: Environment): Environment {
     readBoolean(env, 'PASSWORD_RESET_EXPOSE_TOKEN', !isProduction, errors),
   );
   env.PASSWORD_RESET_EMAIL_ENABLED = String(
-    readBoolean(env, 'PASSWORD_RESET_EMAIL_ENABLED', isProduction, errors),
+    readBoolean(
+      env,
+      'PASSWORD_RESET_EMAIL_ENABLED',
+      isProductionDeployment,
+      errors,
+    ),
   );
   env.SEED_DEMO_DATA = String(
     readBoolean(env, 'SEED_DEMO_DATA', false, errors),
@@ -105,18 +119,27 @@ export function validateEnvironment(input: Environment): Environment {
   setCookiePath(env, 'AUTH_CSRF_COOKIE_PATH', '/', errors);
   setCookiePath(env, 'AUTH_CSRF_BINDING_COOKIE_PATH', '/api', errors);
 
+  if (isProductionDeployment && !isProduction) {
+    errors.push(
+      'NODE_ENV must be production when DEPLOYMENT_ENV is production',
+    );
+  }
+
   if (isProduction) {
     assertProductionBoolean(env, 'SWAGGER_ENABLED', false, errors);
-    assertProductionBoolean(env, 'PASSWORD_RESET_EXPOSE_TOKEN', false, errors);
-    assertProductionBoolean(env, 'PASSWORD_RESET_EMAIL_ENABLED', true, errors);
     assertProductionBoolean(env, 'AUTH_COOKIE_SECURE', true, errors);
     assertProductionBoolean(env, 'SEED_DEMO_DATA', false, errors);
     assertProductionBoolean(env, 'SEED_DEMO_DATA_IN_PRODUCTION', false, errors);
     assertProductionBoolean(env, 'DB_MIGRATIONS_ENABLED', true, errors);
   }
 
+  if (isProductionDeployment) {
+    assertProductionBoolean(env, 'PASSWORD_RESET_EXPOSE_TOKEN', false, errors);
+    assertProductionBoolean(env, 'PASSWORD_RESET_EMAIL_ENABLED', true, errors);
+  }
+
   validateMongoConfiguration(env, isProduction, isTest, errors);
-  validateEmailDelivery(env, isProduction, errors);
+  validateEmailDelivery(env, isProductionDeployment, errors);
   validatePositiveTuning(env, errors);
 
   if (errors.length > 0) {
@@ -132,7 +155,7 @@ export function validateEnvironment(input: Environment): Environment {
 
 function validateEmailDelivery(
   env: Environment,
-  isProduction: boolean,
+  isProductionDeployment: boolean,
   errors: string[],
 ): void {
   const smtpPort = readInteger(env, 'SMTP_PORT', 587, 1, 65535, errors);
@@ -156,7 +179,7 @@ function validateEmailDelivery(
   if (Boolean(user) !== Boolean(password)) {
     errors.push('SMTP_USER and SMTP_PASSWORD must be configured together');
   }
-  if (isProduction && (!user || !password)) {
+  if (isProductionDeployment && (!user || !password)) {
     errors.push('Authenticated SMTP is required in production');
   }
 

@@ -111,8 +111,13 @@ export class AuthService {
       1000;
     this.clientUrl =
       configService.get<string>('CLIENT_URL') ?? 'http://localhost:5173';
+    const deploymentEnv =
+      configService.get<string>('DEPLOYMENT_ENV') ??
+      (configService.get<string>('NODE_ENV') === 'production'
+        ? 'production'
+        : 'development');
     this.exposePasswordResetToken =
-      configService.get<string>('NODE_ENV') !== 'production' &&
+      deploymentEnv !== 'production' &&
       configService.get<string>('PASSWORD_RESET_EXPOSE_TOKEN') === 'true';
   }
 
@@ -254,20 +259,25 @@ export class AuthService {
     );
 
     const resetUrl = this.buildPasswordResetUrl(resetToken);
-    let delivery: 'smtp' | 'development-response' | 'failed' = this
+    const emailEnabled = this.passwordResetEmailService.isEnabled();
+    let delivery: 'smtp' | 'development-response' | 'disabled' | 'failed' = this
       .exposePasswordResetToken
       ? 'development-response'
-      : 'smtp';
+      : emailEnabled
+        ? 'smtp'
+        : 'disabled';
 
-    try {
-      await this.passwordResetEmailService.sendPasswordReset({
-        to: candidate.email,
-        login: candidate.login,
-        resetUrl,
-        expiresAt,
-      });
-    } catch {
-      delivery = 'failed';
+    if (emailEnabled) {
+      try {
+        await this.passwordResetEmailService.sendPasswordReset({
+          to: candidate.email,
+          login: candidate.login,
+          resetUrl,
+          expiresAt,
+        });
+      } catch {
+        delivery = 'failed';
+      }
     }
 
     await this.auditLogService.logAction({

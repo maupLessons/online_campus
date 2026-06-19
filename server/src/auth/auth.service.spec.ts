@@ -106,7 +106,8 @@ describe('AuthService', () => {
       get: jest.fn((key: string) => {
         if (key === 'JWT_EXPIRES_IN') return '15m';
         if (key === 'JWT_REFRESH_EXPIRES_IN') return '7d';
-        if (key === 'NODE_ENV') return 'test';
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'DEPLOYMENT_ENV') return 'development';
         if (key === 'CLIENT_URL') return 'http://localhost:5173';
         if (key === 'PASSWORD_RESET_EXPOSE_TOKEN') return 'true';
         return undefined;
@@ -256,15 +257,7 @@ describe('AuthService', () => {
     expect(typeof result.resetToken).toBe('string');
     expect(result.resetUrl).toContain('/reset-password?token=');
     expect(typeof result.expiresAt).toBe('string');
-    const resetEmail =
-      passwordResetEmailService.sendPasswordReset.mock.calls[0]?.[0];
-    expect(resetEmail).toEqual(
-      expect.objectContaining({
-        to: 'admin@maup.com.ua',
-        login: user.login,
-      }),
-    );
-    expect(resetEmail?.resetUrl).toContain('/reset-password?token=');
+    expect(passwordResetEmailService.sendPasswordReset).not.toHaveBeenCalled();
     expect(auditLogService.logAction).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.password_reset.request',
@@ -334,6 +327,7 @@ describe('AuthService', () => {
     passwordResetEmailService.sendPasswordReset.mockRejectedValue(
       new Error('SMTP unavailable'),
     );
+    passwordResetEmailService.isEnabled.mockReturnValue(true);
 
     const result = await service.requestPasswordReset({ identifier: 'admin' });
 

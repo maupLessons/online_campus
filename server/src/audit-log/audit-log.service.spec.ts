@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { AuditLogService } from './audit-log.service';
-import { AuditLogResult } from './dto';
+import { AuditLogDomain, AuditLogResult } from './dto';
 import { AuditLog } from './schemas/audit-log.schema';
 import { AuditOutbox } from './schemas/audit-outbox.schema';
 
@@ -201,5 +201,31 @@ describe('AuditLogService', () => {
         ],
       }),
     );
+  });
+
+  it('maps domain presets to both named actions and fallback entities', async () => {
+    const findQuery = {
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([]),
+    };
+    auditModel.find.mockReturnValue(findQuery);
+    auditModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(0),
+    });
+
+    await service.findAll({ domain: AuditLogDomain.NOTIFICATIONS });
+
+    expect(auditModel.find).toHaveBeenCalledWith({
+      $or: [
+        {
+          action: { $regex: '^notification\\.', $options: 'i' },
+        },
+        { targetEntity: 'notification' },
+        { targetEntity: 'notifications' },
+      ],
+    });
   });
 });

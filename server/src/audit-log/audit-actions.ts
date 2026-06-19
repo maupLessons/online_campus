@@ -35,6 +35,8 @@ export const AUDIT_ACTIONS = {
   ELECTIVE_SELECTION_CANCEL: 'elective.selection.cancel',
   REPORT_VIEW: 'report.view',
   REPORT_EXPORT: 'report.export',
+  AUDIT_LOG_VIEW: 'audit.view',
+  AUDIT_LOG_EXPORT: 'audit.export',
 } as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[keyof typeof AUDIT_ACTIONS];

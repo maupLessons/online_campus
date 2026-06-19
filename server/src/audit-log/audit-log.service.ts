@@ -4,7 +4,7 @@ import { Model, QueryFilter } from 'mongoose';
 import { randomUUID } from 'crypto';
 import { PaginatedDto } from '../common/dto/paginated.dto';
 import { transformToDtoArray } from '../common/utils/transform.util';
-import { AuditLogEntryDto, AuditLogQueryDto } from './dto';
+import { AuditLogDomain, AuditLogEntryDto, AuditLogQueryDto } from './dto';
 import { AuditLog, AuditLogDocument } from './schemas/audit-log.schema';
 import {
   AuditOutbox,
@@ -39,6 +39,67 @@ const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 type SanitizeState = {
   seen: WeakSet<object>;
   nodes: number;
+};
+
+const AUDIT_DOMAIN_FILTERS: Record<
+  AuditLogDomain,
+  { actions: string[]; entities: string[] }
+> = {
+  [AuditLogDomain.IDENTITY]: {
+    actions: ['auth', 'user'],
+    entities: ['auth', 'user', 'users'],
+  },
+  [AuditLogDomain.SCHEDULE]: {
+    actions: ['schedule'],
+    entities: ['schedule', 'schedule-template'],
+  },
+  [AuditLogDomain.LEARNING]: {
+    actions: [
+      'course',
+      'grade',
+      'material',
+      'assignment',
+      'submission',
+      'journal',
+    ],
+    entities: [
+      'courses',
+      'course',
+      'grade',
+      'material',
+      'assignment',
+      'submission',
+      'journal',
+    ],
+  },
+  [AuditLogDomain.SURVEYS]: {
+    actions: ['survey'],
+    entities: ['survey', 'surveys'],
+  },
+  [AuditLogDomain.ELECTIVES]: {
+    actions: ['elective'],
+    entities: ['electives', 'elective_period', 'elective_selection'],
+  },
+  [AuditLogDomain.REFERENCES]: {
+    actions: ['reference'],
+    entities: ['reference', 'references'],
+  },
+  [AuditLogDomain.NOTIFICATIONS]: {
+    actions: ['notification'],
+    entities: ['notification', 'notifications'],
+  },
+  [AuditLogDomain.REPORTS]: {
+    actions: ['report'],
+    entities: ['report', 'reports'],
+  },
+  [AuditLogDomain.FILES]: {
+    actions: ['file'],
+    entities: ['file', 'files'],
+  },
+  [AuditLogDomain.AUDIT]: {
+    actions: ['audit'],
+    entities: ['audit-log'],
+  },
 };
 
 function escapeRegex(value: string): string {
@@ -220,8 +281,38 @@ export class AuditLogService {
     }
   }
 
+  async findForExport(
+    query: AuditLogQueryDto,
+    maximumRows = 10_000,
+  ): Promise<AuditLogEntryDto[]> {
+    const docs = await this.auditModel
+      .find(this.buildFilter(query))
+      .sort({ timestamp: -1, _id: -1 })
+      .limit(maximumRows + 1)
+      .lean()
+      .exec();
+
+    if (docs.length > maximumRows) {
+      throw new BadRequestException(
+        `Audit export is limited to ${maximumRows} entries; narrow the filters`,
+      );
+    }
+
+    return transformToDtoArray(AuditLogEntryDto, docs);
+  }
+
   private buildFilter(query: AuditLogQueryDto): QueryFilter<AuditLogDocument> {
     const filter: QueryFilter<AuditLogDocument> = {};
+
+    if (query.domain) {
+      const domain = AUDIT_DOMAIN_FILTERS[query.domain];
+      filter.$or = [
+        ...domain.actions.map((action) => ({
+          action: { $regex: `^${escapeRegex(action)}\\.`, $options: 'i' },
+        })),
+        ...domain.entities.map((targetEntity) => ({ targetEntity })),
+      ];
+    }
 
     if (query.userId) {
       filter.userId = query.userId;

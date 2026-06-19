@@ -15,11 +15,29 @@ export enum AuditLogResult {
   FAILURE = 'failure',
 }
 
+export enum AuditLogDomain {
+  IDENTITY = 'identity',
+  SCHEDULE = 'schedule',
+  LEARNING = 'learning',
+  SURVEYS = 'surveys',
+  ELECTIVES = 'electives',
+  REFERENCES = 'references',
+  NOTIFICATIONS = 'notifications',
+  REPORTS = 'reports',
+  FILES = 'files',
+  AUDIT = 'audit',
+}
+
 function trimQueryValue(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() : value;
 }
 
 export class AuditLogQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ enum: AuditLogDomain })
+  @IsOptional()
+  @IsEnum(AuditLogDomain)
+  domain?: AuditLogDomain;
+
   @ApiPropertyOptional({ description: 'Filter by actor id' })
   @IsOptional()
   @IsString()

@@ -183,7 +183,8 @@
 - При невірних даних — відповідь без деталей
 - Заблокований акаунт — відмова до перевірки пароля
 - Password reset token генерується криптографічно безпечно, зберігається тільки як SHA-256 hash, має TTL і стає недійсним після використання
-- У production reset token не повертається в API-відповіді; delivery має виконуватися через email provider
+- У production reset token не повертається в API-відповіді; reset link доставляється через обов'язковий authenticated SMTP transport
+- SMTP failure не змінює generic API-відповідь і не розкриває наявність акаунта; результат delivery фіксується в audit details
 
 ---
 
@@ -197,9 +198,9 @@
 
 | Метод | Шлях                       | Доступ                         |
 | ----- | -------------------------- | ------------------------------ |
-| GET   | `/users`                   | admin, rector, president       |
-| GET   | `/users/search?q=&role=`   | admin, rector, president, dean |
-| GET   | `/users/:id`               | admin, rector, president, dean |
+| GET   | `/users`                   | admin; president — лише студенти, read-only |
+| GET   | `/users/search?q=&role=`   | admin, president, dean, department_head; scoped |
+| GET   | `/users/:id`               | admin, president (лише студент), dean; scoped |
 | GET   | `/users/group/:groupId`    | teacher+                       |
 | GET   | `/users/department/:depId` | department_head+               |
 | POST  | `/users`                   | admin                          |
@@ -215,7 +216,7 @@
 
 **Відповідальність:** зберігання та відображення розкладу; перевірка конфліктів
 (накладання по викладачу, аудиторії та групі); рольове й об'єктне обмеження
-видимості; диспетчерські workflow для скасування, перенесення та заміни занять;
+видимості; адміністративні workflow для скасування, перенесення та заміни занять;
 шаблони й масові операції; CSV/XLSX-експорт; персональні сповіщення про зміни.
 
 **Ендпоінти та доступ:**
@@ -226,19 +227,19 @@
 | GET    | `/schedule/my`                                                    | авторизовані; особистий видимий розклад              |
 | GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`                 | авторизовані; CSV/XLSX у межах видимого scope        |
 | GET    | `/schedule/:id`                                                   | авторизовані; з object-level перевіркою доступу       |
-| POST   | `/schedule`                                                       | dispatcher, admin                                    |
-| PUT    | `/schedule/:id`                                                   | dispatcher, admin                                    |
-| POST   | `/schedule/:id/cancel`                                            | dispatcher, admin; обов'язкова причина               |
-| POST   | `/schedule/:id/reschedule`                                        | dispatcher, admin; новий час/аудиторія + причина     |
-| POST   | `/schedule/:id/substitution`                                      | dispatcher, admin; заміна дисципліни/аудиторії/часу  |
-| POST   | `/schedule/bulk`                                                  | dispatcher, admin; dry-run/skipConflicts             |
-| POST   | `/schedule/bulk/cancel`                                           | dispatcher, admin; масове скасування з причиною      |
-| GET    | `/schedule/templates`                                             | dispatcher, admin                                    |
-| POST   | `/schedule/templates`                                             | dispatcher, admin                                    |
-| PUT    | `/schedule/templates/:id`                                         | dispatcher, admin                                    |
-| DELETE | `/schedule/templates/:id`                                         | dispatcher, admin; архівація шаблону                 |
-| POST   | `/schedule/templates/:id/apply`                                   | dispatcher, admin; генерація розкладу за шаблоном    |
-| DELETE | `/schedule/:id`                                                   | dispatcher, admin                                    |
+| POST   | `/schedule`                                                       | admin                                                |
+| PUT    | `/schedule/:id`                                                   | admin                                                |
+| POST   | `/schedule/:id/cancel`                                            | admin; обов'язкова причина                           |
+| POST   | `/schedule/:id/reschedule`                                        | admin; новий час/аудиторія + причина                 |
+| POST   | `/schedule/:id/substitution`                                      | admin; заміна дисципліни/аудиторії/часу              |
+| POST   | `/schedule/bulk`                                                  | admin; dry-run/skipConflicts                         |
+| POST   | `/schedule/bulk/cancel`                                           | admin; масове скасування з причиною                  |
+| GET    | `/schedule/templates`                                             | admin                                                |
+| POST   | `/schedule/templates`                                             | admin                                                |
+| PUT    | `/schedule/templates/:id`                                         | admin                                                |
+| DELETE | `/schedule/templates/:id`                                         | admin; архівація шаблону                             |
+| POST   | `/schedule/templates/:id/apply`                                   | admin; генерація розкладу за шаблоном                |
+| DELETE | `/schedule/:id`                                                   | admin                                                |
 
 **Перевірка конфліктів:** при створенні, редагуванні, перенесенні, заміні,
 масовому створенні та застосуванні шаблонів перевіряється зайнятість
@@ -252,7 +253,7 @@
 
 **Frontend:** сторінка `SchedulePage` підтримує перегляд день/тиждень, статуси
 `scheduled`/`cancelled`/`rescheduled`/`substituted`, CSV/XLSX-експорт і
-повноцінну диспетчерську UI для створення, редагування, видалення, скасування,
+повноцінну адміністративну UI для створення, редагування, видалення, скасування,
 перенесення, замін, шаблонів та масового скасування.
 
 ---
@@ -355,8 +356,8 @@ interface SurveyResponse {
 
 | Метод  | Шлях                          | Доступ                          | Опис                                         |
 | ------ | ----------------------------- | ------------------------------- | -------------------------------------------- |
-| POST   | `/surveys`                    | admin, dean, rector             | Створити опитування                          |
-| GET    | `/surveys`                    | admin, dean, rector             | Список опитувань; dean бачить лише власні    |
+| POST   | `/surveys`                    | admin, dean                     | Створити опитування                          |
+| GET    | `/surveys`                    | admin, dean, rector, president  | Список; rector/president працюють read-only  |
 | GET    | `/surveys/active`             | student, teacher                | Активні опитування для поточного користувача |
 | GET    | `/surveys/:id`                | авторизовані                    | Деталі опитування з питаннями                |
 | PUT    | `/surveys/:id`                | admin, dean (автор)             | Редагування (тільки в статусі draft)         |
@@ -444,25 +445,25 @@ interface ElectiveSelection {
 | GET | `/electives/my` | student | Мій поточний/історичний вибір |
 | POST | `/electives/periods/:periodId/select` | student | Зафіксувати вибір дисципліни |
 | DELETE | `/electives/periods/:periodId/selections/:selectionId` | student | Скасувати свій вибір у відкритому періоді |
-| GET | `/electives/disciplines` | admin, department_head, dean+ | Список дисциплін |
-| POST | `/electives/disciplines` | admin, department_head, dean+ | Створити дисципліну-чернетку |
-| PUT | `/electives/disciplines/:id` | admin, department_head, dean+ | Оновити дисципліну |
-| PATCH | `/electives/disciplines/:id/status` | admin, department_head, dean+ | Активувати або архівувати дисципліну |
-| GET | `/electives/periods` | admin, dean+ | Список періодів вибору |
-| POST | `/electives/periods` | admin, dean+ | Створити період вибору |
-| PUT | `/electives/periods/:id` | admin, dean+ | Оновити чернетку періоду |
-| PATCH | `/electives/periods/:id/status` | admin, dean+ | Виконати дозволений перехід `draft → active` або `active → closed` |
-| POST | `/electives/periods/:id/finalize` | admin, dean+ | Фіналізувати закритий період, створити навчальні курси та додати їх у `Мої дисципліни` вибраних студентів |
-| GET | `/electives/periods/:id/results` | admin, dean+ | Результати закритого або фіналізованого періоду |
-| GET | `/electives/periods/:id/results/export?format=csv` | admin, dean+ | Структурований UTF-8 CSV-звіт |
-| GET | `/electives/periods/:id/results/export?format=xlsx` | admin, dean+ | Форматований XLSX-звіт |
+| GET | `/electives/disciplines` | admin, department_head, dean | Список дисциплін |
+| POST | `/electives/disciplines` | admin, department_head, dean | Створити дисципліну-чернетку |
+| PUT | `/electives/disciplines/:id` | admin, department_head, dean | Оновити дисципліну |
+| PATCH | `/electives/disciplines/:id/status` | admin, department_head, dean | Активувати або архівувати дисципліну |
+| GET | `/electives/periods` | admin, dean | Список періодів вибору |
+| POST | `/electives/periods` | admin, dean | Створити період вибору |
+| PUT | `/electives/periods/:id` | admin, dean | Оновити чернетку періоду |
+| PATCH | `/electives/periods/:id/status` | admin, dean | Виконати дозволений перехід `draft → active` або `active → closed` |
+| POST | `/electives/periods/:id/finalize` | admin, dean | Фіналізувати закритий період, створити навчальні курси та додати їх у `Мої дисципліни` вибраних студентів |
+| GET | `/electives/periods/:id/results` | admin, dean | Результати закритого або фіналізованого періоду |
+| GET | `/electives/periods/:id/results/export?format=csv` | admin, dean | Структурований UTF-8 CSV-звіт |
+| GET | `/electives/periods/:id/results/export?format=xlsx` | admin, dean | Форматований XLSX-звіт |
 
 **Frontend routes:**
 
 | Шлях | Доступ | Опис |
 | ---- | ------ | ---- |
 | `/electives` | student | Активні періоди, доступні дисципліни, вибір/скасування |
-| `/electives/admin` | admin, department_head, dean, rector, president | Каталог дисциплін; керування періодами та XLSX/CSV export доступні admin/dean/rector/president |
+| `/electives/admin` | admin, department_head, dean | Каталог дисциплін; періоди та XLSX/CSV export доступні admin/dean |
 
 **Бізнес-правила:**
 
@@ -478,12 +479,12 @@ interface ElectiveSelection {
 - керівник кафедри може керувати дисциплінами тільки своєї кафедри;
 - викладач дисципліни має бути активним користувачем і належати до кафедри цієї дисципліни;
 - після відкриття періоду студентам цільових груп створюються групові сповіщення;
-- після закриття періоду адміністратор/декан/ректор/президент фіналізує результати окремою дією;
+- після закриття періоду адміністратор або декан фіналізує результати окремою дією;
 - фіналізація створює або оновлює `Course` та `CourseAssignment` з `source: "elective"` і `enrolledStudents`, тому вибіркова дисципліна зʼявляється у `Мої дисципліни` тільки у студентів, які її реально обрали;
 - для фіналізації кожна вибрана дисципліна повинна мати призначеного активного викладача;
 - після фіналізації студентам надсилаються персональні сповіщення з переходом у `/courses`;
 - кожен вибір і адміністративна дія проходить через захищені API та глобальний audit interceptor;
-- після закриття періоду результати та XLSX/CSV-експорт доступні для деканату, ректора, президента та адміністратора;
+- після закриття періоду результати та XLSX/CSV-експорт доступні декану та адміністратору;
 - CSV використовує UTF-8 BOM, Excel-сумісний роздільник, CRLF, українські заголовки, зведення та деталізацію виборів;
 - XLSX містить окремі аркуші зведення і виборів студентів, стилізовані заголовки, автофільтри, закріплені рядки, формати дат і відсотків;
 - обидва формати нейтралізують значення, що можуть бути інтерпретовані табличним редактором як формули;
@@ -527,7 +528,7 @@ interface ElectiveSelection {
 - централізований `ReferencesAccessService`, який застосовує object-level
   authorization до списків і окремих записів на основі профілю користувача,
   призначень курсів, зарахування на вибіркові дисципліни та розкладу;
-- глобальний read scope для admin, dispatcher, rector і president; керований
+- глобальний read scope для admin, rector і president; керований
   scope для dean і department_head; власні кафедри, групи та аудиторії для
   teacher; власний академічний контекст для student;
 - fail-closed поведінку та `404 Not Found` для чужих об'єктів без розкриття
@@ -559,11 +560,21 @@ interface ElectiveSelection {
 
 | Метод | Шлях                          | Опис                             |
 | ----- | ----------------------------- | -------------------------------- |
-| GET   | `/notifications`              | Мої сповіщення (з пагінацією)    |
+| GET   | `/notifications?search=&type=&readState=&important=&targetType=` | Мої сповіщення з фільтрами |
 | GET   | `/notifications/unread-count` | Кількість непрочитаних           |
+| GET   | `/notifications/stream`       | Authenticated SSE stream         |
 | PATCH | `/notifications/:id/read`     | Позначити прочитаним             |
 | PATCH | `/notifications/read-all`     | Позначити всі прочитаними        |
 | POST  | `/notifications/broadcast`    | admin — надіслати всім або групі |
+
+SSE передає тільки сигнал про зміну, після якого frontend перечитує scoped API;
+текст сповіщення в event stream не дублюється. Nginx buffering для stream
+вимкнений. Поточний event bus працює в одному backend process; для кількох
+replicas потрібен Redis/NATS adapter.
+
+На сторінці сповіщень доступні debounced-пошук, фільтри за прочитаністю,
+типом і важливістю; адміністратор додатково фільтрує за аудиторією. Фільтри
+застосовуються на backend після перевірки видимого користувачеві scope.
 
 **Типи сповіщень:**
 
@@ -626,6 +637,8 @@ interface ElectiveSelection {
   replace і delete операції відхиляються;
 - оброблені outbox-події зберігаються 7 днів для діагностики, після чого
   видаляються TTL-індексом; фінальний аудит не має TTL.
+- admin UI має domain presets і filtered CSV/XLSX export; один export
+  обмежений 10 000 записами.
 
 Транзакційний режим потребує MongoDB replica set. Локальний
 `docker-compose.yml` запускає single-node `rs0` із keyfile-аутентифікацією та
@@ -685,7 +698,7 @@ interface AuditLogEntry {
   керівником;
 - `dean` бачить лише кафедри факультетів, де він призначений деканом;
 - `rector`, `president` і `admin` мають загальний академічний scope кампусу;
-- `student`, `teacher` і `dispatcher` не мають доступу до модуля;
+- `student` і `teacher` не мають доступу до модуля;
 - ідентифікатори кафедри, групи або призначення дисципліни перевіряються
   повторно на backend; фільтр поза дозволеним scope завершується `403`.
 
@@ -812,28 +825,20 @@ src/
 
 ### 5.2 Layout — видимість меню за роллю
 
-| Пункт                    | student | teacher | dispatcher | dept_head | dean | admin |
-| ------------------------ | ------- | ------- | ---------- | --------- | ---- | ----- |
-| Профіль                  | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
-| Дашборд                  | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
-| Розклад                  | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
-| Мої дисципліни           | ✅      | ✅      | —          | ✅        | ✅   | —     |
-| Мої завдання             | ✅      | —       | —          | —         | —    | —     |
-| Залікова книжка          | ✅      | —       | —          | —         | —    | —     |
-| Опитування               | ✅      | ✅      | —          | —         | —    | —     |
-| Адміністрування опитувань | —      | —       | —          | —         | ✅   | ✅    |
-| Вибіркові дисципліни     | ✅      | —       | —          | —         | —    | —     |
-| Керування вибірковими    | —       | —       | —          | ✅        | ✅   | ✅    |
-| Аналітичні звіти         | —       | —       | —          | ✅        | ✅   | ✅    |
-| Користувачі              | —       | —       | —          | —         | ✅   | ✅    |
-| Аудит                    | —       | —       | —          | —         | —    | ✅    |
-| Довідники                | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
-| Сповіщення               | ✅      | ✅      | ✅         | ✅        | ✅   | ✅    |
+| Пункт | student | teacher | dept_head | dean | rector | president | admin |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Профіль, дашборд, сповіщення | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Розклад | read | read | scoped read | scoped read | read | read | read/write |
+| Дисципліни | scoped | scoped | scoped | scoped | — | — | global read |
+| Опитування | participate | participate | — | manage own | results | results | manage |
+| Вибіркові дисципліни | select | — | manage scoped | manage | — | — | manage |
+| Аналітичні звіти | — | — | scoped | scoped | global | global | global |
+| Користувачі | — | — | scoped search | scoped search | — | student read-only | manage |
+| Аудит | — | — | — | — | — | — | read/export |
+| Довідники | scoped read | scoped read | scoped read | scoped read | read | read | manage |
 
-Ролі `rector` і `president` також мають окремі дозволи для керівних
-переглядів, результатів та адміністрування відповідно до `App.tsx` і
-`Layout.tsx`. Таблиця відображає основні щоденні сценарії, а не повну RBAC
-матрицю backend endpoints.
+Повна нормативна матриця з object-level правилами наведена в
+`docs/RBAC_MATRIX.md`.
 
 ---
 
@@ -853,14 +858,14 @@ src/
 - Підтвердження перед відправкою
 - Після здачі — стан подяки та перегляд збережених відповідей для неанонімних опитувань
 
-#### SurveyAdminPage _(admin, dean, rector)_
+#### SurveyAdminPage _(admin, dean; rector/president — read-only)_
 
 - Таблиця всіх опитувань з фільтром по статусу
 - Форма створення: назва, опис, цільова аудиторія, анонімність, терміни
 - Конструктор питань: керування порядком, додати/видалити питання, вибір типу
 - Кнопки: Зберегти чернетку / Опублікувати / Закрити
 
-#### SurveyResultsPage _(admin, dean+)_
+#### SurveyResultsPage _(admin, dean-автор, rector, president)_
 
 - Загальна статистика: кількість проходжень, збережених відповідей і питань
 - По кожному питанню:
@@ -1004,9 +1009,9 @@ AuditLogEntry
 
 | Метод | Шлях                       | Доступ                         |
 | ----- | -------------------------- | ------------------------------ |
-| GET   | `/users`                   | admin, rector, president       |
+| GET   | `/users`                   | admin; president — лише студенти, read-only |
 | GET   | `/users/search?q=&role=`   | admin+                         |
-| GET   | `/users/:id`               | admin, rector, president, dean |
+| GET   | `/users/:id`               | admin, president (лише студент), dean |
 | POST  | `/users`                   | admin                          |
 | PATCH | `/users/:id`               | admin                          |
 | PATCH | `/users/:id/block`         | admin                          |
@@ -1022,23 +1027,23 @@ AuditLogEntry
 | GET    | `/schedule/my`                                                    | авторизовані; scoped visibility                      |
 | GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`                 | авторизовані; CSV/XLSX у межах scoped visibility     |
 | GET    | `/schedule/:id`                                                   | авторизовані; object-level authorization             |
-| POST   | `/schedule`                                                       | dispatcher, admin                                    |
-| PUT    | `/schedule/:id`                                                   | dispatcher, admin                                    |
-| POST   | `/schedule/:id/cancel`                                            | dispatcher, admin; причина скасування                |
-| POST   | `/schedule/:id/reschedule`                                        | dispatcher, admin; новий слот + причина              |
-| POST   | `/schedule/:id/substitution`                                      | dispatcher, admin; заміна + причина                  |
-| POST   | `/schedule/bulk`                                                  | dispatcher, admin; масове створення                  |
-| POST   | `/schedule/bulk/cancel`                                           | dispatcher, admin; масове скасування                 |
-| GET    | `/schedule/templates`                                             | dispatcher, admin                                    |
-| POST   | `/schedule/templates`                                             | dispatcher, admin                                    |
-| PUT    | `/schedule/templates/:id`                                         | dispatcher, admin                                    |
-| DELETE | `/schedule/templates/:id`                                         | dispatcher, admin; archive                           |
-| POST   | `/schedule/templates/:id/apply`                                   | dispatcher, admin; застосування шаблону              |
-| DELETE | `/schedule/:id`                                                   | dispatcher, admin                                    |
+| POST   | `/schedule`                                                       | admin                                                |
+| PUT    | `/schedule/:id`                                                   | admin                                                |
+| POST   | `/schedule/:id/cancel`                                            | admin; причина скасування                            |
+| POST   | `/schedule/:id/reschedule`                                        | admin; новий слот + причина                          |
+| POST   | `/schedule/:id/substitution`                                      | admin; заміна + причина                              |
+| POST   | `/schedule/bulk`                                                  | admin; масове створення                              |
+| POST   | `/schedule/bulk/cancel`                                           | admin; масове скасування                             |
+| GET    | `/schedule/templates`                                             | admin                                                |
+| POST   | `/schedule/templates`                                             | admin                                                |
+| PUT    | `/schedule/templates/:id`                                         | admin                                                |
+| DELETE | `/schedule/templates/:id`                                         | admin; архівація                                     |
+| POST   | `/schedule/templates/:id/apply`                                   | admin; застосування шаблону                          |
+| DELETE | `/schedule/:id`                                                   | admin                                                |
 
 Стани `scheduled`, `cancelled`, `rescheduled` і `substituted` зберігаються в
 MongoDB разом із причиною, actor-метаданими та останніми 50 записами історії
-змін. Спеціалізовані workflow endpoints є основним шляхом для диспетчерських
+змін. Спеціалізовані workflow endpoints є основним шляхом для адміністративних
 операцій, а `PUT /schedule/:id` використовується для звичайного редагування.
 
 ### Курси та навчання `/api/courses`
@@ -1068,8 +1073,8 @@ MongoDB разом із причиною, actor-метаданими та ост
 
 | Метод  | Шлях                          | Доступ                          |
 | ------ | ----------------------------- | ------------------------------- |
-| POST   | `/surveys`                    | admin, dean, rector             |
-| GET    | `/surveys`                    | admin, dean (власні), rector    |
+| POST   | `/surveys`                    | admin, dean                     |
+| GET    | `/surveys`                    | admin, dean (власні), rector/president read-only |
 | GET    | `/surveys/active`             | student, teacher                |
 | GET    | `/surveys/:id`                | Авторизований                   |
 | PUT    | `/surveys/:id`                | admin, dean (тільки draft)      |
@@ -1118,41 +1123,18 @@ MongoDB разом із причиною, actor-метаданими та ост
 
 ## 8. Рольова модель доступу (RBAC)
 
-### Ієрархія ролей
+### Незалежні дозволи ролей
 
-```
-President
-└── Rector
-    └── Dean
-        └── DepartmentHead
-            └── Teacher
-
-Admin          (окрема гілка — системне адміністрування)
-Dispatcher     (окрема гілка — управління розкладом)
-Student        (базовий доступ)
-```
-
-Права успадковуються вниз по ієрархії: ректор бачить усе, що бачить декан.
+Ролі не успадковують permissions одна від одної. `RolesGuard` приймає лише
+прямий збіг явно зазначеної ролі, а `AcademicAccessService` додатково обмежує
+дані на рівні користувача, групи, кафедри, факультету або призначення курсу.
 
 ### Матриця можливостей
 
-| Можливість                     | student | teacher | dispatcher | dept_head | dean | rector | president | admin |
-| ------------------------------ | ------- | ------- | ---------- | --------- | ---- | ------ | --------- | ----- |
-| Особистий розклад              | ✅      | ✅      | ✅         | ✅        | ✅   | ✅     | ✅        | —     |
-| Редагування розкладу           | —       | —       | ✅         | —         | —    | —      | —         | ✅    |
-| Перегляд матеріалів курсів     | ✅      | ✅      | —          | ✅        | —    | —      | —         | —     |
-| Публікація матеріалів          | —       | ✅      | —          | ✅        | —    | —      | —         | —     |
-| Здача завдань                  | ✅      | —       | —          | —         | —    | —      | —         | —     |
-| Виставлення оцінок             | —       | ✅      | —          | ✅        | —    | —      | —         | —     |
-| Перегляд особистих оцінок      | ✅      | —       | —          | —         | —    | —      | —         | —     |
-| Проходження опитувань          | ✅      | ✅      | —          | —         | —    | —      | —         | —     |
-| Створення опитувань            | —       | —       | —          | —         | ✅   | ✅     | ✅        | ✅    |
-| Перегляд результатів опитувань | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
-| Вибір вибіркових дисциплін     | ✅      | —       | —          | —         | —    | —      | —         | —     |
-| Керування вибірковими дисциплінами | —   | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
-| Звіти по кафедрі               | —       | —       | —          | ✅        | ✅   | ✅     | ✅        | ✅    |
-| Управління користувачами       | —       | —       | —          | —         | —    | —      | —         | ✅    |
-| Перегляд аудит-логу            | —       | —       | —          | —         | —    | —      | —         | ✅    |
+Повна матриця можливостей підтримується в `docs/RBAC_MATRIX.md`. Критичні
+інваріанти: лише `admin` змінює користувачів і розклад; `rector` не має
+операційних mutation permissions; `president` отримує лише read-only пошук
+студентів; управлінські ролі бачать звіти у своєму scope.
 
 ---
 
@@ -1202,10 +1184,10 @@ Student        (базовий доступ)
 ### Нові ролі
 
 1. Додати значення до `Role` enum
-2. Оновити `ROLE_HIERARCHY`
-3. Додати `ROLE_LABELS` на фронтенді
-4. Оновити `Layout.tsx` — пункти меню для нової ролі
-5. Додати `@Roles()` декоратори на потрібних ендпоінтах
+2. Додати `ROLE_LABELS` на фронтенді
+3. Оновити `Layout.tsx` — пункти меню для нової ролі
+4. Додати явні `@Roles()` декоратори на потрібних ендпоінтах
+5. Оновити `docs/RBAC_MATRIX.md` і security regression tests
 
 ### База даних
 
@@ -1232,7 +1214,7 @@ Student        (базовий доступ)
 | 3   | Demo fixtures для локального seed                        | ✅ Реалізовано; не runtime data layer       |
 | 4   | AuthModule (cookies, JWT rotation, CSRF, password reset) | ✅ Реалізовано                              |
 | 5   | RBAC Guards та академічна object-level authorization     | ✅ Реалізовано                              |
-| 6   | ScheduleModule backend/frontend workflows, conflicts, audit, CSV/XLSX | ✅ Закрито: dispatcher UI, cancel/reschedule/substitution, templates, bulk |
+| 6   | ScheduleModule backend/frontend workflows, conflicts, audit, CSV/XLSX | ✅ Закрито: admin-only UI, cancel/reschedule/substitution, templates, bulk |
 | 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
 | 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
 | 9   | NotificationsModule                                     | ✅ In-app сценарії реалізовано              |
@@ -1247,7 +1229,7 @@ Student        (базовий доступ)
 | #   | Завдання                                            | Статус       |
 | --- | --------------------------------------------------- | ------------ |
 | 1   | MongoDB + Mongoose ODM замість runtime mock-даних        | ✅ Реалізовано |
-| 2   | Автоматизована стратегія schema migrations               | ⏳ У роботі   |
+| 2   | Автоматизована стратегія schema migrations               | ✅ Versioned ledger, checksum, distributed lock + heartbeat |
 | 3   | FilesModule — завантаження файлів (матеріали, здачі)     | ✅ Реалізовано |
 | 4   | CRUD усіх довідників через окремий admin UI              | ✅ Реалізовано |
 | 5   | **SurveysModule** — backend + frontend, результати/export | ✅ Реалізовано |
@@ -1271,12 +1253,12 @@ Student        (базовий доступ)
 | --- | ---------------------------------------------------------- | ------------------------------------------- |
 | 1   | HTTPS, Helmet, CORS, rate limiting, CSRF                    | ✅ Реалізовано                              |
 | 2   | CI/CD pipeline (GitHub Actions → VPS)                       | ✅ Реалізовано                              |
-| 3   | Email/push/realtime delivery для сповіщень                   | ⏳ Наступний етап                           |
+| 3   | Email/push/realtime delivery для сповіщень                   | 🟡 SSE реалізовано; email/push та distributed pub/sub далі  |
 | 4   | AuditLogModule + transactional outbox                       | ✅ Реалізовано; доменні події розширюються  |
 | 5   | Адаптивний дизайн                                           | 🟡 Основні сторінки адаптивні; потрібен QA  |
 | 6   | XLSX/CSV export                                             | ✅ Спільна інфраструктура для reports, surveys, electives, references і schedule |
 | 7   | i18n (українська + англійська)                              | ✅ Реалізовано                              |
-| 8   | Production email delivery для password reset                | ⏳ Наступний етап                           |
+| 8   | Production email delivery для password reset                | ✅ Authenticated SMTP + production env validation           |
 | 9   | Antivirus/content scanning і private object storage файлів  | ⏳ Наступний етап                           |
 
 ---
@@ -1287,7 +1269,7 @@ Student        (базовий доступ)
 online_campus/
 ├── docker-compose.yml
 ├── README.md
-├── .nvmrc                    # Node.js 20.19.5 для локальної розробки та CI
+├── .nvmrc                    # Node.js 24.17.0 LTS для локальної розробки та CI
 ├── .npmrc                    # npm policy: engine-strict, save-exact, lockfile
 ├── package.json              # root tooling: Husky Git hooks
 ├── package-lock.json
@@ -1576,7 +1558,7 @@ docker compose exec server npm run seed:demo
 ```bash
 # один раз після clone / pull
 nvm use
-npm --version # має бути 10.8.2
+npm --version # підтримується npm 11.13.x
 npm ci
 cd server && npm ci
 cd ../client && npm ci
@@ -1617,6 +1599,14 @@ AUTH_COOKIE_SAMESITE=strict
 AUTH_COOKIE_SECURE=true
 PASSWORD_RESET_TTL_MINUTES=30
 PASSWORD_RESET_EXPOSE_TOKEN=false
+PASSWORD_RESET_EMAIL_ENABLED=true
+EMAIL_FROM=campus@example.edu
+SMTP_HOST=smtp.example.edu
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=campus
+SMTP_PASSWORD=provider-app-password
+SMTP_CONNECTION_TIMEOUT_MS=10000
 SWAGGER_ENABLED=false
 
 # MongoDB
@@ -1630,6 +1620,12 @@ MONGO_REPLICA_SET_KEY=generate-with-openssl-rand-hex-48
 MONGO_RETRY_ATTEMPTS=20
 MONGO_RETRY_DELAY_MS=3000
 MONGO_SERVER_SELECTION_TIMEOUT_MS=5000
+
+# Versioned MongoDB migrations
+DB_MIGRATIONS_ENABLED=true
+DB_MIGRATION_LOCK_TTL_MS=300000
+DB_MIGRATION_WAIT_TIMEOUT_MS=60000
+DB_MIGRATION_POLL_INTERVAL_MS=1000
 
 # Transactional audit outbox
 AUDIT_TRANSACTIONAL_OUTBOX=true
@@ -1855,14 +1851,14 @@ MongoDB без автентифікації та replica-set configuration.
 
 ### Правила роботи із залежностями
 
-- Використовуйте Node.js з `.nvmrc`: `20.19.5`.
-- Підтримувані версії для проєкту: Node.js `20.19.5` і npm `10.8.2`; `engines`/`devEngines` блокують інші версії.
-- Якщо після `nvm use` npm не `10.8.2`, встановіть командний npm: `npm install -g npm@10.8.2`.
+- Рекомендована відтворювана версія з `.nvmrc`: Node.js `24.17.0` LTS із npm `11.13.0`.
+- Підтримуваний діапазон: Node.js `>=24.17.0 <25` і npm `>=11.13.0 <12`; patch-релізи в межах Node.js 24 не блокуються.
+- Якщо після `nvm use` npm застарілий, виконайте `npm install -g npm@11.13.0`.
 - Для встановлення після `pull`, `rebase` або checkout гілки використовуйте тільки `npm ci` окремо в `server` і `client`.
 - `npm install` використовуйте лише коли додаєте, видаляєте або оновлюєте залежність.
 - Якщо змінюється `package.json`, у той самий commit має потрапити відповідний `package-lock.json`.
 - Не запускайте `npm audit fix --force` без окремого review: він може підняти major versions із breaking changes.
-- `.nvmrc`, `.npmrc`, `engines`, `devEngines` і `packageManager` фіксують підтримувані версії Node/npm для всієї команди.
+- `.nvmrc` і Docker фіксують перевірений baseline, а `engines` задає підтримуваний безпечний діапазон без блокувального `devEngines`.
 - Dependabot щотижня перевіряє залежності в `/`, `/server`, `/client` і GitHub Actions.
 - У GitHub Settings для `master` потрібно увімкнути branch protection і зробити checks `Repository`, `Server` та `Client` обов'язковими перед merge.
 
@@ -1915,7 +1911,6 @@ mkdir -p /opt/online_campus && cd /opt/online_campus
 | `student2`    | Студент            | Коваленко Марія Сергіївна       |
 | `teacher1`    | Викладач           | Мельник Віктор Олегович         |
 | `teacher2`    | Викладач           | Кравченко Наталія Петрівна      |
-| `dispatcher1` | Диспетчер розкладу | Савченко Олена                  |
 | `head1`       | Завідувач кафедри  | Григоренко Петро Васильович     |
 | `dean1`       | Декан факультету   | Козлов Михайло Андрійович       |
 | `rector`      | Ректор             | Сидоренко Володимир Миколайович |

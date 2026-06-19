@@ -28,6 +28,11 @@ export class ScheduleQueryDto {
   @IsMongoId()
   teacherId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsMongoId()
+  courseAssignmentId?: string;
+
   @ApiPropertyOptional({ enum: ScheduleEntryStatus })
   @IsOptional()
   @IsEnum(ScheduleEntryStatus)

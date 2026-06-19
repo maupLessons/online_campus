@@ -314,8 +314,10 @@ export default function CourseDetailPage() {
   const { data: scheduleEntries = [] } = useQuery({
     queryKey: ["schedule", "my", id],
     queryFn: async () => {
-      const { data } = await api.get<ScheduleEntry[]>("/schedule/my");
-      return data.filter((entry) => entry.courseAssignmentId === id);
+      const { data } = await api.get<ScheduleEntry[]>("/schedule/my", {
+        params: { courseAssignmentId: id },
+      });
+      return data;
     },
     enabled: Boolean(id) && teacherMode && activeTab === "journal",
   });

@@ -204,7 +204,7 @@ export class ScheduleReaderService {
       filter.status = query.status;
     }
 
-    if (query.groupId || query.teacherId) {
+    if (query.groupId || query.teacherId || query.courseAssignmentId) {
       const assignmentIds = await this.findCourseAssignmentIds(query);
       filter.courseAssignment =
         assignmentIds.length > 0
@@ -218,7 +218,7 @@ export class ScheduleReaderService {
   private async findRequestedCourseAssignmentObjectIds(
     query: ScheduleQueryDto,
   ): Promise<Types.ObjectId[] | null> {
-    if (!query.groupId && !query.teacherId) {
+    if (!query.groupId && !query.teacherId && !query.courseAssignmentId) {
       return null;
     }
 
@@ -242,6 +242,10 @@ export class ScheduleReaderService {
     query: ScheduleQueryDto,
   ): Promise<string[]> {
     const filter: CourseAssignmentFilter = {};
+
+    if (query.courseAssignmentId) {
+      filter._id = this.mapper.toObjectId(query.courseAssignmentId);
+    }
 
     if (query.groupId) {
       filter.group = this.mapper.toObjectId(query.groupId);

@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CalendarDays,
+  BookOpenCheck,
   CheckCircle2,
   Download,
   Edit3,
@@ -24,6 +25,7 @@ import {
   type SyntheticEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import {
   ReferenceType,
   referencesApi,
@@ -122,6 +124,11 @@ export default function SchedulePage() {
   const { t, i18n } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const canManage = user?.role === Role.ADMIN || user?.role === Role.DISPATCHER;
+  const canOpenJournal =
+    user?.role === Role.TEACHER ||
+    user?.role === Role.DEPARTMENT_HEAD ||
+    user?.role === Role.DEAN ||
+    user?.role === Role.ADMIN;
   const locale = i18n.language === "en" ? "en-US" : "uk-UA";
   const exportLocale = i18n.language === "en" ? "en" : "uk";
 
@@ -705,6 +712,7 @@ export default function SchedulePage() {
                   <ScheduleEntryCard
                     key={entry.id}
                     canManage={canManage}
+                    canOpenJournal={canOpenJournal}
                     checked={selectedIds.has(entry.id)}
                     entry={entry}
                     t={t}
@@ -1230,6 +1238,7 @@ function WorkflowPanel({
 
 function ScheduleEntryCard({
   canManage,
+  canOpenJournal,
   checked,
   entry,
   onDelete,
@@ -1239,6 +1248,7 @@ function ScheduleEntryCard({
   t,
 }: {
   canManage: boolean;
+  canOpenJournal: boolean;
   checked: boolean;
   entry: ScheduleEntry;
   onDelete: (entry: ScheduleEntry) => void;
@@ -1311,8 +1321,19 @@ function ScheduleEntryCard({
             </div>
           )}
         </div>
-        {canManage && (
+        {(canManage || canOpenJournal) && (
           <div className="flex flex-wrap gap-2 lg:justify-end">
+            {canOpenJournal && (
+              <Link
+                to={`/courses/${entry.courseAssignmentId}?tab=journal`}
+                title={t("schedule.openJournal")}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 transition hover:bg-blue-100"
+              >
+                <BookOpenCheck size={16} />
+              </Link>
+            )}
+            {canManage && (
+              <>
             <IconOnlyButton
               label={t("common.edit")}
               onClick={() => onEdit(entry)}
@@ -1366,6 +1387,8 @@ function ScheduleEntryCard({
             >
               <Trash2 size={16} />
             </IconOnlyButton>
+              </>
+            )}
           </div>
         )}
       </div>

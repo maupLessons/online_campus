@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import { Role } from '../common/types/roles.enum';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from './notifications.service';
+import { NotificationsRealtimeService } from './notifications-realtime.service';
 
 type QueryMock<T> = {
   exec: jest.Mock<Promise<T>, []>;
@@ -49,6 +50,7 @@ describe('NotificationsService', () => {
   };
   let usersService: jest.Mocked<Pick<UsersService, 'findOne'>>;
   let service: NotificationsService;
+  let realtime: jest.Mocked<Pick<NotificationsRealtimeService, 'publish'>>;
 
   beforeEach(() => {
     notificationModel = {
@@ -78,10 +80,12 @@ describe('NotificationsService', () => {
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
     };
+    realtime = { publish: jest.fn() };
 
     service = new NotificationsService(
       notificationModel as never,
       usersService as unknown as UsersService,
+      realtime as unknown as NotificationsRealtimeService,
     );
   });
 

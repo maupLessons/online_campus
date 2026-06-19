@@ -47,6 +47,27 @@ export default function NotificationsBell() {
     }
   }, [queryClient, userId]);
 
+  useEffect(() => {
+    if (!isAuthChecked || !userId) {
+      return;
+    }
+
+    const source = new EventSource('/api/notifications/stream', {
+      withCredentials: true,
+    });
+    const handleChange = () => {
+      void queryClient.invalidateQueries({
+        queryKey: notificationsQueryKeys.root,
+      });
+    };
+
+    source.addEventListener('notifications.changed', handleChange);
+    return () => {
+      source.removeEventListener('notifications.changed', handleChange);
+      source.close();
+    };
+  }, [isAuthChecked, queryClient, userId]);
+
   const handleOpenNotifications = () => {
     navigate('/notifications');
   };

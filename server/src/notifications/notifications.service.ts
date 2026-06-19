@@ -16,6 +16,7 @@ import {
   Notification,
   NotificationDocument,
 } from './schemas/notification.schema';
+import { NotificationsRealtimeService } from './notifications-realtime.service';
 
 type NotificationPayload = {
   title: string;
@@ -81,10 +82,15 @@ export class NotificationsService {
     @InjectModel(Notification.name)
     private notificationModel: Model<NotificationDocument>,
     private readonly usersService: UsersService,
+    private readonly realtime: NotificationsRealtimeService,
   ) {}
 
   async create(data: CreateNotificationDto): Promise<NotificationDocument> {
-    return this.notificationModel.create(this.buildNotificationPayload(data));
+    const notification = await this.notificationModel.create(
+      this.buildNotificationPayload(data),
+    );
+    this.realtime.publish({ reason: 'created' });
+    return notification;
   }
 
   async createMany(items: CreateNotificationDto[]): Promise<void> {
@@ -96,6 +102,7 @@ export class NotificationsService {
       items.map((data) => this.buildNotificationPayload(data)),
       { ordered: false },
     );
+    this.realtime.publish({ reason: 'created' });
   }
 
   async update(
@@ -133,6 +140,7 @@ export class NotificationsService {
       throw new NotFoundException('Сповіщення не знайдено');
     }
 
+    this.realtime.publish({ reason: 'updated' });
     return this.formatNotification(notification, actorObjId);
   }
 
@@ -192,6 +200,7 @@ export class NotificationsService {
       throw new NotFoundException('Сповіщення не знайдено');
     }
 
+    this.realtime.publish({ userId, reason: 'read' });
     return this.formatNotification(notification, userObjId);
   }
 
@@ -208,6 +217,8 @@ export class NotificationsService {
         { $addToSet: { readBy: userObjId } },
       )
       .exec();
+
+    this.realtime.publish({ userId, reason: 'read' });
 
     return { success: true };
   }
@@ -230,6 +241,8 @@ export class NotificationsService {
       throw new NotFoundException('Сповіщення не знайдено');
     }
 
+    this.realtime.publish({ userId, reason: 'dismissed' });
+
     return { success: true };
   }
 
@@ -241,6 +254,8 @@ export class NotificationsService {
     if (result.deletedCount === 0) {
       throw new NotFoundException('Сповіщення не знайдено');
     }
+
+    this.realtime.publish({ reason: 'deleted' });
 
     return { success: true };
   }
@@ -258,6 +273,8 @@ export class NotificationsService {
         { $addToSet: { dismissedBy: userObjId } },
       )
       .exec();
+
+    this.realtime.publish({ userId, reason: 'dismissed' });
 
     return { success: true };
   }

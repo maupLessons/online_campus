@@ -2,13 +2,17 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   Patch,
   Post,
   Body,
   Request,
+  Sse,
   UseGuards,
 } from '@nestjs/common';
+import type { MessageEvent } from '@nestjs/common';
+import type { Observable } from 'rxjs';
 
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -17,6 +21,7 @@ import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '../common/types/roles.enum';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
+import { NotificationsRealtimeService } from './notifications-realtime.service';
 
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
@@ -25,7 +30,17 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
 export class NotificationsController {
-  constructor(private notificationsService: NotificationsService) {}
+  constructor(
+    private notificationsService: NotificationsService,
+    private readonly realtime: NotificationsRealtimeService,
+  ) {}
+
+  @Sse('stream')
+  @Header('Cache-Control', 'private, no-cache, no-transform')
+  @Header('X-Accel-Buffering', 'no')
+  stream(@Request() req: AuthenticatedRequest): Observable<MessageEvent> {
+    return this.realtime.stream(req.user.sub);
+  }
 
   @Get()
   findMy(@Request() req: AuthenticatedRequest) {

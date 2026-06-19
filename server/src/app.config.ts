@@ -33,7 +33,16 @@ export function configureApp(
     }),
   );
 
-  app.use(compression());
+  app.use(
+    compression({
+      filter: (req, res) => {
+        const contentType = String(res.getHeader('Content-Type') ?? '');
+        return contentType.includes('text/event-stream')
+          ? false
+          : compression.filter(req, res);
+      },
+    }),
+  );
   app.use(apiHealthHandler(swaggerEnabled));
   app.enableCors(buildCorsOptions());
 

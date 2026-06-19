@@ -3,6 +3,7 @@ import { validateEnvironment } from './environment.validation';
 function productionEnvironment(): Record<string, string> {
   return {
     NODE_ENV: 'production',
+    DEPLOYMENT_ENV: 'production',
     PORT: '3000',
     CLIENT_URL: 'https://campus.example.edu',
     JWT_SECRET: 'j'.repeat(64),
@@ -11,6 +12,13 @@ function productionEnvironment(): Record<string, string> {
     AUTH_COOKIE_SAMESITE: 'strict',
     SWAGGER_ENABLED: 'false',
     PASSWORD_RESET_EXPOSE_TOKEN: 'false',
+    PASSWORD_RESET_EMAIL_ENABLED: 'true',
+    EMAIL_FROM: 'campus@example.edu',
+    SMTP_HOST: 'smtp.example.edu',
+    SMTP_PORT: '587',
+    SMTP_SECURE: 'false',
+    SMTP_USER: 'campus',
+    SMTP_PASSWORD: 'smtp-app-password',
     MONGO_ROOT_USERNAME: 'campus',
     MONGO_ROOT_PASSWORD: 'm'.repeat(32),
     MONGO_DATABASE: 'campus',
@@ -21,6 +29,7 @@ function productionEnvironment(): Record<string, string> {
     AUDIT_TRANSACTIONAL_OUTBOX: 'true',
     SEED_DEMO_DATA: 'false',
     SEED_DEMO_DATA_IN_PRODUCTION: 'false',
+    DB_MIGRATIONS_ENABLED: 'true',
   };
 }
 
@@ -69,6 +78,47 @@ describe('validateEnvironment', () => {
     expect(result.AUTH_COOKIE_SECURE).toBe('false');
     expect(result.PASSWORD_RESET_EXPOSE_TOKEN).toBe('true');
     expect(result.AUDIT_TRANSACTIONAL_OUTBOX).toBe('false');
+    expect(result.DB_MIGRATIONS_ENABLED).toBe('false');
+    expect(result.PASSWORD_RESET_EMAIL_ENABLED).toBe('false');
+  });
+
+  it('requires an authenticated password-reset email transport in production', () => {
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment(),
+        SMTP_HOST: '',
+        SMTP_USER: '',
+        SMTP_PASSWORD: '',
+      }),
+    ).toThrow(/SMTP_HOST is required/);
+  });
+
+  it('allows a production runtime to disable SMTP on a development deployment', () => {
+    const environment = {
+      ...productionEnvironment(),
+      DEPLOYMENT_ENV: 'development',
+      PASSWORD_RESET_EMAIL_ENABLED: 'false',
+      PASSWORD_RESET_EXPOSE_TOKEN: 'false',
+      EMAIL_FROM: '',
+      SMTP_HOST: '',
+      SMTP_USER: '',
+      SMTP_PASSWORD: '',
+    };
+
+    const result = validateEnvironment(environment);
+
+    expect(result.NODE_ENV).toBe('production');
+    expect(result.DEPLOYMENT_ENV).toBe('development');
+    expect(result.PASSWORD_RESET_EMAIL_ENABLED).toBe('false');
+  });
+
+  it('does not allow a production deployment to disable SMTP', () => {
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment(),
+        PASSWORD_RESET_EMAIL_ENABLED: 'false',
+      }),
+    ).toThrow(/PASSWORD_RESET_EMAIL_ENABLED must be true in production/);
   });
 
   it('rejects an unauthenticated standalone MongoDB URI in production', () => {

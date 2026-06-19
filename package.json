@@ -3,22 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "npm@10.8.2",
+  "packageManager": "npm@11.13.0",
   "engines": {
-    "node": "20.19.5",
-    "npm": "10.8.2"
-  },
-  "devEngines": {
-    "runtime": {
-      "name": "node",
-      "version": "20.19.5",
-      "onFail": "error"
-    },
-    "packageManager": {
-      "name": "npm",
-      "version": "10.8.2",
-      "onFail": "error"
-    }
+    "node": ">=24.17.0 <25",
+    "npm": ">=11.13.0 <12"
   },
   "scripts": {
     "prepare": "husky",

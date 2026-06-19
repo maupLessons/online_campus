@@ -1,7 +1,6 @@
 export const Role = {
   STUDENT: 'student',
   TEACHER: 'teacher',
-  DISPATCHER: 'dispatcher',
   DEPARTMENT_HEAD: 'department_head',
   DEAN: 'dean',
   RECTOR: 'rector',
@@ -14,7 +13,6 @@ export type Role = (typeof Role)[keyof typeof Role];
 export const ROLE_LABEL_KEYS: Record<Role, string> = {
   [Role.STUDENT]: 'roles.student',
   [Role.TEACHER]: 'roles.teacher',
-  [Role.DISPATCHER]: 'roles.dispatcher',
   [Role.DEPARTMENT_HEAD]: 'roles.departmentHead',
   [Role.DEAN]: 'roles.dean',
   [Role.RECTOR]: 'roles.rector',
@@ -24,7 +22,6 @@ export const ROLE_LABEL_KEYS: Record<Role, string> = {
 export const ROLE_LABELS: Record<Role, string> = {
   [Role.STUDENT]: 'Студент',
   [Role.TEACHER]: 'Викладач',
-  [Role.DISPATCHER]: 'Диспетчер',
   [Role.DEPARTMENT_HEAD]: 'Зав. кафедри',
   [Role.DEAN]: 'Декан',
   [Role.RECTOR]: 'Ректор',

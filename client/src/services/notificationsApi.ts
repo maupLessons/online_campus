@@ -7,6 +7,14 @@ type NotificationResponse = Partial<Notification> & {
   readBy?: unknown[];
 };
 
+export type NotificationListFilters = {
+  search?: string;
+  type?: string;
+  readState?: 'read' | 'unread';
+  important?: boolean;
+  targetType?: string;
+};
+
 const normalizeNotification = (notification: NotificationResponse): Notification => ({
   id: notification.id ?? notification._id ?? '',
   userId: notification.userId ?? null,
@@ -28,22 +36,27 @@ export const isRateLimitError = (error: unknown) =>
 
 export const notificationsQueryKeys = {
   root: ['notifications'] as const,
-  all: (userId: string) => ['notifications', userId, 'list'] as const,
-  adminAll: (userId: string) =>
-    ['notifications', userId, 'admin-list'] as const,
+  all: (userId: string, filters: NotificationListFilters = {}) =>
+    ['notifications', userId, 'list', filters] as const,
+  adminAll: (userId: string, filters: NotificationListFilters = {}) =>
+    ['notifications', userId, 'admin-list', filters] as const,
   unreadCount: (userId: string) =>
     ['notifications', userId, 'unread-count'] as const,
 };
 
 export const notificationsApi = {
-  list: async () => {
-    const { data } = await api.get<NotificationResponse[]>('/notifications');
+  list: async (filters: NotificationListFilters = {}) => {
+    const { data } = await api.get<NotificationResponse[]>('/notifications', {
+      params: filters,
+    });
     return data.map(normalizeNotification);
   },
 
-  listForAdmin: async () => {
+  listForAdmin: async (filters: NotificationListFilters = {}) => {
     const { data } =
-      await api.get<NotificationResponse[]>('/notifications/admin');
+      await api.get<NotificationResponse[]>('/notifications/admin', {
+        params: filters,
+      });
     return data.map(normalizeNotification);
   },
 

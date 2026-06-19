@@ -19,7 +19,13 @@ const NAV_ITEMS: {
   {
     labelKey: 'nav.courses',
     path: '/courses',
-    roles: [Role.STUDENT, Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN],
+    roles: [
+      Role.STUDENT,
+      Role.TEACHER,
+      Role.DEPARTMENT_HEAD,
+      Role.DEAN,
+      Role.ADMIN,
+    ],
   },
   {
     labelKey: 'nav.assignments',
@@ -39,7 +45,7 @@ const NAV_ITEMS: {
   {
     labelKey: 'nav.surveyAdmin',
     path: '/surveys/admin',
-    roles: [Role.ADMIN, Role.DEAN, Role.RECTOR],
+    roles: [Role.ADMIN, Role.DEAN, Role.RECTOR, Role.PRESIDENT],
   },
   {
     labelKey: 'nav.electives',
@@ -53,8 +59,6 @@ const NAV_ITEMS: {
       Role.ADMIN,
       Role.DEPARTMENT_HEAD,
       Role.DEAN,
-      Role.RECTOR,
-      Role.PRESIDENT,
     ],
   },
   {
@@ -71,7 +75,7 @@ const NAV_ITEMS: {
   {
     labelKey: 'nav.users',
     path: '/users',
-    roles: [Role.ADMIN, Role.PRESIDENT, Role.RECTOR, Role.DEAN],
+    roles: [Role.ADMIN, Role.PRESIDENT],
   },
   {
     labelKey: 'nav.auditLog',

@@ -12,6 +12,7 @@ import { Role } from '../common/types/roles.enum';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthService } from './auth.service';
+import { PasswordResetEmailService } from './password-reset-email.service';
 
 type MockUser = {
   id: string;
@@ -61,6 +62,7 @@ describe('AuthService', () => {
       | 'findByIdWithPassword'
       | 'addRefreshTokenHash'
       | 'removeRefreshTokenHash'
+      | 'rotateRefreshTokenHash'
       | 'removeAllRefreshTokenHashes'
       | 'updatePassword'
       | 'findOne'
@@ -70,6 +72,9 @@ describe('AuthService', () => {
     >
   >;
   let auditLogService: jest.Mocked<Pick<AuditLogService, 'logAction'>>;
+  let passwordResetEmailService: jest.Mocked<
+    Pick<PasswordResetEmailService, 'sendPasswordReset' | 'isEnabled'>
+  >;
 
   beforeEach(() => {
     jwtService = {
@@ -81,6 +86,7 @@ describe('AuthService', () => {
       findByIdWithPassword: jest.fn(),
       addRefreshTokenHash: jest.fn(),
       removeRefreshTokenHash: jest.fn(),
+      rotateRefreshTokenHash: jest.fn().mockResolvedValue(true),
       removeAllRefreshTokenHashes: jest.fn(),
       updatePassword: jest.fn(),
       findOne: jest.fn(),
@@ -91,12 +97,17 @@ describe('AuthService', () => {
     auditLogService = {
       logAction: jest.fn(),
     };
+    passwordResetEmailService = {
+      sendPasswordReset: jest.fn(),
+      isEnabled: jest.fn().mockReturnValue(false),
+    };
 
     const configService = {
       get: jest.fn((key: string) => {
         if (key === 'JWT_EXPIRES_IN') return '15m';
         if (key === 'JWT_REFRESH_EXPIRES_IN') return '7d';
-        if (key === 'NODE_ENV') return 'test';
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'DEPLOYMENT_ENV') return 'development';
         if (key === 'CLIENT_URL') return 'http://localhost:5173';
         if (key === 'PASSWORD_RESET_EXPOSE_TOKEN') return 'true';
         return undefined;
@@ -107,6 +118,7 @@ describe('AuthService', () => {
       jwtService as unknown as JwtService,
       usersService as unknown as UsersService,
       auditLogService as unknown as AuditLogService,
+      passwordResetEmailService as unknown as PasswordResetEmailService,
       configService,
     );
   });
@@ -182,12 +194,9 @@ describe('AuthService', () => {
       refreshToken: 'new-refresh-token',
     });
 
-    expect(usersService.removeRefreshTokenHash).toHaveBeenCalledWith(
+    expect(usersService.rotateRefreshTokenHash).toHaveBeenCalledWith(
       user.id,
       tokenHash('old-refresh-token'),
-    );
-    expect(usersService.addRefreshTokenHash).toHaveBeenCalledWith(
-      user.id,
       tokenHash('new-refresh-token'),
     );
 
@@ -248,6 +257,7 @@ describe('AuthService', () => {
     expect(typeof result.resetToken).toBe('string');
     expect(result.resetUrl).toContain('/reset-password?token=');
     expect(typeof result.expiresAt).toBe('string');
+    expect(passwordResetEmailService.sendPasswordReset).not.toHaveBeenCalled();
     expect(auditLogService.logAction).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'auth.password_reset.request',
@@ -302,6 +312,32 @@ describe('AuthService', () => {
         result: 'success',
         userId: user.id,
       }),
+    );
+  });
+
+  it('does not reveal an SMTP delivery failure to password-reset callers', async () => {
+    const user = createUser();
+    usersService.findPasswordResetCandidate.mockResolvedValue({
+      id: user.id,
+      login: user.login,
+      email: 'admin@maup.com.ua',
+      role: Role.ADMIN,
+      status: 'active',
+    });
+    passwordResetEmailService.sendPasswordReset.mockRejectedValue(
+      new Error('SMTP unavailable'),
+    );
+    passwordResetEmailService.isEnabled.mockReturnValue(true);
+
+    const result = await service.requestPasswordReset({ identifier: 'admin' });
+
+    expect(typeof result.message).toBe('string');
+    const deliveryAudit = auditLogService.logAction.mock.calls.find(
+      ([entry]) => entry.action === 'auth.password_reset.request',
+    )?.[0];
+    expect(deliveryAudit?.result).toBe('success');
+    expect(deliveryAudit?.details).toEqual(
+      expect.objectContaining({ delivery: 'failed' }),
     );
   });
 

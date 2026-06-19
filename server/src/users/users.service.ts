@@ -81,6 +81,20 @@ export class UsersService {
       .exec();
   }
 
+  async rotateRefreshTokenHash(
+    userId: string,
+    currentHash: string,
+    nextHash: string,
+  ): Promise<boolean> {
+    const result = await this.userModel
+      .updateOne(
+        { _id: userId, refreshTokenHashes: currentHash },
+        { $set: { 'refreshTokenHashes.$': nextHash } },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
   async removeAllRefreshTokenHashes(userId: string): Promise<void> {
     await this.userModel
       .updateOne({ _id: userId }, { $set: { refreshTokenHashes: [] } })
@@ -552,8 +566,12 @@ export class UsersService {
     const scopeFilter = requester
       ? await this.academicAccessService.buildVisibleUserFilter(requester)
       : {};
+    const requestedUserFilter =
+      requester?.role === Role.PRESIDENT
+        ? { _id: id, role: Role.STUDENT }
+        : { _id: id };
     const user = await this.userModel
-      .findOne({ $and: [{ _id: id }, scopeFilter] })
+      .findOne({ $and: [requestedUserFilter, scopeFilter] })
       .select('-passwordHash')
       .populate('studentProfile.group')
       .populate({
@@ -572,6 +590,7 @@ export class UsersService {
   async findAll(
     paginationDto: PaginationDto,
     role?: Role,
+    requester?: AuthenticatedUser,
   ): Promise<PaginatedDto<UserDto>> {
     const { page, limit } = paginationDto;
     const options = {
@@ -580,7 +599,9 @@ export class UsersService {
       sort: { createdAt: -1 },
       lean: true,
     };
-    const query = role ? { role } : {};
+    const effectiveRole =
+      requester?.role === Role.PRESIDENT ? Role.STUDENT : role;
+    const query = effectiveRole ? { role: effectiveRole } : {};
     const result = await this.userModel.paginate(query, options);
     return transformToPaginatedDto(UserDto, result);
   }
@@ -598,8 +619,10 @@ export class UsersService {
       $or: [{ firstName: q }, { lastName: q }, { middleName: q }],
     };
 
-    if (role) {
-      searchFilter.role = role;
+    const effectiveRole =
+      requester?.role === Role.PRESIDENT ? Role.STUDENT : role;
+    if (effectiveRole) {
+      searchFilter.role = effectiveRole;
     }
     const scopeFilter = requester
       ? await this.academicAccessService.buildVisibleUserFilter(requester)

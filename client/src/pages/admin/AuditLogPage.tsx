@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronUp,
   ClipboardList,
+  Download,
   Filter,
   RotateCcw,
   Search,
@@ -16,6 +17,8 @@ import {
 import api from "../../services/api";
 import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import { ROLE_LABEL_KEYS } from "../../types";
+import { fetchSpreadsheetExport } from "../../services/spreadsheetExportApi";
+import { downloadBlob } from "../../utils/spreadsheetExport";
 import type {
   AuditLogEntry,
   AuditLogResult,
@@ -23,6 +26,7 @@ import type {
 } from "../../types";
 
 type AuditLogFilters = {
+  domain: AuditLogDomain | "";
   userLogin: string;
   action: string;
   result: "" | AuditLogResult;
@@ -32,7 +36,33 @@ type AuditLogFilters = {
   limit: number;
 };
 
+type AuditLogDomain =
+  | "identity"
+  | "schedule"
+  | "learning"
+  | "surveys"
+  | "electives"
+  | "references"
+  | "notifications"
+  | "reports"
+  | "files"
+  | "audit";
+
+const AUDIT_DOMAINS: AuditLogDomain[] = [
+  "identity",
+  "schedule",
+  "learning",
+  "surveys",
+  "electives",
+  "references",
+  "notifications",
+  "reports",
+  "files",
+  "audit",
+];
+
 const DEFAULT_FILTERS: AuditLogFilters = {
+  domain: "",
   userLogin: "",
   action: "",
   result: "",
@@ -59,6 +89,10 @@ function buildAuditLogParams(filters: AuditLogFilters, page: number) {
     page: page.toString(),
     limit: filters.limit.toString(),
   });
+
+  if (filters.domain) {
+    params.set("domain", filters.domain);
+  }
 
   if (filters.userLogin.trim()) {
     params.set("userLogin", filters.userLogin.trim());
@@ -106,6 +140,7 @@ export default function AuditLogPage() {
     useState<PaginatedResponse<AuditLogEntry> | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useAutoDismissState("");
 
   const locale = i18n.language.startsWith("en") ? "en-US" : "uk-UA";
@@ -176,6 +211,24 @@ export default function AuditLogPage() {
     setPage(nextPage);
   };
 
+  const handleExport = async (format: "csv" | "xlsx") => {
+    setExporting(true);
+    setError("");
+    try {
+      const params = buildAuditLogParams(appliedFilters, 1);
+      params.delete("page");
+      params.delete("limit");
+      params.set("format", format);
+      params.set("locale", i18n.language.startsWith("en") ? "en" : "uk");
+      const blob = await fetchSpreadsheetExport("/audit-log/export", { params });
+      downloadBlob(blob, `audit-log.${format}`);
+    } catch {
+      setError(t("auditLog.exportError"));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const formatDateTime = (value: string) =>
     new Intl.DateTimeFormat(locale, {
       dateStyle: "short",
@@ -199,20 +252,40 @@ export default function AuditLogPage() {
           </h1>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-gray-600">
-          {t("auditLog.rowsPerPage")}
-          <select
-            value={draftFilters.limit}
-            onChange={(event) => handleLimitChange(Number(event.target.value))}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={() => void handleExport("csv")}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
-            {[10, 25, 50].map((limit) => (
-              <option key={limit} value={limit}>
-                {limit}
-              </option>
-            ))}
-          </select>
-        </label>
+            <Download className="h-4 w-4" aria-hidden="true" />
+            CSV
+          </button>
+          <button
+            type="button"
+            disabled={exporting}
+            onClick={() => void handleExport("xlsx")}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            XLSX
+          </button>
+          <label className="flex items-center gap-2 text-sm text-gray-600">
+            {t("auditLog.rowsPerPage")}
+            <select
+              value={draftFilters.limit}
+              onChange={(event) => handleLimitChange(Number(event.target.value))}
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {[10, 25, 50].map((limit) => (
+                <option key={limit} value={limit}>
+                  {limit}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       <form
@@ -224,7 +297,27 @@ export default function AuditLogPage() {
           {t("auditLog.filters")}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-1 text-sm text-gray-600">
+            <span>{t("auditLog.domain")}</span>
+            <select
+              value={draftFilters.domain}
+              onChange={(event) =>
+                setDraftFilters((current) => ({
+                  ...current,
+                  domain: event.target.value as AuditLogDomain | "",
+                }))
+              }
+              className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">{t("auditLog.allDomains")}</option>
+              {AUDIT_DOMAINS.map((domain) => (
+                <option key={domain} value={domain}>
+                  {t(`auditLog.domains.${domain}`)}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="space-y-1 text-sm text-gray-600">
             <span>{t("auditLog.userLogin")}</span>
             <input

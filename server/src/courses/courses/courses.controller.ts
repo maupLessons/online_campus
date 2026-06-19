@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { CoursesService } from './courses.service';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
-import { RolesGuard } from '../../auth/roles.guard';
+import { Roles, RolesGuard } from '../../auth/roles.guard';
 import { ApiTags, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { CourseAssignmentDto, CourseDto } from './dto';
 import { UserDto } from '../../users/dto/user.dto';
@@ -16,11 +16,13 @@ import { RequestWithUser } from '../../common/types/request-with-user.interface'
 import { ApiPaginatedResponse } from '../../common/swagger/api-paginated.response';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginatedDto } from '../../common/dto/paginated.dto';
+import { Role } from '../../common/types/roles.enum';
 
 @ApiTags('courses')
 @ApiBearerAuth()
 @Controller('courses')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.STUDENT, Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN)
 export class CoursesController {
   constructor(private coursesService: CoursesService) {}
 

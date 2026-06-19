@@ -252,7 +252,7 @@ describe('UsersService', () => {
     model.countDocuments.mockReturnValue(query(0));
 
     await expect(
-      service.changeRole(userId, { role: Role.DISPATCHER }, objectId()),
+      service.changeRole(userId, { role: Role.DEAN }, objectId()),
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(model.countDocuments).toHaveBeenCalledWith({

@@ -11,9 +11,11 @@
     "<rootDir>/courses.e2e-spec.ts",
     "<rootDir>/electives.e2e-spec.ts",
     "<rootDir>/grades.e2e-spec.ts",
+    "<rootDir>/identity.e2e-spec.ts",
     "<rootDir>/materials.e2e-spec.ts",
     "<rootDir>/references.e2e-spec.ts",
     "<rootDir>/reports.e2e-spec.ts",
+    "<rootDir>/schedule.e2e-spec.ts",
     "<rootDir>/surveys.e2e-spec.ts"
   ],
   "detectOpenHandles": true,

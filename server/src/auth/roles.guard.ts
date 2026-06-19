@@ -5,7 +5,7 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Role, ROLE_HIERARCHY } from '../common/types/roles.enum';
+import { Role } from '../common/types/roles.enum';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 
 export const ROLES_KEY = 'roles';
@@ -29,15 +29,6 @@ export class RolesGuard implements CanActivate {
     const { user } = context.switchToHttp().getRequest<AuthenticatedRequest>();
     if (!user) return false;
 
-    const userRole = user.role;
-
-    // Direct role match
-    if (requiredRoles.includes(userRole)) {
-      return true;
-    }
-
-    // Check hierarchy: does userRole inherit any of the required roles?
-    const inherited = ROLE_HIERARCHY[userRole] || [];
-    return requiredRoles.some((role) => inherited.includes(role));
+    return requiredRoles.includes(user.role);
   }
 }

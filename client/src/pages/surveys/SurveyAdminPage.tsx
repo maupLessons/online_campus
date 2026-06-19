@@ -244,6 +244,7 @@ function statusBadgeClass(status: SurveyStatus) {
 
 function SurveyManagementRow({
   survey,
+  canManage,
   canDelete,
   onPublish,
   onClose,
@@ -252,6 +253,7 @@ function SurveyManagementRow({
   isWorking,
 }: {
   survey: Survey;
+  canManage: boolean;
   canDelete: boolean;
   onPublish: (id: string) => void;
   onClose: (id: string) => void;
@@ -334,7 +336,7 @@ function SurveyManagementRow({
             </Link>
           )}
 
-          {survey.status === SurveyStatus.DRAFT && (
+          {canManage && survey.status === SurveyStatus.DRAFT && (
             <button
               type="button"
               disabled={isWorking}
@@ -346,7 +348,7 @@ function SurveyManagementRow({
             </button>
           )}
 
-          {survey.status === SurveyStatus.DRAFT && (
+          {canManage && survey.status === SurveyStatus.DRAFT && (
             <button
               type="button"
               disabled={isWorking}
@@ -358,7 +360,7 @@ function SurveyManagementRow({
             </button>
           )}
 
-          {survey.status === SurveyStatus.ACTIVE && (
+          {canManage && survey.status === SurveyStatus.ACTIVE && (
             <button
               type="button"
               disabled={isWorking}
@@ -721,6 +723,7 @@ export default function SurveyAdminPage() {
     setFormError("");
   };
 
+  const canManage = user?.role === Role.ADMIN || user?.role === Role.DEAN;
   const canDelete = user?.role === Role.ADMIN;
 
   return (
@@ -741,8 +744,14 @@ export default function SurveyAdminPage() {
         </div>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]">
-        <form
+      <div
+        className={`grid gap-6 ${
+          canManage
+            ? "xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)]"
+            : "grid-cols-1"
+        }`}
+      >
+        {canManage && <form
           onSubmit={handleSubmit}
           className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
         >
@@ -1149,7 +1158,7 @@ export default function SurveyAdminPage() {
                   : t("surveys.admin.create")}
             </button>
           </div>
-        </form>
+        </form>}
 
         <section className="space-y-4">
           <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -1231,6 +1240,7 @@ export default function SurveyAdminPage() {
                 <SurveyManagementRow
                   key={survey.id}
                   survey={survey}
+                  canManage={canManage}
                   canDelete={canDelete}
                   isWorking={isWorking}
                   onPublish={(surveyId) => {

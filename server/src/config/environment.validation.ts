@@ -20,8 +20,17 @@ export function validateEnvironment(input: Environment): Environment {
   );
   const isProduction = nodeEnv === 'production';
   const isTest = nodeEnv === 'test';
+  const deploymentEnv = readEnum(
+    env,
+    'DEPLOYMENT_ENV',
+    ['development', 'staging', 'production'],
+    isProduction ? 'production' : 'development',
+    errors,
+  );
+  const isProductionDeployment = deploymentEnv === 'production';
 
   env.NODE_ENV = nodeEnv;
+  env.DEPLOYMENT_ENV = deploymentEnv;
   env.PORT = String(readInteger(env, 'PORT', 3000, 1, 65535, errors));
   env.CLIENT_URL = readClientUrl(
     env,
@@ -38,6 +47,14 @@ export function validateEnvironment(input: Environment): Environment {
   env.PASSWORD_RESET_EXPOSE_TOKEN = String(
     readBoolean(env, 'PASSWORD_RESET_EXPOSE_TOKEN', !isProduction, errors),
   );
+  env.PASSWORD_RESET_EMAIL_ENABLED = String(
+    readBoolean(
+      env,
+      'PASSWORD_RESET_EMAIL_ENABLED',
+      isProductionDeployment,
+      errors,
+    ),
+  );
   env.SEED_DEMO_DATA = String(
     readBoolean(env, 'SEED_DEMO_DATA', false, errors),
   );
@@ -46,6 +63,9 @@ export function validateEnvironment(input: Environment): Environment {
   );
   env.AUDIT_TRANSACTIONAL_OUTBOX = String(
     readBoolean(env, 'AUDIT_TRANSACTIONAL_OUTBOX', !isTest, errors),
+  );
+  env.DB_MIGRATIONS_ENABLED = String(
+    readBoolean(env, 'DB_MIGRATIONS_ENABLED', !isTest, errors),
   );
 
   const jwtSecret = readSecret(
@@ -99,15 +119,27 @@ export function validateEnvironment(input: Environment): Environment {
   setCookiePath(env, 'AUTH_CSRF_COOKIE_PATH', '/', errors);
   setCookiePath(env, 'AUTH_CSRF_BINDING_COOKIE_PATH', '/api', errors);
 
+  if (isProductionDeployment && !isProduction) {
+    errors.push(
+      'NODE_ENV must be production when DEPLOYMENT_ENV is production',
+    );
+  }
+
   if (isProduction) {
     assertProductionBoolean(env, 'SWAGGER_ENABLED', false, errors);
-    assertProductionBoolean(env, 'PASSWORD_RESET_EXPOSE_TOKEN', false, errors);
     assertProductionBoolean(env, 'AUTH_COOKIE_SECURE', true, errors);
     assertProductionBoolean(env, 'SEED_DEMO_DATA', false, errors);
     assertProductionBoolean(env, 'SEED_DEMO_DATA_IN_PRODUCTION', false, errors);
+    assertProductionBoolean(env, 'DB_MIGRATIONS_ENABLED', true, errors);
+  }
+
+  if (isProductionDeployment) {
+    assertProductionBoolean(env, 'PASSWORD_RESET_EXPOSE_TOKEN', false, errors);
+    assertProductionBoolean(env, 'PASSWORD_RESET_EMAIL_ENABLED', true, errors);
   }
 
   validateMongoConfiguration(env, isProduction, isTest, errors);
+  validateEmailDelivery(env, isProductionDeployment, errors);
   validatePositiveTuning(env, errors);
 
   if (errors.length > 0) {
@@ -119,6 +151,40 @@ export function validateEnvironment(input: Environment): Environment {
   }
 
   return env;
+}
+
+function validateEmailDelivery(
+  env: Environment,
+  isProductionDeployment: boolean,
+  errors: string[],
+): void {
+  const smtpPort = readInteger(env, 'SMTP_PORT', 587, 1, 65535, errors);
+  env.SMTP_PORT = String(smtpPort);
+  env.SMTP_SECURE = String(
+    readBoolean(env, 'SMTP_SECURE', smtpPort === 465, errors),
+  );
+
+  if (env.PASSWORD_RESET_EMAIL_ENABLED !== 'true') {
+    return;
+  }
+
+  requireString(env, 'SMTP_HOST', errors);
+  const emailFrom = requireString(env, 'EMAIL_FROM', errors);
+  if (emailFrom && !/^\S+@\S+\.\S+$/.test(emailFrom)) {
+    errors.push('EMAIL_FROM must be an email address');
+  }
+
+  const user = readOptionalString(env, 'SMTP_USER');
+  const password = readOptionalString(env, 'SMTP_PASSWORD');
+  if (Boolean(user) !== Boolean(password)) {
+    errors.push('SMTP_USER and SMTP_PASSWORD must be configured together');
+  }
+  if (isProductionDeployment && (!user || !password)) {
+    errors.push('Authenticated SMTP is required in production');
+  }
+
+  env.SMTP_USER = user ?? '';
+  env.SMTP_PASSWORD = password ?? '';
 }
 
 function validateMongoConfiguration(
@@ -210,6 +276,10 @@ function validatePositiveTuning(env: Environment, errors: string[]): void {
     ['AUDIT_OUTBOX_POLL_INTERVAL_MS', 500, 100, 60_000],
     ['AUDIT_OUTBOX_LOCK_TIMEOUT_MS', 30_000, 1000, 600_000],
     ['AUDIT_OUTBOX_MAX_ATTEMPTS', 10, 1, 100],
+    ['DB_MIGRATION_LOCK_TTL_MS', 300_000, 5_000, 3_600_000],
+    ['DB_MIGRATION_WAIT_TIMEOUT_MS', 60_000, 1_000, 600_000],
+    ['DB_MIGRATION_POLL_INTERVAL_MS', 1_000, 100, 10_000],
+    ['SMTP_CONNECTION_TIMEOUT_MS', 10_000, 1_000, 120_000],
   ];
 
   for (const [key, fallback, min, max] of definitions) {

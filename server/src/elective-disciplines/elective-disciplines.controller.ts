@@ -44,15 +44,9 @@ import { createAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { AuditEvent } from '../audit-log/audit.decorator';
 
-const disciplineManagers = [
-  Role.ADMIN,
-  Role.DEPARTMENT_HEAD,
-  Role.DEAN,
-  Role.RECTOR,
-  Role.PRESIDENT,
-];
+const disciplineManagers = [Role.ADMIN, Role.DEPARTMENT_HEAD, Role.DEAN];
 
-const periodManagers = [Role.ADMIN, Role.DEAN, Role.RECTOR, Role.PRESIDENT];
+const periodManagers = [Role.ADMIN, Role.DEAN];
 
 @ApiTags('elective-disciplines')
 @ApiBearerAuth()

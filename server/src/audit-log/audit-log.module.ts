@@ -7,6 +7,7 @@ import { AuditOutbox, AuditOutboxSchema } from './schemas/audit-outbox.schema';
 import { AuditOutboxProcessor } from './audit-outbox.processor';
 import { TransactionLifecycleService } from './transaction-lifecycle.service';
 import { AuditOutboxReadinessService } from './audit-outbox-readiness.service';
+import { AuditLogExportService } from './audit-log-export.service';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AuditOutboxReadinessService } from './audit-outbox-readiness.service';
     AuditOutboxProcessor,
     AuditOutboxReadinessService,
     TransactionLifecycleService,
+    AuditLogExportService,
   ],
   exports: [AuditLogService, TransactionLifecycleService],
 })

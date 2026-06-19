@@ -4,6 +4,7 @@ import type { User } from '../../types';
 import { Role, ROLE_LABEL_KEYS } from '../../types';
 import { useTranslation } from 'react-i18next';
 import CreateUserModal from '../../components/CreateUserModal';
+import { useAuthStore } from '../../store/authStore';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -12,6 +13,8 @@ export default function UsersPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const currentUser = useAuthStore((state) => state.user);
+  const canManageUsers = currentUser?.role === Role.ADMIN;
   const { t } = useTranslation();
 
   const handleToggleBlock = async (user: User) => {
@@ -54,13 +57,21 @@ export default function UsersPage() {
         <h1 className="text-2xl font-bold text-gray-900">
           {t('users.title')}
         </h1>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
-        >
-          {t('users.addUser')}
-        </button>
+        {canManageUsers && (
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors whitespace-nowrap"
+          >
+            {t('users.addUser')}
+          </button>
+        )}
       </div>
+
+      {!canManageUsers && (
+        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          {t('users.readOnlyStudentDirectory')}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
@@ -82,17 +93,19 @@ export default function UsersPage() {
             </button>
           </div>
 
-          <select
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-            className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-            <option value="">{t('users.allRoles')}</option>
-            {Object.values(Role).map((role) => (
-              <option key={role} value={role}>
-                {t(ROLE_LABEL_KEYS[role])}
-              </option>
-            ))}
-          </select>
+          {canManageUsers && (
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+              <option value="">{t('users.allRoles')}</option>
+              {Object.values(Role).map((role) => (
+                <option key={role} value={role}>
+                  {t(ROLE_LABEL_KEYS[role])}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -113,9 +126,11 @@ export default function UsersPage() {
               <th className="p-4 text-left text-xs font-semibold text-gray-500 uppercase">
                 {t('users.status')}
               </th>
-              <th className="p-4 text-left text-xs font-semibold text-gray-500 uppercase">
-              {t('users.actions')}
-              </th>
+              {canManageUsers && (
+                <th className="p-4 text-left text-xs font-semibold text-gray-500 uppercase">
+                  {t('users.actions')}
+                </th>
+              )}
             </tr>
           </thead>
 
@@ -151,8 +166,9 @@ export default function UsersPage() {
                   </span>
                 </td>
 
-                <td className="p-4">
-                  <div className="flex items-center gap-2">
+                {canManageUsers && (
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
                     <button
                       onClick={() => {
                         setEditingUser(user);
@@ -184,24 +200,27 @@ export default function UsersPage() {
                         </svg>
                       )}
                     </button>
-                  </div>
-                </td>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
 
-      <CreateUserModal
-        key={`${isCreateModalOpen ? 'open' : 'closed'}-${editingUser?.id ?? 'create'}`}
-        isOpen={isCreateModalOpen}
-        userToEdit={editingUser}
-        onClose={() => {
-          setIsCreateModalOpen(false);
-          setEditingUser(null);
-        }}
-        onSuccess={() => setRefreshKey((prev) => prev + 1)}
-      />
+      {canManageUsers && (
+        <CreateUserModal
+          key={`${isCreateModalOpen ? 'open' : 'closed'}-${editingUser?.id ?? 'create'}`}
+          isOpen={isCreateModalOpen}
+          userToEdit={editingUser}
+          onClose={() => {
+            setIsCreateModalOpen(false);
+            setEditingUser(null);
+          }}
+          onSuccess={() => setRefreshKey((prev) => prev + 1)}
+        />
+      )}
     </div>
   );
 }

@@ -32,7 +32,6 @@ type ReferenceScope = {
 
 const GLOBAL_REFERENCE_READ_ROLES = new Set<Role>([
   Role.ADMIN,
-  Role.DISPATCHER,
   Role.RECTOR,
   Role.PRESIDENT,
 ]);

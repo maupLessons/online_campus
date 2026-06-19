@@ -7,12 +7,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
+import { PasswordResetEmailService } from './password-reset-email.service';
 
 interface AuthUser {
   id: string;
@@ -90,6 +91,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly usersService: UsersService,
     private readonly auditLogService: AuditLogService,
+    private readonly passwordResetEmailService: PasswordResetEmailService,
     configService: ConfigService,
   ) {
     this.accessTokenExpiresIn =
@@ -109,8 +111,13 @@ export class AuthService {
       1000;
     this.clientUrl =
       configService.get<string>('CLIENT_URL') ?? 'http://localhost:5173';
+    const deploymentEnv =
+      configService.get<string>('DEPLOYMENT_ENV') ??
+      (configService.get<string>('NODE_ENV') === 'production'
+        ? 'production'
+        : 'development');
     this.exposePasswordResetToken =
-      configService.get<string>('NODE_ENV') !== 'production' &&
+      deploymentEnv !== 'production' &&
       configService.get<string>('PASSWORD_RESET_EXPOSE_TOKEN') === 'true';
   }
 
@@ -175,9 +182,12 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: this.accessTokenExpiresIn,
     });
-    const refreshToken = this.jwtService.sign(payload, {
-      expiresIn: this.refreshTokenExpiresIn,
-    });
+    const refreshToken = this.jwtService.sign(
+      { ...payload, jti: randomUUID() },
+      {
+        expiresIn: this.refreshTokenExpiresIn,
+      },
+    );
 
     await this.usersService.addRefreshTokenHash(
       user.id,
@@ -248,6 +258,28 @@ export class AuthService {
       expiresAt,
     );
 
+    const resetUrl = this.buildPasswordResetUrl(resetToken);
+    const emailEnabled = this.passwordResetEmailService.isEnabled();
+    let delivery: 'smtp' | 'development-response' | 'disabled' | 'failed' = this
+      .exposePasswordResetToken
+      ? 'development-response'
+      : emailEnabled
+        ? 'smtp'
+        : 'disabled';
+
+    if (emailEnabled) {
+      try {
+        await this.passwordResetEmailService.sendPasswordReset({
+          to: candidate.email,
+          login: candidate.login,
+          resetUrl,
+          expiresAt,
+        });
+      } catch {
+        delivery = 'failed';
+      }
+    }
+
     await this.auditLogService.logAction({
       userId: candidate.id,
       userLogin: candidate.login,
@@ -258,6 +290,7 @@ export class AuthService {
       result: 'success',
       details: {
         expiresAt: expiresAt.toISOString(),
+        delivery,
       },
       requestId,
     });
@@ -268,7 +301,7 @@ export class AuthService {
 
     if (this.exposePasswordResetToken) {
       response.resetToken = resetToken;
-      response.resetUrl = this.buildPasswordResetUrl(resetToken);
+      response.resetUrl = resetUrl;
       response.expiresAt = expiresAt.toISOString();
     }
 
@@ -409,8 +442,6 @@ export class AuthService {
       throw new UnauthorizedException('Невірний refresh token');
     }
 
-    await this.usersService.removeRefreshTokenHash(user.id, tokenHash);
-
     const newPayload: ValidJwtPayload = {
       sub: user.id,
       login: user.login,
@@ -419,14 +450,29 @@ export class AuthService {
     const newAccessToken = this.jwtService.sign(newPayload, {
       expiresIn: this.accessTokenExpiresIn,
     });
-    const newRefreshToken = this.jwtService.sign(newPayload, {
-      expiresIn: this.refreshTokenExpiresIn,
-    });
+    const newRefreshToken = this.jwtService.sign(
+      { ...newPayload, jti: randomUUID() },
+      { expiresIn: this.refreshTokenExpiresIn },
+    );
 
-    await this.usersService.addRefreshTokenHash(
+    const rotated = await this.usersService.rotateRefreshTokenHash(
       user.id,
+      tokenHash,
       hashToken(newRefreshToken),
     );
+    if (!rotated) {
+      await this.auditLogService.logAction({
+        userId: user.id,
+        userLogin: user.login,
+        action: 'auth.refresh',
+        ipAddress,
+        userAgent,
+        result: 'failure',
+        details: { reason: 'Concurrent refresh token reuse detected' },
+        requestId,
+      });
+      throw new UnauthorizedException('Невірний refresh token');
+    }
 
     await this.auditLogService.logAction({
       userId: user.id,

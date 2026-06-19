@@ -4,22 +4,10 @@
   "description": "",
   "author": "",
   "private": true,
-  "packageManager": "npm@10.8.2",
+  "packageManager": "npm@11.13.0",
   "engines": {
-    "node": "20.19.5",
-    "npm": "10.8.2"
-  },
-  "devEngines": {
-    "runtime": {
-      "name": "node",
-      "version": "20.19.5",
-      "onFail": "error"
-    },
-    "packageManager": {
-      "name": "npm",
-      "version": "10.8.2",
-      "onFail": "error"
-    }
+    "node": ">=24.17.0 <25",
+    "npm": ">=11.13.0 <12"
   },
   "license": "UNLICENSED",
   "scripts": {
@@ -61,6 +49,7 @@
     "mongoose-paginate-v2": "^1.9.4",
     "multer": "2.2.0",
     "nestjs-pino": "^4.6.1",
+    "nodemailer": "9.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pino": "^10.3.1",
@@ -83,6 +72,7 @@
     "@types/jest": "^29.5.14",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.10.7",
+    "@types/nodemailer": "8.0.1",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
     "eslint": "^9.18.0",

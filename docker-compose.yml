@@ -14,7 +14,7 @@ services:
       mongodb-init:
         condition: service_completed_successfully
     healthcheck:
-      test: "node -e \"fetch('http://127.0.0.1:3000/api').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""
+      test: "node -e \"fetch('http://127.0.0.1:3000/api/health/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""
       interval: 10s
       timeout: 5s
       retries: 12

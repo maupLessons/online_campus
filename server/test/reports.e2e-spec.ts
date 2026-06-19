@@ -139,7 +139,6 @@ describe('Reports (e2e)', () => {
     const head = await createActor(Role.DEPARTMENT_HEAD, 'head');
     const dean = await createActor(Role.DEAN, 'dean');
     const rector = await createActor(Role.RECTOR, 'rector');
-    const dispatcher = await createActor(Role.DISPATCHER, 'dispatcher');
     const student = await createActor(Role.STUDENT, 'student', {
       studentProfile: {
         group: groupAId,
@@ -275,7 +274,6 @@ describe('Reports (e2e)', () => {
       head,
       dean,
       rector,
-      dispatcher,
       student,
       teacher,
       departmentBId,
@@ -338,11 +336,6 @@ describe('Reports (e2e)', () => {
     await request(app.getHttpServer())
       .get('/api/reports/overview')
       .set('Authorization', `Bearer ${fixture.teacher.token}`)
-      .expect(403);
-
-    await request(app.getHttpServer())
-      .get('/api/reports/overview')
-      .set('Authorization', `Bearer ${fixture.dispatcher.token}`)
       .expect(403);
 
     await request(app.getHttpServer())

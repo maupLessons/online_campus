@@ -7,6 +7,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { ConfigService } from '@nestjs/config';
 import { AuditLogModule } from '../audit-log/audit-log.module';
+import { PasswordResetEmailService } from './password-reset-email.service';
 
 @Module({
   imports: [
@@ -27,7 +28,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, PasswordResetEmailService],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

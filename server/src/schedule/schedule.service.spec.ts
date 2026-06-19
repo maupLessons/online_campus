@@ -374,7 +374,7 @@ describe('ScheduleService', () => {
       {
         sub: ids.teacher,
         login: 'teacher1',
-        role: Role.DISPATCHER,
+        role: Role.ADMIN,
       },
     );
 

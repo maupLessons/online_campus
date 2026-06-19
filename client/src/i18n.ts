@@ -104,7 +104,6 @@ const resources = {
 
       'roles.student': 'Студент',
       'roles.teacher': 'Викладач',
-      'roles.dispatcher': 'Диспетчер',
       'roles.departmentHead': 'Зав. кафедри',
       'roles.dean': 'Декан',
       'roles.rector': 'Ректор',
@@ -233,7 +232,7 @@ const resources = {
         'Скасовано пар: {{count}}, пропущено: {{skipped}}.',
       'schedule.errors.load': 'Не вдалося завантажити розклад.',
       'schedule.errors.managementLoad':
-        'Не вдалося завантажити диспетчерські дані.',
+        'Не вдалося завантажити дані керування розкладом.',
       'schedule.errors.save': 'Не вдалося зберегти пару.',
       'schedule.errors.delete': 'Не вдалося видалити пару.',
       'schedule.errors.workflow': 'Не вдалося застосувати зміну розкладу.',
@@ -1114,7 +1113,6 @@ const resources = {
 
       'roles.student': 'Student',
       'roles.teacher': 'Teacher',
-      'roles.dispatcher': 'Dispatcher',
       'roles.departmentHead': 'Department head',
       'roles.dean': 'Dean',
       'roles.rector': 'Rector',
@@ -1241,7 +1239,8 @@ const resources = {
       'schedule.messages.bulkCancelled':
         'Cancelled classes: {{count}}, skipped: {{skipped}}.',
       'schedule.errors.load': 'Failed to load schedule.',
-      'schedule.errors.managementLoad': 'Failed to load dispatcher data.',
+      'schedule.errors.managementLoad':
+        'Failed to load schedule management data.',
       'schedule.errors.save': 'Failed to save class.',
       'schedule.errors.delete': 'Failed to delete class.',
       'schedule.errors.workflow': 'Failed to apply schedule change.',

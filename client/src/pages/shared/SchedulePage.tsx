@@ -123,7 +123,7 @@ type ApplyTemplateState = {
 export default function SchedulePage() {
   const { t, i18n } = useTranslation();
   const user = useAuthStore((state) => state.user);
-  const canManage = user?.role === Role.ADMIN || user?.role === Role.DISPATCHER;
+  const canManage = user?.role === Role.ADMIN;
   const canOpenJournal =
     user?.role === Role.TEACHER ||
     user?.role === Role.DEPARTMENT_HEAD ||

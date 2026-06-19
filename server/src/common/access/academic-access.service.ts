@@ -18,7 +18,6 @@ type MongoFilter = Record<string, unknown>;
 
 const GLOBAL_ACADEMIC_READ_ROLES = new Set<Role>([
   Role.ADMIN,
-  Role.DISPATCHER,
   Role.RECTOR,
   Role.PRESIDENT,
 ]);

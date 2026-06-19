@@ -24,7 +24,6 @@ import {
 export class ScheduleReaderService {
   private readonly privilegedScheduleRoles = new Set<Role>([
     Role.ADMIN,
-    Role.DISPATCHER,
     Role.RECTOR,
     Role.PRESIDENT,
   ]);

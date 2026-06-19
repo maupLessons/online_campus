@@ -372,7 +372,6 @@ describe('References management (e2e)', () => {
 
   it('applies role-aware read scopes and hides foreign reference objects', async () => {
     const fixture = await seedReferences();
-    const dispatcher = await createActor(Role.DISPATCHER, 'dispatcher');
 
     for (const actor of [
       fixture.student,
@@ -408,7 +407,7 @@ describe('References management (e2e)', () => {
 
     const globalCatalog = await request(app.getHttpServer())
       .get('/api/references/catalog/groups?page=1&limit=10')
-      .auth(dispatcher.token, { type: 'bearer' })
+      .auth(fixture.admin.token, { type: 'bearer' })
       .expect(200);
     expect((globalCatalog.body as CatalogBody).totalDocs).toBe(2);
 

@@ -86,14 +86,14 @@ export class ScheduleController {
   }
 
   @Get('templates')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'List active schedule templates' })
   findTemplates() {
     return this.scheduleService.findTemplates();
   }
 
   @Post('templates')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_CREATE, 'schedule-template')
   @ApiOperation({ summary: 'Create reusable schedule template' })
   createTemplate(
@@ -108,7 +108,7 @@ export class ScheduleController {
   }
 
   @Put('templates/:id')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_UPDATE, 'schedule-template')
   @ApiOperation({ summary: 'Update schedule template' })
   updateTemplate(
@@ -124,7 +124,7 @@ export class ScheduleController {
   }
 
   @Delete('templates/:id')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_DELETE, 'schedule-template')
   @ApiOperation({ summary: 'Archive schedule template' })
   deleteTemplate(
@@ -138,7 +138,7 @@ export class ScheduleController {
   }
 
   @Post('templates/:id/apply')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_APPLY, 'schedule-template')
   @ApiOperation({ summary: 'Apply schedule template to a date range' })
   applyTemplate(
@@ -155,7 +155,7 @@ export class ScheduleController {
   }
 
   @Post('bulk')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_BULK_CREATE, 'schedule')
   @ApiOperation({
     summary: 'Bulk create schedule entries with conflict checks',
@@ -172,7 +172,7 @@ export class ScheduleController {
   }
 
   @Post('bulk/cancel')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_BULK_CANCEL, 'schedule')
   @ApiOperation({ summary: 'Bulk cancel schedule entries with one reason' })
   bulkCancel(
@@ -194,7 +194,7 @@ export class ScheduleController {
   }
 
   @Post()
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_CREATE, 'schedule')
   @ApiOperation({ summary: 'Create schedule entry with conflict checks' })
   @ApiResponse({ status: 201, type: ScheduleEntryDto })
@@ -210,7 +210,7 @@ export class ScheduleController {
   }
 
   @Put(':id')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_UPDATE, 'schedule')
   @ApiOperation({ summary: 'Update schedule entry with conflict checks' })
   @ApiResponse({ status: 200, type: ScheduleEntryDto })
@@ -228,7 +228,7 @@ export class ScheduleController {
   }
 
   @Post(':id/cancel')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_CANCEL, 'schedule')
   @ApiOperation({ summary: 'Cancel schedule entry with a required reason' })
   @ApiResponse({ status: 200, type: ScheduleEntryDto })
@@ -246,7 +246,7 @@ export class ScheduleController {
   }
 
   @Post(':id/reschedule')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_RESCHEDULE, 'schedule')
   @ApiOperation({ summary: 'Move schedule entry to a new slot' })
   @ApiResponse({ status: 200, type: ScheduleEntryDto })
@@ -264,7 +264,7 @@ export class ScheduleController {
   }
 
   @Post(':id/substitution')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_SUBSTITUTE, 'schedule')
   @ApiOperation({
     summary: 'Substitute teacher/course/classroom/time for entry',
@@ -284,7 +284,7 @@ export class ScheduleController {
   }
 
   @Delete(':id')
-  @Roles(Role.DISPATCHER, Role.ADMIN)
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.SCHEDULE_DELETE, 'schedule')
   @ApiOperation({ summary: 'Delete schedule entry' })
   delete(@Param('id') id: string, @Request() req: AuthenticatedRequest) {

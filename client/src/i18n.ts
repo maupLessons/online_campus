@@ -525,6 +525,8 @@ const resources = {
       'users.searchPlaceholder': 'Пошук за ПІБ...',
       'users.searchButton': 'Знайти',
       'users.allRoles': 'Усі ролі',
+      'users.readOnlyStudentDirectory':
+        'Режим перегляду: доступний лише пошук студентів без редагування, зміни ролей або блокування.',
       'users.fullName': 'ПІБ',
       'users.role': 'Роль',
       'users.email': 'Email',
@@ -1535,6 +1537,8 @@ const resources = {
       'users.searchPlaceholder': 'Search by full name...',
       'users.searchButton': 'Search',
       'users.allRoles': 'All roles',
+      'users.readOnlyStudentDirectory':
+        'Read-only mode: only student lookup is available; editing, role changes, and blocking are disabled.',
       'users.fullName': 'Full name',
       'users.role': 'Role',
       'users.email': 'Email',

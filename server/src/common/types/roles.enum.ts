@@ -7,19 +7,3 @@ export enum Role {
   PRESIDENT = 'president',
   ADMIN = 'admin',
 }
-
-export const ROLE_HIERARCHY: Record<Role, Role[]> = {
-  [Role.STUDENT]: [],
-  [Role.TEACHER]: [],
-  [Role.DEPARTMENT_HEAD]: [Role.TEACHER],
-  [Role.DEAN]: [Role.DEPARTMENT_HEAD, Role.TEACHER],
-  [Role.RECTOR]: [Role.DEAN, Role.DEPARTMENT_HEAD, Role.TEACHER],
-  [Role.PRESIDENT]: [
-    Role.RECTOR,
-    Role.DEAN,
-    Role.DEPARTMENT_HEAD,
-    Role.TEACHER,
-    Role.STUDENT,
-  ],
-  [Role.ADMIN]: [],
-};

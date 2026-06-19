@@ -108,17 +108,35 @@ export default function App() {
           <Route
             path="courses"
             element={
-              <LazyPage>
-                <CoursesPage />
-              </LazyPage>
+              <ProtectedRoute
+                allowedRoles={[
+                  Role.STUDENT,
+                  Role.TEACHER,
+                  Role.DEPARTMENT_HEAD,
+                  Role.DEAN,
+                  Role.ADMIN,
+                ]}>
+                <LazyPage>
+                  <CoursesPage />
+                </LazyPage>
+              </ProtectedRoute>
             }
           />
           <Route
             path="courses/:id"
             element={
-              <LazyPage>
-                <CourseDetailPage />
-              </LazyPage>
+              <ProtectedRoute
+                allowedRoles={[
+                  Role.STUDENT,
+                  Role.TEACHER,
+                  Role.DEPARTMENT_HEAD,
+                  Role.DEAN,
+                  Role.ADMIN,
+                ]}>
+                <LazyPage>
+                  <CourseDetailPage />
+                </LazyPage>
+              </ProtectedRoute>
             }
           />
           <Route
@@ -161,7 +179,12 @@ export default function App() {
             path="surveys/admin"
             element={
               <ProtectedRoute
-                allowedRoles={[Role.ADMIN, Role.DEAN, Role.RECTOR]}>
+                allowedRoles={[
+                  Role.ADMIN,
+                  Role.DEAN,
+                  Role.RECTOR,
+                  Role.PRESIDENT,
+                ]}>
                 <LazyPage>
                   <SurveyAdminPage />
                 </LazyPage>
@@ -202,8 +225,6 @@ export default function App() {
                   Role.ADMIN,
                   Role.DEPARTMENT_HEAD,
                   Role.DEAN,
-                  Role.RECTOR,
-                  Role.PRESIDENT,
                 ]}>
                 <LazyPage>
                   <ElectiveAdminPage />
@@ -236,8 +257,6 @@ export default function App() {
                 allowedRoles={[
                   Role.ADMIN,
                   Role.PRESIDENT,
-                  Role.RECTOR,
-                  Role.DEAN,
                 ]}>
                 <LazyPage>
                   <UsersPage />

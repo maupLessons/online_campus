@@ -155,16 +155,9 @@ const DISCIPLINE_MANAGER_ROLES = new Set<Role>([
   Role.ADMIN,
   Role.DEPARTMENT_HEAD,
   Role.DEAN,
-  Role.RECTOR,
-  Role.PRESIDENT,
 ]);
 
-const PERIOD_MANAGER_ROLES = new Set<Role>([
-  Role.ADMIN,
-  Role.DEAN,
-  Role.RECTOR,
-  Role.PRESIDENT,
-]);
+const PERIOD_MANAGER_ROLES = new Set<Role>([Role.ADMIN, Role.DEAN]);
 
 type FinalizationBucket = {
   discipline: ElectiveDisciplineDocument;
@@ -1314,13 +1307,7 @@ export class ElectiveDisciplinesService {
     const filter: Record<string, unknown> = {
       _id: this.toObjectId(teacherId),
       role: {
-        $in: [
-          Role.TEACHER,
-          Role.DEPARTMENT_HEAD,
-          Role.DEAN,
-          Role.RECTOR,
-          Role.PRESIDENT,
-        ],
+        $in: [Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN],
       },
       status: 'active',
     };
@@ -1562,13 +1549,7 @@ export class ElectiveDisciplinesService {
       .find({
         _id: { $in: teacherIds.map((id) => this.toObjectId(id)) },
         role: {
-          $in: [
-            Role.TEACHER,
-            Role.DEPARTMENT_HEAD,
-            Role.DEAN,
-            Role.RECTOR,
-            Role.PRESIDENT,
-          ],
+          $in: [Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DEAN],
         },
         status: 'active',
       })

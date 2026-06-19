@@ -18,13 +18,22 @@ describe('SurveyAccessPolicy', () => {
       role,
     }) satisfies AuthenticatedUser;
 
-  it.each([Role.ADMIN, Role.RECTOR, Role.PRESIDENT])(
-    'grants global management scope to %s',
+  it('grants global management scope only to administrators', () => {
+    const actor = user(Role.ADMIN);
+
+    expect(policy.canCreate(actor)).toBe(true);
+    expect(policy.canManage(survey, actor)).toBe(true);
+    expect(policy.canViewResults(survey, actor)).toBe(true);
+  });
+
+  it.each([Role.RECTOR, Role.PRESIDENT])(
+    'keeps %s read-only while allowing global result review',
     (role) => {
       const actor = user(role);
 
-      expect(policy.canCreate(actor)).toBe(true);
-      expect(policy.canManage(survey, actor)).toBe(true);
+      expect(policy.canCreate(actor)).toBe(false);
+      expect(policy.canListManagedSurveys(actor)).toBe(true);
+      expect(policy.canManage(survey, actor)).toBe(false);
       expect(policy.canViewResults(survey, actor)).toBe(true);
     },
   );
@@ -47,7 +56,7 @@ describe('SurveyAccessPolicy', () => {
     expect(policy.canDelete(user(Role.DEAN))).toBe(false);
   });
 
-  it.each([Role.STUDENT, Role.TEACHER, Role.DEPARTMENT_HEAD, Role.DISPATCHER])(
+  it.each([Role.STUDENT, Role.TEACHER, Role.DEPARTMENT_HEAD])(
     'denies management operations to %s',
     (role) => {
       const actor = user(role);

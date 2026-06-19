@@ -56,7 +56,7 @@ export class SurveysController {
   ) {}
 
   @Post()
-  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @Roles(Role.ADMIN, Role.DEAN)
   @ApiOperation({ summary: 'Create a survey draft' })
   @ApiCreatedResponse({ type: SurveyDto })
   create(@Body() dto: CreateSurveyDto, @Request() req: AuthenticatedRequest) {
@@ -64,7 +64,7 @@ export class SurveysController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR, Role.PRESIDENT)
   @ApiOperation({ summary: 'List surveys for managers' })
   @ApiOkResponse({ type: SurveyDto, isArray: true })
   findAll(
@@ -90,7 +90,7 @@ export class SurveysController {
   }
 
   @Put(':id')
-  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @Roles(Role.ADMIN, Role.DEAN)
   @ApiOperation({ summary: 'Update a draft survey' })
   @ApiOkResponse({ type: SurveyDto })
   update(
@@ -102,7 +102,7 @@ export class SurveysController {
   }
 
   @Patch(':id/publish')
-  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @Roles(Role.ADMIN, Role.DEAN)
   @AuditEvent(AUDIT_ACTIONS.SURVEY_PUBLISH, 'survey')
   @ApiOperation({ summary: 'Publish a survey' })
   @ApiOkResponse({ type: SurveyDto })
@@ -115,7 +115,7 @@ export class SurveysController {
   }
 
   @Patch(':id/close')
-  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @Roles(Role.ADMIN, Role.DEAN)
   @AuditEvent(AUDIT_ACTIONS.SURVEY_CLOSE, 'survey')
   @ApiOperation({ summary: 'Close a survey' })
   @ApiOkResponse({ type: SurveyDto })

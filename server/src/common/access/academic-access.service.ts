@@ -22,11 +22,7 @@ const GLOBAL_ACADEMIC_READ_ROLES = new Set<Role>([
   Role.PRESIDENT,
 ]);
 
-const GLOBAL_USER_READ_ROLES = new Set<Role>([
-  Role.ADMIN,
-  Role.RECTOR,
-  Role.PRESIDENT,
-]);
+const GLOBAL_USER_READ_ROLES = new Set<Role>([Role.ADMIN, Role.PRESIDENT]);
 
 @Injectable()
 export class AcademicAccessService {

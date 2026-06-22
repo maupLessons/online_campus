@@ -1,6 +1,6 @@
 # Електронний Кампус МАУП — Технічна документація
 
-> Версія документа: 3.0
+> Версія документа: 3.1
 > Статус: актуальний
 
 ---
@@ -31,7 +31,7 @@
 
 ### Призначення
 
-Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, розклад, курси, оцінки, опитування, сповіщення, довідники та аудит. Moodle не вбудовується в портал як внутрішній модуль і не дублюється функціонально; він залишається окремою потужною LMS-системою, до якої портал може надати лише зовнішній перехід або, за окремим рішенням, простий SSO-вхід.
+Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, опитування, вибіркові дисципліни, сповіщення, довідники та аудит. Поточна реалізація також містить локальні модулі розкладу, курсів, завдань і оцінок. Погоджений цільовий стан передбачає отримання академічних даних із API МАУП та використання зовнішніх посилань на Moodle замість дублювання LMS-функцій.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -56,7 +56,7 @@
 ### Ключові можливості
 
 - Особисті кабінети для **7 ролей** з різними наборами функцій
-- Перегляд розкладу (день / тиждень / місяць) з перевіркою конфліктів
+- Перегляд розкладу (день / тиждень) з перевіркою конфліктів
 - Управління навчальними матеріалами, завданнями та оцінками
 - **Система опитувань** — створення, проходження студентами та викладачами, аналіз результатів
 - **Вибіркові дисципліни** — критичний модуль: вибір студентом із запропонованого переліку та фіксація результату в кабінеті
@@ -87,8 +87,9 @@
 │  │  AuthModule · UsersModule · ScheduleModule        │   │
 │  │  CoursesModule · SurveysModule                    │   │
 │  │  NotificationsModule · ReferencesModule           │   │
-│  │  ElectiveDisciplinesModule                         │   │
-│  │  AuditLogModule                                   │   │
+│  │  ElectiveDisciplinesModule · ReportsModule         │   │
+│  │  AuditLogModule · FilesModule                      │   │
+│  │  DatabaseMigrationsModule · MaupStudentApiModule   │   │
 │  └──────────────────────────────────────────────────┘   │
 │                                                          │
 │  ┌──────────────────────────────────────────────────┐   │
@@ -117,7 +118,8 @@
 
 | Технологія      | Версія | Призначення                           |
 | --------------- | ------ | ------------------------------------- |
-| Node.js         | 20 LTS | Runtime                               |
+| Node.js         | 24.17  | Runtime                               |
+| npm             | 11.13  | Package manager                       |
 | NestJS          | 11     | Framework (модулі, DI, guards, pipes) |
 | TypeScript      | 5      | Типізація                             |
 | Passport.js     | —      | Стратегія JWT-аутентифікації          |
@@ -125,8 +127,8 @@
 | bcryptjs        | —      | Хешування паролів                     |
 | class-validator | —      | Валідація DTO                         |
 | Helmet          | —      | HTTP security headers                 |
-| Mongoose        | —      | ODM для MongoDB [Phase 2]             |
-| MongoDB         | 7      | База даних [Phase 2]                  |
+| Mongoose        | 9      | ODM для MongoDB                       |
+| MongoDB         | 7      | База даних                            |
 
 ### Фронтенд
 
@@ -192,21 +194,23 @@
 
 **Файли:** `src/users/`
 
-**Відповідальність:** управління обліковими записами, пошук, фільтрація за роллю, перегляд профілів.
+**Відповідальність:** управління обліковими записами, серверна пагінація, пошук за кількома частинами ПІБ, фільтрація за роллю та перегляд профілів. Ректор і президент мають глобальний read-only доступ до каталогу; мутації доступні лише адміністратору.
 
 **Ендпоінти та доступ:**
 
 | Метод | Шлях                       | Доступ                         |
 | ----- | -------------------------- | ------------------------------ |
-| GET   | `/users`                   | admin; president — лише студенти, read-only |
-| GET   | `/users/search?q=&role=`   | admin, president, dean, department_head; scoped |
-| GET   | `/users/:id`               | admin, president (лише студент), dean; scoped |
+| GET   | `/users?page=&limit=&role=&search=` | admin, rector, president; глобальний read-only для rector/president |
+| GET   | `/users/search?q=&role=`   | admin, rector, president, dean, department_head; scoped для dean/department_head |
+| GET   | `/users/:id`               | admin, rector, president, dean; scoped для dean |
 | GET   | `/users/group/:groupId`    | teacher+                       |
 | GET   | `/users/department/:depId` | department_head+               |
 | POST  | `/users`                   | admin                          |
 | PATCH | `/users/:id`               | admin (часткове оновлення)     |
 | PATCH | `/users/:id/block`         | admin                          |
 | PATCH | `/users/:id/role`          | admin                          |
+
+`GET /users` повертає стандартний `PaginatedDto<UserDto>`. Дозволені розміри сторінки — від 1 до 100; frontend пропонує 10, 25 або 50 записів. Пошук обмежено 100 символами, він нечутливий до регістру та підтримує до трьох частин ПІБ у довільному порядку.
 
 ---
 
@@ -256,6 +260,10 @@
 повноцінну адміністративну UI для створення, редагування, видалення, скасування,
 перенесення, замін, шаблонів та масового скасування.
 
+> **Погоджений напрямок:** офіційний основний і сесійний розклад має надходити
+> з API МАУП. Локальний ScheduleModule залишається описом поточної реалізації до
+> авторизованої перевірки зовнішнього контракту та окремого плану переходу.
+
 ---
 
 ### 4.4 CoursesModule
@@ -263,6 +271,11 @@
 **Файли:** `src/courses/`
 
 **Відповідальність:** дисципліни, матеріали, завдання, здачі, оцінки та електронний журнал занять у межах порталу. Викладач бачить закріплені дисципліни, студентів групи, веде теми занять, відвідування та поточні оцінки. Матеріали й завдання можуть містити файли, критерії оцінювання та безпечні HTTPS-посилання на Moodle, Google Classroom, силабуси, робочі програми або інші зовнішні навчальні ресурси без дублювання повноцінної LMS усередині порталу.
+
+> **Погоджений напрямок:** на поточному етапі студентський навчальний контур має
+> використовувати зовнішні посилання на Moodle, а офіційні оцінки — API МАУП.
+> Видалення або приховування локальних workflow буде окремою зміною після
+> затвердження міграційного сценарію; цей розділ документує наявний код.
 
 **Ендпоінти та доступ:**
 
@@ -758,6 +771,41 @@ interface AuditLogEntry {
 MongoDB E2E quality gate:
 `npm run test:e2e:db -- reports.e2e-spec.ts`.
 
+### 4.11 FilesModule
+
+**Файли:** `src/files/`
+
+**Поточний стан:** авторизоване завантаження й завантаження файлів із
+перевіркою ownership/scope, випадковими storage names, обмеженням розміру та
+allow-list розширень і declared MIME. Файли зберігаються на приватному
+локальному volume і віддаються через контрольований backend endpoint.
+
+**Production gap:** content inspection ще не реалізовано. Перед production
+потрібні quarantine, magic-byte/container validation, antivirus scanning і
+private object storage із контрольованою видачею файлів.
+
+### 4.12 DatabaseMigrationsModule
+
+**Файли:** `src/database-migrations/`
+
+Автоматичні MongoDB migrations використовують версійний ledger, checksum,
+distributed lock, heartbeat і fail-closed перевірку невідомих або змінених
+migrations. У production `DB_MIGRATIONS_ENABLED=true` є обов'язковим.
+
+### 4.13 MaupStudentApiModule
+
+**Файли:** `src/integrations/maup-student-api/`
+
+Підготовлено вимкнений за замовчуванням backend-only клієнт студентського API:
+Basic credentials не передаються у browser, доступні timeout, обмежені retry,
+circuit breaker, ліміт відповіді, нормалізація зовнішніх помилок і безпечний
+mapper без копіювання ІПН та фінансових полів до профільної моделі.
+
+Модуль не підключений до користувацьких сценаріїв і не виконує зовнішніх
+запитів, доки `MAUP_API_ENABLED=false`. URL та credentials не зберігаються в
+репозиторії. Умови активації описані в
+[`docs/integrations/maup-student-api.md`](docs/integrations/maup-student-api.md).
+
 ---
 
 ## 5. Компоненти фронтенду
@@ -833,7 +881,7 @@ src/
 | Опитування | participate | participate | — | manage own | results | results | manage |
 | Вибіркові дисципліни | select | — | manage scoped | manage | — | — | manage |
 | Аналітичні звіти | — | — | scoped | scoped | global | global | global |
-| Користувачі | — | — | scoped search | scoped search | — | student read-only | manage |
+| Користувачі | — | — | scoped search | scoped search | global read-only | global read-only | manage |
 | Аудит | — | — | — | — | — | — | read/export |
 | Довідники | scoped read | scoped read | scoped read | scoped read | read | read | manage |
 
@@ -1009,9 +1057,9 @@ AuditLogEntry
 
 | Метод | Шлях                       | Доступ                         |
 | ----- | -------------------------- | ------------------------------ |
-| GET   | `/users`                   | admin; president — лише студенти, read-only |
-| GET   | `/users/search?q=&role=`   | admin+                         |
-| GET   | `/users/:id`               | admin, president (лише студент), dean |
+| GET   | `/users?page=&limit=&role=&search=` | admin, rector, president; paginated read-only для rector/president |
+| GET   | `/users/search?q=&role=`   | admin, rector, president, dean, department_head |
+| GET   | `/users/:id`               | admin, rector, president, dean |
 | POST  | `/users`                   | admin                          |
 | PATCH | `/users/:id`               | admin                          |
 | PATCH | `/users/:id/block`         | admin                          |
@@ -1132,9 +1180,9 @@ MongoDB разом із причиною, actor-метаданими та ост
 ### Матриця можливостей
 
 Повна матриця можливостей підтримується в `docs/RBAC_MATRIX.md`. Критичні
-інваріанти: лише `admin` змінює користувачів і розклад; `rector` не має
-операційних mutation permissions; `president` отримує лише read-only пошук
-студентів; управлінські ролі бачать звіти у своєму scope.
+інваріанти: лише `admin` змінює користувачів і розклад; `rector` та
+`president` не мають операційних mutation permissions, але отримують глобальний
+read-only каталог користувачів; управлінські ролі бачать звіти у своєму scope.
 
 ---
 
@@ -1218,10 +1266,10 @@ MongoDB разом із причиною, actor-метаданими та ост
 | 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
 | 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
 | 9   | NotificationsModule                                     | ✅ In-app сценарії реалізовано              |
-| 10  | UsersModule                                             | ✅ Реалізовано                              |
+| 10  | UsersModule                                             | ✅ Paginated каталог, multi-part пошук, admin mutations, rector/president read-only |
 | 11  | React auth flow (Zustand, cookies, interceptors)         | ✅ Реалізовано                              |
 | 12  | React layout, lazy routes, RBAC navigation, i18n         | ✅ Реалізовано                              |
-| 13  | Role-based frontend pages                               | ✅ 18 page components                       |
+| 13  | Role-based frontend pages                               | ✅ 20 page components                       |
 | 14  | Docker Compose + MongoDB replica set                    | ✅ Реалізовано                              |
 
 ### Фаза 2 — База даних + File Upload + Опитування
@@ -1260,6 +1308,7 @@ MongoDB разом із причиною, actor-метаданими та ост
 | 7   | i18n (українська + англійська)                              | ✅ Реалізовано                              |
 | 8   | Production email delivery для password reset                | ✅ Authenticated SMTP + production env validation           |
 | 9   | Antivirus/content scanning і private object storage файлів  | ⏳ Наступний етап                           |
+| 10  | Backend-каркас студентського API МАУП                      | ✅ Підготовлено й вимкнено; активація після contract check |
 
 ---
 
@@ -1434,6 +1483,20 @@ online_campus/
 │       │   ├── reports-analytics.service.spec.ts
 │       │   └── reports-exporter.spec.ts
 │       │
+│       ├── database-migrations/ # versioned MongoDB migrations and distributed lock
+│       │   ├── database-migrations.module.ts
+│       │   ├── database-migrations.service.ts
+│       │   ├── database-migrations.registry.ts
+│       │   └── database-migration.types.ts
+│       │
+│       ├── integrations/
+│       │   └── maup-student-api/ # disabled backend-only MAUP API client
+│       │       ├── maup-student-api.module.ts
+│       │       ├── maup-student-api.client.ts
+│       │       ├── maup-student-api.mapper.ts
+│       │       ├── maup-student-api.error.ts
+│       │       └── maup-student-api.types.ts
+│       │
 │       ├── seed-data/         # optional demo data seeders for local fixtures
 │       │   ├── seed.module.ts
 │       │   ├── seed.service.ts
@@ -1607,6 +1670,20 @@ SMTP_SECURE=false
 SMTP_USER=campus
 SMTP_PASSWORD=provider-app-password
 SMTP_CONNECTION_TIMEOUT_MS=10000
+
+# MAUP student API (backend only; disabled until authenticated contract check)
+MAUP_API_ENABLED=false
+MAUP_API_BASE_URL=
+MAUP_API_ALLOWED_HOST=
+MAUP_API_REQUEST_METHOD=POST
+MAUP_API_USERNAME=
+MAUP_API_PASSWORD=
+MAUP_API_TIMEOUT_MS=10000
+MAUP_API_RETRY_ATTEMPTS=2
+MAUP_API_CIRCUIT_FAILURE_THRESHOLD=5
+MAUP_API_CIRCUIT_RESET_TIMEOUT_MS=30000
+MAUP_API_MAX_RESPONSE_BYTES=5000000
+
 SWAGGER_ENABLED=false
 
 # MongoDB
@@ -1669,6 +1746,12 @@ Demo seeders копіюють fixture-дані з `server/src/common/mock-data` 
 `SEED_DEMO_DATA=false` і створюйте реальних адміністраторів контрольованою
 процедурою.
 
+Поки інтеграція з API МАУП вимкнена, `MAUP_API_*` не потрібно додавати ані до
+GitHub Secrets, ані до `.env` на Hetzner. Перед активацією потрібно окремо
+перевірити автентифікований контракт, додати передачу змінних у deploy workflow
+та безпечно налаштувати URL, allow-listed host і credentials у цільовому
+середовищі. Реальний endpoint і credentials у репозиторії не зберігаються.
+
 У локальному `docker-compose.yml` MongoDB доступна backend-контейнеру через
 внутрішню Docker network (`mongodb:27017`) і не публікується на host-порт за
 замовчуванням. Це прибирає конфлікти з локально встановленою MongoDB або іншими
@@ -1676,25 +1759,17 @@ Demo seeders копіюють fixture-дані з `server/src/common/mock-data` 
 
 ### Production (VPS)
 
-Для 5000 користувачів достатньо одного сервера. Рекомендована конфігурація:
+Поточне розгортання використовує репозиторний `docker-compose.yml`: один
+backend-контейнер NestJS, один frontend-контейнер Nginx, MongoDB single-node
+replica set та одноразовий `mongodb-init`. Окремого
+`docker-compose.prod.yml` у проєкті немає.
 
-**Hetzner CX31** (або аналог): 4 vCPU, 8 GB RAM, 80 GB SSD — ~€12/міс.
-
-На сервері запускається `docker-compose.prod.yml`:
-
-```yaml
-services:
-  server: # NestJS — 2 replicas (через docker compose scale або Traefik)
-  client: # Nginx + React build
-  mongo: # MongoDB 7
-  # Traefik або Nginx як reverse proxy з SSL (Let's Encrypt)
-```
-
-**Орієнтовна ємність при 5000 юзерів:**
-
-- Пікове одночасне навантаження ~500 активних сесій
-- NestJS на Node.js легко тримає 1000+ req/s на CX31
-- MongoDB з індексами — без проблем для такого обсягу
+Розмір VPS і допустиме навантаження ще не підтверджені benchmark або load test,
+тому конфігурацію Hetzner потрібно обирати за результатами вимірювань на
+production-like даних. Горизонтальне масштабування backend також потребує
+винесення локального file storage у private object storage або інше спільне
+сховище. Reverse proxy, TLS, backup/restore і monitoring мають бути частиною
+окремого production runbook.
 
 ---
 
@@ -1788,7 +1863,8 @@ CI окремо запускає `academic-access.e2e-spec.ts`, який бло�
 Запускається після push у `master`. Workflow підключається до VPS через SSH, виконує `git pull origin master`, записує `.env` із GitHub Secrets і запускає `docker compose up --build -d`.
 
 Deploy workflow передає обов'язкові `MONGO_*`, `JWT_SECRET`, `PORT`,
-`CLIENT_URL`, `AUTH_CSRF_SECRET` та optional `AUTH_*`/`AUDIT_*` secrets.
+`CLIENT_URL`, `AUTH_CSRF_SECRET` та optional `AUTH_*`, `AUDIT_*`, SMTP і
+database migration settings.
 `MONGO_REPLICA_SET_KEY` є обов'язковим і має бути окремим випадковим секретом
 для кожного середовища. Порожні optional secrets не записуються в `.env`,
 тому застосунок використовує кодові defaults; `AUTH_COOKIE_SECURE` та
@@ -1796,30 +1872,9 @@ Deploy workflow передає обов'язкові `MONGO_*`, `JWT_SECRET`, `P
 `true`. `DEPLOYMENT_ENV` за замовчуванням дорівнює `production`; SMTP secrets
 вимагаються лише коли `PASSWORD_RESET_EMAIL_ENABLED=true`.
 
-```yaml
-name: Deploy
-
-on:
-  push:
-    branches: [master]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT }}
-          script: |
-            cd /opt/online_campus
-            git pull origin master
-            docker compose up --build -d
-            docker image prune -f
-```
+Повна логіка sanitization, required/optional values і defaults підтримується в
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). README навмисно
+не дублює workflow, щоб документація не розходилася з кодом розгортання.
 
 ### Secrets для GitHub Actions
 
@@ -1836,7 +1891,6 @@ jobs:
 | `MONGO_PORT` | порт MongoDB |
 | `MONGO_REPLICA_SET_NAME` | optional; назва replica set (`rs0` за замовчуванням) |
 | `MONGO_REPLICA_SET_KEY` | обов'язковий keyfile secret; згенерувати `openssl rand -hex 48` |
-| `MONGODB_URI` | optional alternative до окремих `MONGO_*`; у production має містити credentials, database name і replica set для transactional outbox |
 | `JWT_SECRET` | секрет для JWT |
 | `PORT` | порт backend |
 | `CLIENT_URL` | URL frontend для CORS і reset links |
@@ -1861,13 +1915,21 @@ jobs:
 | `SMTP_SECURE` | optional; `true` для SMTPS/465, інакше `false` |
 | `SMTP_USER` | обов'язковий у production, коли SMTP увімкнений |
 | `SMTP_PASSWORD` | обов'язковий у production, коли SMTP увімкнений |
+| `SMTP_CONNECTION_TIMEOUT_MS` | optional; timeout SMTP connection (`10000` за замовчуванням) |
 | `AUDIT_TRANSACTIONAL_OUTBOX` | `true` для атомарного доменного запису та аудиту |
 | `AUDIT_OUTBOX_POLL_INTERVAL_MS` | optional; інтервал доставки audit-подій |
 | `AUDIT_OUTBOX_LOCK_TIMEOUT_MS` | optional; timeout відновлення завислого worker lock |
 | `AUDIT_OUTBOX_MAX_ATTEMPTS` | optional; кількість спроб до dead-letter state |
+| `DB_MIGRATIONS_ENABLED` | optional; deploy default `true`, у production має залишатися `true` |
+| `DB_MIGRATION_LOCK_TTL_MS` | optional; TTL distributed migration lock (`300000` за замовчуванням) |
+| `DB_MIGRATION_WAIT_TIMEOUT_MS` | optional; максимальне очікування migration lock (`60000`) |
+| `DB_MIGRATION_POLL_INTERVAL_MS` | optional; інтервал перевірки migration lock (`1000`) |
 | `SWAGGER_ENABLED` | `true` для dev, `false`/unset у production; Swagger вимкнений у production за замовчуванням |
-| `SEED_DEMO_DATA` | optional; `true` тільки для локальних fixture-даних, `false`/unset для shared dev/prod |
-| `SEED_DEMO_DATA_IN_PRODUCTION` | emergency/demo-only override; не додавати у production secrets |
+
+`SEED_DEMO_DATA` і `SEED_DEMO_DATA_IN_PRODUCTION` не є GitHub Secrets:
+workflow завжди записує для них `false`. `MONGODB_URI` також не передається
+поточним workflow, який формує підключення з окремих `MONGO_*` значень.
+`MAUP_API_*` не налаштовуються до окремого рішення про активацію інтеграції.
 
 `ConfigModule` застосовує централізовану fail-fast схему. Для
 `NODE_ENV=production` застосунок не запуститься зі слабкими або placeholder

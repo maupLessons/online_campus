@@ -13,6 +13,7 @@ type ModelMock = {
   findByIdAndUpdate: jest.Mock;
   findOne: jest.Mock;
   countDocuments: jest.Mock;
+  paginate: jest.Mock;
 };
 
 function objectId(): string {
@@ -45,6 +46,11 @@ function userResponse(overrides: Record<string, unknown> = {}) {
 describe('UsersService', () => {
   let service: UsersService;
   let model: ModelMock;
+  let academicAccessService: {
+    buildVisibleUserFilter: jest.Mock;
+    canAccessGroup: jest.Mock;
+    canAccessDepartment: jest.Mock;
+  };
   let removeAllRefreshTokenHashesSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -53,19 +59,64 @@ describe('UsersService', () => {
       findByIdAndUpdate: jest.fn(),
       findOne: jest.fn(),
       countDocuments: jest.fn(),
+      paginate: jest.fn(),
     };
 
-    service = new UsersService(
-      model as never,
-      {
-        buildVisibleUserFilter: jest.fn().mockResolvedValue({}),
-        canAccessGroup: jest.fn().mockResolvedValue(true),
-        canAccessDepartment: jest.fn().mockResolvedValue(true),
-      } as never,
-    );
+    academicAccessService = {
+      buildVisibleUserFilter: jest.fn().mockResolvedValue({}),
+      canAccessGroup: jest.fn().mockResolvedValue(true),
+      canAccessDepartment: jest.fn().mockResolvedValue(true),
+    };
+
+    service = new UsersService(model as never, academicAccessService as never);
     removeAllRefreshTokenHashesSpy = jest
       .spyOn(service, 'removeAllRefreshTokenHashes')
       .mockResolvedValue(undefined);
+  });
+
+  it('paginates a role-filtered multi-part name search', async () => {
+    model.paginate.mockResolvedValue({
+      docs: [userResponse({ role: Role.STUDENT })],
+      totalDocs: 31,
+      limit: 25,
+      page: 2,
+      totalPages: 2,
+      hasNextPage: false,
+      hasPrevPage: true,
+      nextPage: null,
+      prevPage: 1,
+    });
+    const requester = {
+      sub: objectId(),
+      login: 'rector',
+      role: Role.RECTOR,
+    };
+
+    const result = await service.findAll(
+      { page: 2, limit: 25 },
+      Role.STUDENT,
+      'Петренко Іван',
+      requester,
+    );
+
+    const [filter, options] = model.paginate.mock.calls[0] as [
+      { $and: Array<Record<string, unknown>> },
+      Record<string, unknown>,
+    ];
+    expect(filter.$and[0]).toEqual({ role: Role.STUDENT });
+    expect(filter.$and).toHaveLength(3);
+    expect(filter.$and[1]).toHaveProperty('$or');
+    expect(filter.$and[2]).toHaveProperty('$or');
+    expect(options).toMatchObject({ page: 2, limit: 25, lean: true });
+    expect(academicAccessService.buildVisibleUserFilter).toHaveBeenCalledWith(
+      requester,
+    );
+    expect(result).toMatchObject({
+      totalDocs: 31,
+      page: 2,
+      totalPages: 2,
+      hasPrevPage: true,
+    });
   });
 
   it('changes a student to teacher, clears the student profile and resets refresh sessions', async () => {

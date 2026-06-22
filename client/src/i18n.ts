@@ -525,8 +525,17 @@ const resources = {
       'users.searchPlaceholder': 'Пошук за ПІБ...',
       'users.searchButton': 'Знайти',
       'users.allRoles': 'Усі ролі',
-      'users.readOnlyStudentDirectory':
-        'Режим перегляду: доступний лише пошук студентів без редагування, зміни ролей або блокування.',
+      'users.readOnlyDirectory':
+        'Режим перегляду: редагування, зміна ролей і блокування користувачів недоступні.',
+      'users.loading': 'Завантаження користувачів...',
+      'users.empty': 'Користувачів не знайдено',
+      'users.loadError': 'Не вдалося завантажити користувачів',
+      'users.actionError': 'Не вдалося змінити статус користувача',
+      'users.perPage': 'На сторінці',
+      'users.pageInfo':
+        'Сторінка {{page}} з {{total}} · Усього користувачів: {{count}}',
+      'users.previous': 'Назад',
+      'users.next': 'Далі',
       'users.fullName': 'ПІБ',
       'users.role': 'Роль',
       'users.email': 'Email',
@@ -1537,8 +1546,17 @@ const resources = {
       'users.searchPlaceholder': 'Search by full name...',
       'users.searchButton': 'Search',
       'users.allRoles': 'All roles',
-      'users.readOnlyStudentDirectory':
-        'Read-only mode: only student lookup is available; editing, role changes, and blocking are disabled.',
+      'users.readOnlyDirectory':
+        'Read-only mode: editing, role changes, and blocking are disabled.',
+      'users.loading': 'Loading users...',
+      'users.empty': 'No users found',
+      'users.loadError': 'Could not load users',
+      'users.actionError': 'Could not change the user status',
+      'users.perPage': 'Per page',
+      'users.pageInfo':
+        'Page {{page}} of {{total}} · Total users: {{count}}',
+      'users.previous': 'Previous',
+      'users.next': 'Next',
       'users.fullName': 'Full name',
       'users.role': 'Role',
       'users.email': 'Email',

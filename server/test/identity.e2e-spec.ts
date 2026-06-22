@@ -224,6 +224,28 @@ describe('Identity and session security (e2e)', () => {
     const rectorCookies = cookieHeader(rectorSession);
     const rectorCsrfToken = cookieValue(rectorSession, 'campus_csrf_token');
 
+    const directory = await request(app.getHttpServer())
+      .get('/api/users?page=1&limit=10&search=Created%20Teacher')
+      .set('Cookie', rectorCookies)
+      .expect(200);
+    const directoryBody = responseBody<{
+      docs: Array<{ id: string; role: Role }>;
+      totalDocs: number;
+      page: number;
+      totalPages: number;
+    }>(directory);
+    expect(directoryBody.docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: created?._id.toString(),
+          role: Role.TEACHER,
+        }),
+      ]),
+    );
+    expect(directoryBody.totalDocs).toBeGreaterThanOrEqual(1);
+    expect(directoryBody.page).toBe(1);
+    expect(directoryBody.totalPages).toBeGreaterThanOrEqual(1);
+
     await request(app.getHttpServer())
       .patch(`/api/users/${created?._id.toString()}`)
       .set('Cookie', rectorCookies)

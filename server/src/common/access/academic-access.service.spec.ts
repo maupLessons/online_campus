@@ -50,6 +50,19 @@ describe('AcademicAccessService', () => {
     );
   });
 
+  it.each([Role.ADMIN, Role.RECTOR, Role.PRESIDENT])(
+    'grants %s a global read-only user scope',
+    async (role) => {
+      await expect(
+        service.buildVisibleUserFilter({
+          sub: new Types.ObjectId().toHexString(),
+          login: role,
+          role,
+        }),
+      ).resolves.toEqual({});
+    },
+  );
+
   it('limits students to standard courses and explicitly enrolled electives', async () => {
     userModel.findById.mockReturnValue(
       query({ studentProfile: { group: groupId } }),

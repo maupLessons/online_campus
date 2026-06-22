@@ -80,6 +80,43 @@ describe('validateEnvironment', () => {
     expect(result.AUDIT_TRANSACTIONAL_OUTBOX).toBe('false');
     expect(result.DB_MIGRATIONS_ENABLED).toBe('false');
     expect(result.PASSWORD_RESET_EMAIL_ENABLED).toBe('false');
+    expect(result.MAUP_API_ENABLED).toBe('false');
+    expect(result.MAUP_API_BASE_URL).toBe('');
+  });
+
+  it('requires credentials only when the MAUP integration is enabled', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'test',
+        MONGODB_URI: 'mongodb://127.0.0.1:27017/campus-test',
+        MAUP_API_ENABLED: 'true',
+      }),
+    ).toThrow(/MAUP_API_USERNAME is required/);
+
+    const result = validateEnvironment({
+      NODE_ENV: 'test',
+      MONGODB_URI: 'mongodb://127.0.0.1:27017/campus-test',
+      MAUP_API_ENABLED: 'true',
+      MAUP_API_BASE_URL: 'https://students-api.example.test/api',
+      MAUP_API_ALLOWED_HOST: 'students-api.example.test',
+      MAUP_API_USERNAME: 'integration-user',
+      MAUP_API_PASSWORD: 'integration-password',
+    });
+
+    expect(result.MAUP_API_REQUEST_METHOD).toBe('POST');
+  });
+
+  it('restricts the production MAUP integration to its approved HTTPS host', () => {
+    expect(() =>
+      validateEnvironment({
+        ...productionEnvironment(),
+        MAUP_API_ENABLED: 'true',
+        MAUP_API_BASE_URL: 'http://127.0.0.1:8080/api',
+        MAUP_API_ALLOWED_HOST: '127.0.0.1',
+        MAUP_API_USERNAME: 'integration-user',
+        MAUP_API_PASSWORD: 'integration-password',
+      }),
+    ).toThrow(/MAUP_API_BASE_URL must use HTTPS in production/);
   });
 
   it('requires an authenticated password-reset email transport in production', () => {

@@ -566,12 +566,8 @@ export class UsersService {
     const scopeFilter = requester
       ? await this.academicAccessService.buildVisibleUserFilter(requester)
       : {};
-    const requestedUserFilter =
-      requester?.role === Role.PRESIDENT
-        ? { _id: id, role: Role.STUDENT }
-        : { _id: id };
     const user = await this.userModel
-      .findOne({ $and: [requestedUserFilter, scopeFilter] })
+      .findOne({ $and: [{ _id: id }, scopeFilter] })
       .select('-passwordHash')
       .populate('studentProfile.group')
       .populate({
@@ -590,6 +586,7 @@ export class UsersService {
   async findAll(
     paginationDto: PaginationDto,
     role?: Role,
+    search?: string,
     requester?: AuthenticatedUser,
   ): Promise<PaginatedDto<UserDto>> {
     const { page, limit } = paginationDto;
@@ -599,9 +596,31 @@ export class UsersService {
       sort: { createdAt: -1 },
       lean: true,
     };
-    const effectiveRole =
-      requester?.role === Role.PRESIDENT ? Role.STUDENT : role;
-    const query = effectiveRole ? { role: effectiveRole } : {};
+    const filters: Array<Record<string, unknown>> = [];
+    if (role) {
+      filters.push({ role });
+    }
+
+    for (const token of normalizeSearchTokens(search)) {
+      const pattern = new RegExp(escapeRegex(token), 'i');
+      filters.push({
+        $or: [
+          { firstName: pattern },
+          { lastName: pattern },
+          { middleName: pattern },
+        ],
+      });
+    }
+
+    if (requester) {
+      const scopeFilter =
+        await this.academicAccessService.buildVisibleUserFilter(requester);
+      if (Object.keys(scopeFilter).length > 0) {
+        filters.push(scopeFilter);
+      }
+    }
+
+    const query = filters.length > 0 ? { $and: filters } : {};
     const result = await this.userModel.paginate(query, options);
     return transformToPaginatedDto(UserDto, result);
   }
@@ -619,10 +638,8 @@ export class UsersService {
       $or: [{ firstName: q }, { lastName: q }, { middleName: q }],
     };
 
-    const effectiveRole =
-      requester?.role === Role.PRESIDENT ? Role.STUDENT : role;
-    if (effectiveRole) {
-      searchFilter.role = effectiveRole;
+    if (role) {
+      searchFilter.role = role;
     }
     const scopeFilter = requester
       ? await this.academicAccessService.buildVisibleUserFilter(requester)
@@ -940,4 +957,12 @@ export class UsersService {
       });
     }
   }
+}
+
+function normalizeSearchTokens(value?: string): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return value.trim().split(/\s+/).filter(Boolean).slice(0, 3);
 }

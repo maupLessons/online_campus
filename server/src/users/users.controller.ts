@@ -98,18 +98,24 @@ export class UsersController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.PRESIDENT)
+  @Roles(Role.ADMIN, Role.RECTOR, Role.PRESIDENT)
   @ApiPaginatedResponse(UserDto)
   findAll(
     @Query() query: UserQueryDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<PaginatedDto<UserDto>> {
-    const { role, ...paginationDto } = query;
-    return this.usersService.findAll(paginationDto, role, req.user);
+    const { role, search, ...paginationDto } = query;
+    return this.usersService.findAll(paginationDto, role, search, req.user);
   }
 
   @Get('search')
-  @Roles(Role.ADMIN, Role.PRESIDENT, Role.DEAN, Role.DEPARTMENT_HEAD)
+  @Roles(
+    Role.ADMIN,
+    Role.RECTOR,
+    Role.PRESIDENT,
+    Role.DEAN,
+    Role.DEPARTMENT_HEAD,
+  )
   search(@Query() query: UserSearchQueryDto, @Req() req: AuthenticatedRequest) {
     return this.usersService.findByName(query.q ?? '', query.role, req.user);
   }
@@ -133,7 +139,7 @@ export class UsersController {
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.PRESIDENT, Role.DEAN)
+  @Roles(Role.ADMIN, Role.RECTOR, Role.PRESIDENT, Role.DEAN)
   findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.usersService.findOne(id, req.user);
   }

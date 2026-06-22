@@ -76,4 +76,21 @@ describe('critical RBAC regression policy', () => {
       }
     },
   );
+
+  it('grants rector and president user-directory reads without mutations', () => {
+    const directoryRoles = rolesFor(
+      controllerMethod(UsersController.prototype, 'findAll'),
+    );
+    const detailRoles = rolesFor(
+      controllerMethod(UsersController.prototype, 'findOne'),
+    );
+
+    expect(directoryRoles).toEqual([Role.ADMIN, Role.RECTOR, Role.PRESIDENT]);
+    expect(detailRoles).toEqual([
+      Role.ADMIN,
+      Role.RECTOR,
+      Role.PRESIDENT,
+      Role.DEAN,
+    ]);
+  });
 });

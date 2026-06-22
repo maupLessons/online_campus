@@ -67,6 +67,16 @@ export function validateEnvironment(input: Environment): Environment {
   env.DB_MIGRATIONS_ENABLED = String(
     readBoolean(env, 'DB_MIGRATIONS_ENABLED', !isTest, errors),
   );
+  env.MAUP_API_ENABLED = String(
+    readBoolean(env, 'MAUP_API_ENABLED', false, errors),
+  );
+  env.MAUP_API_REQUEST_METHOD = readEnum(
+    env,
+    'MAUP_API_REQUEST_METHOD',
+    ['GET', 'POST'],
+    'POST',
+    errors,
+  );
 
   const jwtSecret = readSecret(
     env,
@@ -140,6 +150,7 @@ export function validateEnvironment(input: Environment): Environment {
 
   validateMongoConfiguration(env, isProduction, isTest, errors);
   validateEmailDelivery(env, isProductionDeployment, errors);
+  validateMaupStudentApi(env, isProduction, errors);
   validatePositiveTuning(env, errors);
 
   if (errors.length > 0) {
@@ -151,6 +162,69 @@ export function validateEnvironment(input: Environment): Environment {
   }
 
   return env;
+}
+
+function validateMaupStudentApi(
+  env: Environment,
+  isProduction: boolean,
+  errors: string[],
+): void {
+  const rawBaseUrl = readOptionalString(env, 'MAUP_API_BASE_URL') ?? '';
+  const allowedHost = readOptionalString(env, 'MAUP_API_ALLOWED_HOST') ?? '';
+  env.MAUP_API_BASE_URL = rawBaseUrl;
+  env.MAUP_API_ALLOWED_HOST = allowedHost;
+
+  const username = readOptionalString(env, 'MAUP_API_USERNAME') ?? '';
+  const password = readOptionalString(env, 'MAUP_API_PASSWORD') ?? '';
+  env.MAUP_API_USERNAME = username;
+  env.MAUP_API_PASSWORD = password;
+
+  if (env.MAUP_API_ENABLED !== 'true') {
+    return;
+  }
+  if (!rawBaseUrl) {
+    errors.push('MAUP_API_BASE_URL is required when MAUP API is enabled');
+  }
+  if (!allowedHost) {
+    errors.push('MAUP_API_ALLOWED_HOST is required when MAUP API is enabled');
+  }
+
+  try {
+    const url = new URL(rawBaseUrl);
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      errors.push('MAUP_API_BASE_URL must use HTTP or HTTPS');
+    }
+    if (url.username || url.password || url.search || url.hash) {
+      errors.push(
+        'MAUP_API_BASE_URL must not contain credentials or parameters',
+      );
+    }
+    if (isProduction && url.protocol !== 'https:') {
+      errors.push('MAUP_API_BASE_URL must use HTTPS in production');
+    }
+    url.pathname = url.pathname.replace(/\/$/, '') || '/api';
+    if (allowedHost && url.hostname !== allowedHost) {
+      errors.push('MAUP_API_BASE_URL must use MAUP_API_ALLOWED_HOST');
+    }
+    env.MAUP_API_BASE_URL = url.toString().replace(/\/$/, '');
+  } catch {
+    if (rawBaseUrl) {
+      errors.push('MAUP_API_BASE_URL must be a valid absolute URL');
+    }
+    env.MAUP_API_BASE_URL = rawBaseUrl;
+  }
+  if (!username) {
+    errors.push('MAUP_API_USERNAME is required when MAUP API is enabled');
+  }
+  if (!password) {
+    errors.push('MAUP_API_PASSWORD is required when MAUP API is enabled');
+  }
+  if (username.includes(':')) {
+    errors.push('MAUP_API_USERNAME must not contain a colon');
+  }
+  if (/\r|\n/.test(`${username}${password}`)) {
+    errors.push('MAUP API credentials must not contain line breaks');
+  }
 }
 
 function validateEmailDelivery(
@@ -280,6 +354,11 @@ function validatePositiveTuning(env: Environment, errors: string[]): void {
     ['DB_MIGRATION_WAIT_TIMEOUT_MS', 60_000, 1_000, 600_000],
     ['DB_MIGRATION_POLL_INTERVAL_MS', 1_000, 100, 10_000],
     ['SMTP_CONNECTION_TIMEOUT_MS', 10_000, 1_000, 120_000],
+    ['MAUP_API_TIMEOUT_MS', 10_000, 500, 120_000],
+    ['MAUP_API_RETRY_ATTEMPTS', 2, 0, 5],
+    ['MAUP_API_CIRCUIT_FAILURE_THRESHOLD', 5, 1, 100],
+    ['MAUP_API_CIRCUIT_RESET_TIMEOUT_MS', 30_000, 1_000, 600_000],
+    ['MAUP_API_MAX_RESPONSE_BYTES', 5_000_000, 1_024, 50_000_000],
   ];
 
   for (const [key, fallback, min, max] of definitions) {

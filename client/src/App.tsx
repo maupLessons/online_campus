@@ -256,6 +256,7 @@ export default function App() {
               <ProtectedRoute
                 allowedRoles={[
                   Role.ADMIN,
+                  Role.RECTOR,
                   Role.PRESIDENT,
                 ]}>
                 <LazyPage>

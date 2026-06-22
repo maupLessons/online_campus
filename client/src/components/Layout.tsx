@@ -75,7 +75,7 @@ const NAV_ITEMS: {
   {
     labelKey: 'nav.users',
     path: '/users',
-    roles: [Role.ADMIN, Role.PRESIDENT],
+    roles: [Role.ADMIN, Role.RECTOR, Role.PRESIDENT],
   },
   {
     labelKey: 'nav.auditLog',

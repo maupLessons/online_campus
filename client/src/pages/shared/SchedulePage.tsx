@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Download,
   Edit3,
+  ExternalLink,
   FileSpreadsheet,
   Filter,
   Repeat2,
@@ -73,6 +74,7 @@ const DEFAULT_ENTRY_FORM: ScheduleEntryInput = {
   endTime: "10:05",
   type: "lecture",
   status: "scheduled",
+  onlineUrl: "",
   changeReason: "",
 };
 
@@ -84,6 +86,7 @@ const DEFAULT_TEMPLATE_FORM: ScheduleTemplateInput = {
   startTime: "08:30",
   endTime: "10:05",
   type: "lecture",
+  onlineUrl: "",
 };
 
 type WorkflowState =
@@ -100,6 +103,7 @@ type WorkflowState =
       startTime: string;
       endTime: string;
       classroomId: string;
+      onlineUrl: string;
     }
   | {
       type: "substitution";
@@ -111,6 +115,7 @@ type WorkflowState =
       startTime: string;
       endTime: string;
       entryType: ScheduleEntryType;
+      onlineUrl: string;
     };
 
 type ApplyTemplateState = {
@@ -336,6 +341,7 @@ export default function SchedulePage() {
           startTime: workflow.startTime,
           endTime: workflow.endTime,
           classroomId: workflow.classroomId || undefined,
+          onlineUrl: workflow.onlineUrl.trim(),
         });
       }
       if (workflow.type === "substitution") {
@@ -347,6 +353,7 @@ export default function SchedulePage() {
           startTime: workflow.startTime || undefined,
           endTime: workflow.endTime || undefined,
           type: workflow.entryType,
+          onlineUrl: workflow.onlineUrl.trim(),
         };
         await scheduleApi.substitute(workflow.entry.id, payload);
       }
@@ -439,6 +446,7 @@ export default function SchedulePage() {
       endTime: entry.endTime,
       type: entry.type,
       status: entry.status,
+      onlineUrl: entry.onlineUrl ?? "",
       changeReason: entry.changeReason ?? "",
     });
   };
@@ -469,6 +477,7 @@ export default function SchedulePage() {
       startTime: template.startTime,
       endTime: template.endTime,
       type: template.type,
+      onlineUrl: template.onlineUrl ?? "",
     });
   };
 
@@ -788,6 +797,16 @@ function ScheduleEntryForm({
             </option>
           ))}
         </Select>
+        <Input
+          label={t("schedule.onlineUrl")}
+          name="onlineUrl"
+          type="url"
+          pattern="https://.*"
+          value={form.onlineUrl ?? ""}
+          onChange={onChange}
+          placeholder={t("schedule.onlineUrlPlaceholder")}
+          title={t("schedule.onlineUrlPlaceholder")}
+        />
         <div className="grid gap-3 md:grid-cols-3">
           <Input
             label={t("schedule.date")}
@@ -912,6 +931,16 @@ function TemplateForm({
             </option>
           ))}
         </Select>
+        <Input
+          label={t("schedule.onlineUrl")}
+          name="onlineUrl"
+          type="url"
+          pattern="https://.*"
+          value={form.onlineUrl ?? ""}
+          onChange={onChange}
+          placeholder={t("schedule.onlineUrlPlaceholder")}
+          title={t("schedule.onlineUrlPlaceholder")}
+        />
         <div className="grid gap-3 md:grid-cols-3">
           <Select
             label={t("schedule.dayOfWeek")}
@@ -1184,6 +1213,18 @@ function WorkflowPanel({
                 </option>
               ))}
             </Select>
+            <Input
+              label={t("schedule.onlineUrl")}
+              name="onlineUrl"
+              type="url"
+              pattern="https://.*"
+              value={state.onlineUrl}
+              onChange={(event) =>
+                onChange({ ...state, onlineUrl: event.target.value })
+              }
+              placeholder={t("schedule.onlineUrlPlaceholder")}
+              title={t("schedule.onlineUrlPlaceholder")}
+            />
           </>
         )}
         {state.type === "substitution" && (
@@ -1321,8 +1362,19 @@ function ScheduleEntryCard({
             </div>
           )}
         </div>
-        {(canManage || canOpenJournal) && (
+        {(entry.onlineUrl || canManage || canOpenJournal) && (
           <div className="flex flex-wrap gap-2 lg:justify-end">
+            {entry.onlineUrl && (
+              <a
+                href={entry.onlineUrl}
+                target="_blank"
+                rel="noreferrer"
+                title={t("schedule.openOnlineClass")}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 transition hover:bg-emerald-100"
+              >
+                <ExternalLink size={16} />
+              </a>
+            )}
             {canOpenJournal && (
               <Link
                 to={`/courses/${entry.courseAssignmentId}?tab=journal`}
@@ -1357,6 +1409,7 @@ function ScheduleEntryCard({
                   startTime: entry.startTime,
                   endTime: entry.endTime,
                   classroomId: entry.classroomId ?? "",
+                  onlineUrl: entry.onlineUrl ?? "",
                 })
               }
             >
@@ -1375,6 +1428,7 @@ function ScheduleEntryCard({
                   startTime: entry.startTime,
                   endTime: entry.endTime,
                   entryType: entry.type,
+                  onlineUrl: entry.onlineUrl ?? "",
                 })
               }
             >
@@ -1611,6 +1665,7 @@ function cleanSchedulePayload(payload: ScheduleEntryInput): ScheduleEntryInput {
   return {
     ...payload,
     classroomId: payload.classroomId || undefined,
+    onlineUrl: payload.onlineUrl?.trim() ?? "",
     changeReason: payload.changeReason?.trim() || undefined,
   };
 }
@@ -1622,6 +1677,7 @@ function cleanTemplatePayload(
     ...payload,
     title: payload.title.trim(),
     classroomId: payload.classroomId || undefined,
+    onlineUrl: payload.onlineUrl?.trim() ?? "",
   };
 }
 

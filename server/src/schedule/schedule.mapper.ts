@@ -36,6 +36,7 @@ export class ScheduleMapper {
       endTime: entry.endTime,
       type: entry.type,
       status: entry.status,
+      onlineUrl: entry.onlineUrl,
       changeReason: entry.changeReason,
       cancelledAt: this.toIsoString(entry.cancelledAt),
       rescheduledAt: this.toIsoString(entry.rescheduledAt),
@@ -78,6 +79,7 @@ export class ScheduleMapper {
       startTime: template.startTime,
       endTime: template.endTime,
       type: template.type,
+      onlineUrl: template.onlineUrl,
       status: template.status,
       courseName: course?.name,
       courseCode: course?.code,
@@ -237,6 +239,7 @@ export class ScheduleMapper {
       endTime: payload.endTime,
       type: payload.type,
       status: payload.status,
+      onlineUrl: payload.onlineUrl,
     };
   }
 
@@ -253,6 +256,7 @@ export class ScheduleMapper {
       endTime: entry.endTime,
       type: entry.type,
       status: entry.status,
+      onlineUrl: entry.onlineUrl,
       changeReason: entry.changeReason,
     };
   }

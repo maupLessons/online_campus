@@ -24,6 +24,7 @@ type Labels = {
   group: string;
   teacher: string;
   classroom: string;
+  onlineUrl: string;
   reason: string;
 };
 
@@ -41,6 +42,7 @@ const LABELS: Record<SpreadsheetExportLocale, Labels> = {
     group: 'Група',
     teacher: 'Викладач',
     classroom: 'Аудиторія',
+    onlineUrl: 'Онлайн-пара',
     reason: 'Причина зміни',
   },
   [SpreadsheetExportLocale.EN]: {
@@ -56,6 +58,7 @@ const LABELS: Record<SpreadsheetExportLocale, Labels> = {
     group: 'Group',
     teacher: 'Teacher',
     classroom: 'Classroom',
+    onlineUrl: 'Online class link',
     reason: 'Change reason',
   },
 };
@@ -88,7 +91,7 @@ export async function buildScheduleXlsx(
     },
   });
 
-  sheet.mergeCells('A1:K1');
+  sheet.mergeCells('A1:L1');
   const title = sheet.getCell('A1');
   title.value = labels.title;
   title.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 15 };
@@ -108,9 +111,9 @@ export async function buildScheduleXlsx(
 
   sheet.autoFilter = {
     from: { row: 2, column: 1 },
-    to: { row: 2, column: 11 },
+    to: { row: 2, column: 12 },
   };
-  fitWorksheetColumns(sheet, [14, 12, 12, 18, 16, 16, 34, 14, 28, 24, 36]);
+  fitWorksheetColumns(sheet, [14, 12, 12, 18, 16, 16, 34, 14, 28, 24, 34, 36]);
 
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
@@ -127,6 +130,7 @@ function scheduleHeaders(labels: Labels): string[] {
     labels.group,
     labels.teacher,
     labels.classroom,
+    labels.onlineUrl,
     labels.reason,
   ];
 }
@@ -143,6 +147,7 @@ function scheduleRow(entry: ScheduleEntryDto): unknown[] {
     entry.groupCode ?? '',
     entry.teacherName ?? '',
     entry.classroom ?? '',
+    entry.onlineUrl ?? '',
     entry.changeReason ?? '',
   ];
 }

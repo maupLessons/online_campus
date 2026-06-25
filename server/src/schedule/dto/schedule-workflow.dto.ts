@@ -8,10 +8,12 @@ import {
   IsMongoId,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   MaxLength,
   MinLength,
   ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateScheduleEntryDto } from './create-schedule-entry.dto';
@@ -47,6 +49,14 @@ export class RescheduleScheduleEntryDto extends ScheduleReasonDto {
   @IsOptional()
   @IsMongoId()
   classroomId?: string;
+
+  @ApiPropertyOptional({
+    description: 'HTTPS link for the rescheduled online class.',
+  })
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
+  onlineUrl?: string;
 }
 
 export class SubstituteScheduleEntryDto extends ScheduleReasonDto {
@@ -62,6 +72,14 @@ export class SubstituteScheduleEntryDto extends ScheduleReasonDto {
   @IsOptional()
   @IsMongoId()
   classroomId?: string;
+
+  @ApiPropertyOptional({
+    description: 'HTTPS link for the substituted online class.',
+  })
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
+  onlineUrl?: string;
 
   @ApiPropertyOptional({ example: '2026-09-02' })
   @IsOptional()

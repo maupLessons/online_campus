@@ -65,6 +65,7 @@ export class ScheduleTemplatesService {
       startTime: payload.startTime,
       endTime: payload.endTime,
       type: payload.type,
+      onlineUrl: payload.onlineUrl,
       status: ScheduleTemplateStatus.ACTIVE,
       createdBy: this.mapper.toOptionalObjectId(user?.sub),
     } as never);
@@ -105,6 +106,8 @@ export class ScheduleTemplatesService {
       startTime: dto.startTime ?? existing.startTime,
       endTime: dto.endTime ?? existing.endTime,
       type: dto.type ?? existing.type,
+      onlineUrl:
+        dto.onlineUrl !== undefined ? dto.onlineUrl : existing.onlineUrl,
     });
 
     existing.set({
@@ -117,6 +120,7 @@ export class ScheduleTemplatesService {
       startTime: payload.startTime,
       endTime: payload.endTime,
       type: payload.type,
+      onlineUrl: payload.onlineUrl,
       status: dto.status ?? existing.status,
     });
     await existing.save();
@@ -211,12 +215,14 @@ export class ScheduleTemplatesService {
     startTime: string;
     endTime: string;
     type: ScheduleEntryType;
+    onlineUrl?: string;
   }): Promise<{
     courseAssignmentId: string;
     classroomId?: string;
     startTime: string;
     endTime: string;
     type: ScheduleEntryType;
+    onlineUrl?: string;
   }> {
     if (payload.startTime >= payload.endTime) {
       throw new BadRequestException(
@@ -230,6 +236,7 @@ export class ScheduleTemplatesService {
     return {
       ...payload,
       classroomId: payload.classroomId || undefined,
+      onlineUrl: payload.onlineUrl?.trim() || undefined,
     };
   }
 

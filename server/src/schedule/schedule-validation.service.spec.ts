@@ -82,6 +82,39 @@ describe('ScheduleValidationService', () => {
     expect(courseAssignmentModel.findById).not.toHaveBeenCalled();
   });
 
+  it('normalizes optional online class links', async () => {
+    courseAssignmentModel.findById.mockReturnValue(query(assignment));
+    classroomModel.exists.mockReturnValue(query(null));
+
+    await expect(
+      service.normalizePayload({
+        courseAssignmentId: ids.assignment,
+        date: '2026-09-01',
+        startTime: '08:30',
+        endTime: '10:05',
+        type: ScheduleEntryType.LECTURE,
+        status: ScheduleEntryStatus.SCHEDULED,
+        onlineUrl: '  https://dist.maup.com.ua/  ',
+      }),
+    ).resolves.toMatchObject({
+      onlineUrl: 'https://dist.maup.com.ua/',
+    });
+
+    await expect(
+      service.normalizePayload({
+        courseAssignmentId: ids.assignment,
+        date: '2026-09-01',
+        startTime: '08:30',
+        endTime: '10:05',
+        type: ScheduleEntryType.LECTURE,
+        status: ScheduleEntryStatus.SCHEDULED,
+        onlineUrl: '',
+      }),
+    ).resolves.toMatchObject({
+      onlineUrl: undefined,
+    });
+  });
+
   it('detects teacher, classroom and group conflicts in one pass', async () => {
     courseAssignmentModel.findById.mockReturnValue(query(assignment));
     classroomModel.exists.mockReturnValue(query({ _id: ids.classroom }));

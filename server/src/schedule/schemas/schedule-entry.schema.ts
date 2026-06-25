@@ -68,6 +68,9 @@ export class ScheduleEntry {
   @Prop({ trim: true, maxlength: 500 })
   changeReason?: string;
 
+  @Prop({ trim: true, maxlength: 2048 })
+  onlineUrl?: string;
+
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', default: null })
   changedBy?: MongooseSchema.Types.ObjectId | null;
 

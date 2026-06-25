@@ -39,6 +39,7 @@ export class ScheduleValidationService {
     endTime: string;
     type: ScheduleEntryType;
     status: ScheduleEntryStatus;
+    onlineUrl?: string;
   }): Promise<NormalizedSchedulePayload> {
     if (payload.startTime >= payload.endTime) {
       throw new BadRequestException(
@@ -57,6 +58,7 @@ export class ScheduleValidationService {
       date,
       dateString: this.mapper.formatDate(date),
       classroomId: payload.classroomId || undefined,
+      onlineUrl: this.normalizeOnlineUrl(payload.onlineUrl),
       assignment,
     };
   }
@@ -177,5 +179,10 @@ export class ScheduleValidationService {
     if (!classroomExists) {
       throw new NotFoundException('Аудиторію не знайдено');
     }
+  }
+
+  private normalizeOnlineUrl(value?: string): string | undefined {
+    const normalized = value?.trim();
+    return normalized || undefined;
   }
 }

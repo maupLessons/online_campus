@@ -35,6 +35,7 @@ export type ScheduleRescheduleInput = ScheduleWorkflowReason & {
   startTime: string;
   endTime: string;
   classroomId?: string;
+  onlineUrl?: string;
 };
 
 export type ScheduleSubstitutionInput = ScheduleWorkflowReason & {
@@ -44,6 +45,7 @@ export type ScheduleSubstitutionInput = ScheduleWorkflowReason & {
   startTime?: string;
   endTime?: string;
   type?: ScheduleEntryType;
+  onlineUrl?: string;
 };
 
 export type ScheduleTemplateApplyInput = {

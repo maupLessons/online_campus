@@ -66,6 +66,9 @@ export class ScheduleEntryDto {
   classroom?: string;
 
   @ApiPropertyOptional()
+  onlineUrl?: string;
+
+  @ApiPropertyOptional()
   changeReason?: string;
 
   @ApiPropertyOptional()

@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsMongoId, IsOptional, Matches } from 'class-validator';
+import {
+  IsEnum,
+  IsMongoId,
+  IsOptional,
+  IsUrl,
+  Matches,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 import { ScheduleEntryStatus, ScheduleEntryType } from '../schedule.enums';
 
 export class CreateScheduleEntryDto {
@@ -37,4 +45,13 @@ export class CreateScheduleEntryDto {
   @IsOptional()
   @IsEnum(ScheduleEntryStatus)
   status?: ScheduleEntryStatus;
+
+  @ApiPropertyOptional({
+    description: 'HTTPS link for an online class, webinar or meeting room.',
+    example: 'https://dist.maup.com.ua/',
+  })
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
+  onlineUrl?: string;
 }

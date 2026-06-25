@@ -64,6 +64,7 @@ export class ScheduleMutationService {
       endTime: payload.endTime,
       type: payload.type,
       status: payload.status,
+      onlineUrl: payload.onlineUrl,
       changeHistory: [
         this.mapper.buildHistoryEntry(
           ScheduleChangeAction.CREATED,
@@ -115,6 +116,7 @@ export class ScheduleMutationService {
       endTime: payload.endTime,
       type: payload.type,
       status: payload.status,
+      onlineUrl: payload.onlineUrl,
       changeReason: dto.changeReason,
       changedBy: this.mapper.toOptionalObjectId(user?.sub),
     });
@@ -244,6 +246,7 @@ export class ScheduleMutationService {
       startTime: dto.startTime,
       endTime: dto.endTime,
       classroomId: dto.classroomId,
+      onlineUrl: dto.onlineUrl,
       status: ScheduleEntryStatus.RESCHEDULED,
     });
     await this.scheduleValidation.assertNoConflicts(payload, id);
@@ -290,7 +293,8 @@ export class ScheduleMutationService {
       !dto.date &&
       !dto.startTime &&
       !dto.endTime &&
-      !dto.type
+      !dto.type &&
+      dto.onlineUrl === undefined
     ) {
       throw new BadRequestException(
         'Для заміни потрібно змінити хоча б один параметр заняття',
@@ -305,6 +309,7 @@ export class ScheduleMutationService {
       startTime: dto.startTime,
       endTime: dto.endTime,
       type: dto.type,
+      onlineUrl: dto.onlineUrl,
       status: ScheduleEntryStatus.SUBSTITUTED,
     });
     await this.scheduleValidation.assertNoConflicts(payload, id);
@@ -461,6 +466,7 @@ export class ScheduleMutationService {
           endTime: template.endTime,
           type: template.type,
           status: ScheduleEntryStatus.SCHEDULED,
+          onlineUrl: template.onlineUrl,
         })),
       },
       undefined,
@@ -509,6 +515,7 @@ export class ScheduleMutationService {
       endTime: dto.endTime,
       type: dto.type,
       status: dto.status ?? ScheduleEntryStatus.SCHEDULED,
+      onlineUrl: dto.onlineUrl,
     });
   }
 
@@ -530,6 +537,8 @@ export class ScheduleMutationService {
       endTime: dto.endTime ?? currentEntry.endTime,
       type: dto.type ?? currentEntry.type,
       status: dto.status ?? currentEntry.status,
+      onlineUrl:
+        dto.onlineUrl !== undefined ? dto.onlineUrl : currentEntry.onlineUrl,
     });
   }
 
@@ -556,6 +565,7 @@ export class ScheduleMutationService {
       endTime: params.payload.endTime,
       type: params.payload.type,
       status: params.payload.status,
+      onlineUrl: params.payload.onlineUrl,
       changeReason: params.reason,
       changedBy: actorId,
       [params.timestampField]: now,

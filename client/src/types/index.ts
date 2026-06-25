@@ -96,6 +96,7 @@ export interface ScheduleEntry {
   teacherId?: string;
   teacherName?: string;
   classroom?: string;
+  onlineUrl?: string;
   changeReason?: string;
   cancelledAt?: string;
   rescheduledAt?: string;
@@ -113,6 +114,7 @@ export interface ScheduleEntryInput {
   endTime: string;
   type: ScheduleEntryType;
   status?: ScheduleEntryStatus;
+  onlineUrl?: string;
   changeReason?: string;
 }
 
@@ -133,6 +135,7 @@ export interface ScheduleTemplate {
   groupCode?: string;
   teacherName?: string;
   classroom?: string;
+  onlineUrl?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -145,6 +148,7 @@ export interface ScheduleTemplateInput {
   startTime: string;
   endTime: string;
   type: ScheduleEntryType;
+  onlineUrl?: string;
 }
 
 export interface ScheduleBulkResultItem {

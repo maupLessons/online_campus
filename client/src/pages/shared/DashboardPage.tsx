@@ -6,6 +6,8 @@ import PerformanceCard from '../../components/dashboard/PerformanceCard';
 import TodayScheduleCard from '../../components/dashboard/TodayScheduleCard';
 import DeadlinesCard from '../../components/dashboard/DeadlinesCard';
 import SurveyHighlightCard from '../../components/dashboard/SurveyHighlightCard';
+import CampusNewsCard from '../../components/dashboard/CampusNewsCard';
+import { newsApi, type NewsItem } from '../../services/newsApi';
 
 export type ScheduleItem = {
   id?: string;
@@ -52,6 +54,8 @@ export default function DashboardPage() {
   const { user } = useAuthStore();
   const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [newsUnavailable, setNewsUnavailable] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -60,10 +64,12 @@ export default function DashboardPage() {
     const loadDashboardData = async () => {
       setIsLoading(true);
 
-      const [scheduleResult, notificationsResult] = await Promise.allSettled([
-        api.get('/schedule/my'),
-        api.get('/notifications'),
-      ]);
+      const [scheduleResult, notificationsResult, newsResult] =
+        await Promise.allSettled([
+          api.get('/schedule/my'),
+          api.get('/notifications'),
+          newsApi.listLatest(3),
+        ]);
 
       if (!isMounted) return;
 
@@ -79,6 +85,14 @@ export default function DashboardPage() {
         );
       } else {
         setNotifications([]);
+      }
+
+      if (newsResult.status === 'fulfilled') {
+        setNews(newsResult.value.items);
+        setNewsUnavailable(newsResult.value.unavailable);
+      } else {
+        setNews([]);
+        setNewsUnavailable(true);
       }
 
       setIsLoading(false);
@@ -121,6 +135,11 @@ export default function DashboardPage() {
 
         <div className="space-y-6">
           <TodayScheduleCard items={todaySchedule} isLoading={isLoading} />
+          <CampusNewsCard
+            items={news}
+            isLoading={isLoading}
+            unavailable={newsUnavailable}
+          />
 
           <div className="grid gap-6 lg:grid-cols-2">
             <DeadlinesCard items={notifications} />

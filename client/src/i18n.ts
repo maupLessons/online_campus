@@ -9,6 +9,7 @@ const resources = {
       'app.subtitle': 'Електронний кампус академії',
 
       'nav.dashboard': 'Дашборд',
+      'nav.news': 'Новини',
       'nav.schedule': 'Розклад',
       'nav.courses': 'Мої дисципліни',
       'nav.assignments': 'Завдання',
@@ -143,6 +144,13 @@ const resources = {
 
       'dashboard.surveysTitle': 'Важливі опитування',
       'dashboard.noSurveys': 'Наразі активних опитувань немає.',
+
+      'dashboard.newsTitle': 'Новини МАУП',
+      'dashboard.newsSubtitle': 'Останні публікації з офіційної стрічки.',
+      'dashboard.newsAll': 'Усі новини',
+      'dashboard.newsEmpty': 'Новин поки немає.',
+      'dashboard.newsUnavailable':
+        'Не вдалося оновити стрічку новин. Спробуйте пізніше.',
 
       'dashboard.adminPanel': 'Адмін-панель',
       'dashboard.usersCount': 'Користувачі',
@@ -391,6 +399,18 @@ const resources = {
       'common.cancel': 'Скасувати',
       'common.edit': 'Редагувати',
       'common.delete': 'Видалити',
+
+      'news.title': 'Новини МАУП',
+      'news.subtitle':
+        'Останні матеріали з офіційної RSS-стрічки МАУП. Посилання відкриваються на сайті академії.',
+      'news.source': 'Офіційна стрічка МАУП',
+      'news.lastUpdated': 'Оновлено: {{date}}',
+      'news.refresh': 'Оновити',
+      'news.loading': 'Завантажуємо новини...',
+      'news.empty': 'Новин поки немає.',
+      'news.unavailable':
+        'Стрічка новин тимчасово недоступна. Якщо є кешовані дані, система покаже їх автоматично.',
+      'news.open': 'Відкрити на сайті',
 
       'layout.supportTitle': 'Підтримка',
       'layout.supportText':
@@ -1031,6 +1051,7 @@ const resources = {
       'app.subtitle': 'Academy electronic campus',
 
       'nav.dashboard': 'Dashboard',
+      'nav.news': 'News',
       'nav.schedule': 'Schedule',
       'nav.courses': 'My courses',
       'nav.assignments': 'Assignments',
@@ -1163,6 +1184,13 @@ const resources = {
 
       'dashboard.surveysTitle': 'Important surveys',
       'dashboard.noSurveys': 'There are no active surveys right now.',
+
+      'dashboard.newsTitle': 'IAPM news',
+      'dashboard.newsSubtitle': 'Latest posts from the official feed.',
+      'dashboard.newsAll': 'All news',
+      'dashboard.newsEmpty': 'There are no news posts yet.',
+      'dashboard.newsUnavailable':
+        'Could not refresh the news feed. Try again later.',
 
       'dashboard.adminPanel': 'Admin panel',
       'dashboard.usersCount': 'Users',
@@ -1414,6 +1442,18 @@ const resources = {
       'common.cancel': 'Cancel',
       'common.edit': 'Edit',
       'common.delete': 'Delete',
+
+      'news.title': 'IAPM news',
+      'news.subtitle':
+        'Latest posts from the official IAPM RSS feed. Links open on the academy website.',
+      'news.source': 'Official IAPM feed',
+      'news.lastUpdated': 'Updated: {{date}}',
+      'news.refresh': 'Refresh',
+      'news.loading': 'Loading news...',
+      'news.empty': 'There are no news posts yet.',
+      'news.unavailable':
+        'The news feed is temporarily unavailable. If cached data exists, the system will show it automatically.',
+      'news.open': 'Open on website',
 
       'layout.supportTitle': 'Support',
       'layout.supportText': 'Contact technical support via bot or email.',

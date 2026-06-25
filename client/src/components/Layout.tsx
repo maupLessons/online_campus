@@ -29,16 +29,6 @@ const NAV_ITEMS: {
     ],
   },
   {
-    labelKey: 'nav.assignments',
-    path: '/assignments',
-    roles: [Role.STUDENT],
-  },
-  {
-    labelKey: 'nav.grades',
-    path: '/grades',
-    roles: [Role.STUDENT],
-  },
-  {
     labelKey: 'nav.surveys',
     path: '/surveys',
     roles: [Role.STUDENT, Role.TEACHER],
@@ -142,9 +132,8 @@ export default function Layout() {
       case '/courses':
         return t('nav.courses');
       case '/assignments':
-        return t('nav.assignments');
       case '/grades':
-        return t('nav.grades');
+        return t('moodle.title');
       case '/users':
         return t('nav.users');
       case '/notifications':

@@ -77,6 +77,7 @@ export function validateEnvironment(input: Environment): Environment {
     'POST',
     errors,
   );
+  validateMaupNewsFeed(env, isProduction, errors);
 
   const jwtSecret = readSecret(
     env,
@@ -162,6 +163,42 @@ export function validateEnvironment(input: Environment): Environment {
   }
 
   return env;
+}
+
+function validateMaupNewsFeed(
+  env: Environment,
+  isProduction: boolean,
+  errors: string[],
+): void {
+  const rawFeedUrl =
+    readOptionalString(env, 'MAUP_NEWS_FEED_URL') ??
+    'https://maup.com.ua/ua/feed.xml';
+  const allowedHost =
+    readOptionalString(env, 'MAUP_NEWS_FEED_ALLOWED_HOST') ?? 'maup.com.ua';
+
+  env.MAUP_NEWS_FEED_ALLOWED_HOST = allowedHost;
+
+  try {
+    const url = new URL(rawFeedUrl);
+    if (!['http:', 'https:'].includes(url.protocol)) {
+      errors.push('MAUP_NEWS_FEED_URL must use HTTP or HTTPS');
+    }
+    if (url.username || url.password || url.hash) {
+      errors.push(
+        'MAUP_NEWS_FEED_URL must not contain credentials or a fragment',
+      );
+    }
+    if (isProduction && url.protocol !== 'https:') {
+      errors.push('MAUP_NEWS_FEED_URL must use HTTPS in production');
+    }
+    if (!isAllowedHost(url.hostname, allowedHost)) {
+      errors.push('MAUP_NEWS_FEED_URL must use MAUP_NEWS_FEED_ALLOWED_HOST');
+    }
+    env.MAUP_NEWS_FEED_URL = url.toString();
+  } catch {
+    errors.push('MAUP_NEWS_FEED_URL must be a valid absolute URL');
+    env.MAUP_NEWS_FEED_URL = rawFeedUrl;
+  }
 }
 
 function validateMaupStudentApi(
@@ -359,11 +396,24 @@ function validatePositiveTuning(env: Environment, errors: string[]): void {
     ['MAUP_API_CIRCUIT_FAILURE_THRESHOLD', 5, 1, 100],
     ['MAUP_API_CIRCUIT_RESET_TIMEOUT_MS', 30_000, 1_000, 600_000],
     ['MAUP_API_MAX_RESPONSE_BYTES', 5_000_000, 1_024, 50_000_000],
+    ['MAUP_NEWS_FEED_CACHE_TTL_MS', 600_000, 60_000, 3_600_000],
+    ['MAUP_NEWS_FEED_TIMEOUT_MS', 5_000, 500, 60_000],
+    ['MAUP_NEWS_FEED_MAX_ITEMS', 12, 1, 20],
+    ['MAUP_NEWS_FEED_MAX_RESPONSE_BYTES', 1_000_000, 1_024, 5_000_000],
   ];
 
   for (const [key, fallback, min, max] of definitions) {
     env[key] = String(readInteger(env, key, fallback, min, max, errors));
   }
+}
+
+function isAllowedHost(hostname: string, allowedHost: string): boolean {
+  const normalizedHostname = hostname.toLowerCase();
+  const normalizedAllowedHost = allowedHost.toLowerCase();
+  return (
+    normalizedHostname === normalizedAllowedHost ||
+    normalizedHostname.endsWith(`.${normalizedAllowedHost}`)
+  );
 }
 
 function readClientUrl(

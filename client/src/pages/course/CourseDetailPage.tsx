@@ -11,11 +11,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   BookOpen,
-  ClipboardList,
   Download,
   Edit3,
-  FileCheck2,
-  GraduationCap,
+  ExternalLink,
   Link as LinkIcon,
   Plus,
   RotateCcw,
@@ -27,6 +25,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import api from "../../services/api";
+import { moodleBaseUrl } from "../../config/externalLearning";
 import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import { useAuthStore } from "../../store/authStore";
 import {
@@ -53,17 +52,11 @@ type TabType =
   | "grades";
 type AttendanceStatus = "present" | "absent" | "late" | "excused";
 
-const COURSE_DETAIL_TABS: TabType[] = [
-  "materials",
-  "assignments",
-  "students",
-  "journal",
-  "submissions",
-  "grades",
-];
+const getAllowedTabs = (teacherMode: boolean): TabType[] =>
+  teacherMode ? ["materials", "students", "journal"] : ["materials"];
 
-const getInitialTab = (value: string | null): TabType =>
-  COURSE_DETAIL_TABS.includes(value as TabType)
+const getInitialTab = (value: string | null, teacherMode: boolean): TabType =>
+  getAllowedTabs(teacherMode).includes(value as TabType)
     ? (value as TabType)
     : "materials";
 
@@ -190,9 +183,11 @@ export default function CourseDetailPage() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const locale = i18n.language === "en" ? "en-US" : "uk-UA";
-  const initialTab = getInitialTab(searchParams.get("tab"));
+  const teacherMode = isTeacherLike(user?.role);
+  const initialTab = (searchParams.get("tab") as TabType | null) ?? "materials";
   const initialAssignmentId = searchParams.get("assignmentId") ?? "";
-  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
+  const [selectedTab, setSelectedTab] = useState<TabType>(initialTab);
+  const activeTab = getInitialTab(selectedTab, teacherMode);
   const [statusMessage, setStatusMessage] = useAutoDismissState("");
   const [materialForm, setMaterialForm] = useState(emptyMaterialForm);
   const [materialFile, setMaterialFile] = useState<File | null>(null);
@@ -240,7 +235,6 @@ export default function CourseDetailPage() {
   });
 
   // The backend is the source of truth for course ownership and permissions.
-  const teacherMode = isTeacherLike(user?.role);
 
   const { data: materialsData, isLoading: isLoadingMaterials } = useQuery({
     queryKey: ["courses", id, "materials"],
@@ -340,23 +334,12 @@ export default function CourseDetailPage() {
   const tabs = useMemo(() => {
     const base: Array<{ id: TabType; label: string; icon: typeof BookOpen }> = [
       { id: "materials", label: t("courses.tabs.materials"), icon: BookOpen },
-      {
-        id: "assignments",
-        label: t("courses.tabs.assignments"),
-        icon: ClipboardList,
-      },
     ];
 
     if (teacherMode) {
       base.push(
         { id: "students", label: t("courses.tabs.students"), icon: Users },
         { id: "journal", label: t("courses.tabs.journal"), icon: BookOpen },
-        {
-          id: "submissions",
-          label: t("courses.tabs.submissions"),
-          icon: FileCheck2,
-        },
-        { id: "grades", label: t("courses.tabs.grades"), icon: GraduationCap },
       );
     }
 
@@ -808,6 +791,20 @@ export default function CourseDetailPage() {
             </p>
           </div>
         </div>
+        <a
+          href={moodleBaseUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          {t("courses.openMoodle")}
+          <ExternalLink className="h-4 w-4" />
+        </a>
+      </div>
+
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm leading-6 text-blue-900">
+        <p className="font-semibold">{t("courses.detailsMoodleTitle")}</p>
+        <p className="mt-1 text-blue-800">{t("courses.detailsMoodleText")}</p>
       </div>
 
       {statusMessage && (
@@ -852,7 +849,7 @@ export default function CourseDetailPage() {
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => setSelectedTab(tab.id)}
                   className={`inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${
                     active
                       ? "bg-blue-600 text-white shadow-sm"

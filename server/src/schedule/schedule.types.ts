@@ -43,6 +43,7 @@ export type ScheduleEntryLean = {
   type: ScheduleEntryType;
   status: ScheduleEntryStatus;
   changeReason?: string;
+  onlineUrl?: string;
   cancelledAt?: Date;
   rescheduledAt?: Date;
   substitutedAt?: Date;
@@ -60,6 +61,7 @@ export type ScheduleTemplateLean = {
   startTime: string;
   endTime: string;
   type: ScheduleEntryType;
+  onlineUrl?: string;
   status: ScheduleTemplateStatus;
   createdAt?: Date;
   updatedAt?: Date;
@@ -74,6 +76,7 @@ export type NormalizedSchedulePayload = {
   endTime: string;
   type: ScheduleEntryType;
   status: ScheduleEntryStatus;
+  onlineUrl?: string;
   assignment: CourseAssignmentLean;
 };
 

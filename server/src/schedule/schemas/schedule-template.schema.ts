@@ -50,6 +50,9 @@ export class ScheduleTemplate {
   })
   type: ScheduleEntryType;
 
+  @Prop({ trim: true, maxlength: 2048 })
+  onlineUrl?: string;
+
   @Prop({
     type: String,
     enum: Object.values(ScheduleTemplateStatus),

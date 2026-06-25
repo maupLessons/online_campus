@@ -16,8 +16,9 @@ const DashboardPage = lazy(() => import('./pages/shared/DashboardPage'));
 const SchedulePage = lazy(() => import('./pages/shared/SchedulePage'));
 const CoursesPage = lazy(() => import('./pages/course/CoursesPage'));
 const CourseDetailPage = lazy(() => import('./pages/course/CourseDetailPage'));
-const AssignmentsPage = lazy(() => import('./pages/student/AssignmentsPage'));
-const GradesPage = lazy(() => import('./pages/student/GradesPage'));
+const MoodleRedirectPage = lazy(
+  () => import('./pages/shared/MoodleRedirectPage'),
+);
 const NotificationsPage = lazy(
   () => import('./pages/shared/NotificationsPage'),
 );
@@ -144,7 +145,7 @@ export default function App() {
             path="assignments"
             element={
               <LazyPage>
-                <AssignmentsPage />
+                <MoodleRedirectPage />
               </LazyPage>
             }
           />
@@ -152,7 +153,7 @@ export default function App() {
             path="grades"
             element={
               <LazyPage>
-                <GradesPage />
+                <MoodleRedirectPage />
               </LazyPage>
             }
           />

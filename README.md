@@ -1,6 +1,6 @@
 # Електронний Кампус МАУП — Технічна документація
 
-> Версія документа: 3.2
+> Версія документа: 3.3
 > Статус: актуальний
 
 ---
@@ -31,7 +31,7 @@
 
 ### Призначення
 
-Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, опитування, вибіркові дисципліни, сповіщення, новини МАУП, довідники та аудит. Поточна реалізація також містить локальні модулі розкладу, курсів, завдань і оцінок. Погоджений цільовий стан передбачає отримання академічних даних із API МАУП та використання зовнішніх посилань на Moodle замість дублювання LMS-функцій.
+Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, розклад, дисципліни, додаткові матеріали, опитування, вибіркові дисципліни, сповіщення, новини МАУП, довідники та аудит. Moodle не інтегрується і не вбудовується в портал: завдання, здача робіт та офіційне оцінювання живуть окремо в Moodle за посиланням `https://dist.maup.com.ua/`. Кампус може показувати зовнішній перехід у Moodle та зберігати HTTPS-посилання як додаткові матеріали дисципліни або посилання на онлайн-пари.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -46,7 +46,7 @@
 │  Elective disciplines                                   │
 │                 Власна БД (MongoDB)                      │
 └─────────────────────────────────────────────────────────┘
-                           │ optional link / future SSO
+                           │ external link only
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │              Moodle — зовнішня LMS, не частина порталу   │
@@ -57,10 +57,11 @@
 
 - Особисті кабінети для **7 ролей** з різними наборами функцій
 - Перегляд розкладу (день / тиждень) з перевіркою конфліктів
-- Управління навчальними матеріалами, завданнями та оцінками
+- Перегляд дисциплін поточного навчального контексту, додаткових матеріалів і зовнішніх HTTPS-посилань
+- Перехід до Moodle для завдань, здачі робіт та офіційного оцінювання
 - **Система опитувань** — створення, проходження студентами та викладачами, аналіз результатів
 - **Вибіркові дисципліни** — критичний модуль: вибір студентом із запропонованого переліку та фіксація результату в кабінеті
-- Система сповіщень: зміни розкладу, нові завдання, оголошення
+- Система сповіщень: зміни розкладу, опитування, оголошення
 - Новини МАУП з офіційної RSS-стрічки через backend proxy з cache/fallback
 - Відновлення пароля через одноразовий reset token без розкриття існування акаунта
 - Повний RBAC з явною матрицею дозволів без успадкування ролей та аудит-логом дій
@@ -259,7 +260,10 @@
 **Frontend:** сторінка `SchedulePage` підтримує перегляд день/тиждень, статуси
 `scheduled`/`cancelled`/`rescheduled`/`substituted`, CSV/XLSX-експорт і
 повноцінну адміністративну UI для створення, редагування, видалення, скасування,
-перенесення, замін, шаблонів та масового скасування.
+перенесення, замін, шаблонів та масового скасування. Для очних і дистанційних
+занять підтримується окреме HTTPS-посилання `onlineUrl`; воно проходить
+валідацію, аудит, шаблони та CSV/XLSX-експорт і відображається як кнопка
+«Відкрити онлайн-пару».
 
 > **Погоджений напрямок:** офіційний основний і сесійний розклад має надходити
 > з API МАУП. Локальний ScheduleModule залишається описом поточної реалізації до
@@ -271,12 +275,13 @@
 
 **Файли:** `src/courses/`
 
-**Відповідальність:** дисципліни, матеріали, завдання, здачі, оцінки та електронний журнал занять у межах порталу. Викладач бачить закріплені дисципліни, студентів групи, веде теми занять, відвідування та поточні оцінки. Матеріали й завдання можуть містити файли, критерії оцінювання та безпечні HTTPS-посилання на Moodle, Google Classroom, силабуси, робочі програми або інші зовнішні навчальні ресурси без дублювання повноцінної LMS усередині порталу.
+**Відповідальність:** дисципліни, детальна інформація про дисципліну, студенти групи, додаткові матеріали, HTTPS-посилання на зовнішні навчальні ресурси та електронний журнал занять у межах порталу. Викладач бачить закріплені дисципліни, студентів групи, веде теми занять і відвідування. Завдання, здача робіт і офіційне оцінювання не дублюються в кампусі та ведуться в Moodle окремо за посиланням `https://dist.maup.com.ua/`.
 
-> **Погоджений напрямок:** на поточному етапі студентський навчальний контур має
-> використовувати зовнішні посилання на Moodle, а офіційні оцінки — API МАУП.
-> Видалення або приховування локальних workflow буде окремою зміною після
-> затвердження міграційного сценарію; цей розділ документує наявний код.
+> **Поточний стан коду:** legacy API для локальних assignments/submissions/grades
+> збережено для сумісності даних, історії та звітів, але основний frontend-сценарій
+> приховує локальні вкладки завдань/оцінок і показує користувачам Moodle як
+> офіційний навчальний контур. Фізичне видалення legacy API потребує окремого
+> погодженого плану міграції даних і звітності.
 
 **Ендпоінти та доступ:**
 
@@ -290,17 +295,17 @@
 | POST   | `/courses/:caId/materials`        | teacher+                                                |
 | PUT    | `/courses/:caId/materials/:id`    | teacher+                                                |
 | DELETE | `/courses/:caId/materials/:id`    | teacher+                                                |
-| GET    | `/courses/:caId/assignments`      | авторизовані                                            |
+| GET    | `/courses/:caId/assignments`      | legacy/internal; не основний frontend-сценарій          |
 | POST   | `/courses/:caId/assignments`      | teacher+                                                |
 | PUT    | `/courses/:caId/assignments/:id`  | teacher+                                                |
-| GET    | `/courses/:caId/grades`           | teacher+, department_head+                              |
+| GET    | `/courses/:caId/grades`           | legacy/internal; не основний frontend-сценарій          |
 | GET    | `/courses/:caId/journal`          | teacher+                                                |
 | POST   | `/courses/:caId/journal`          | teacher+                                                |
 | PATCH  | `/courses/journal/:id`            | teacher+                                                |
 | DELETE | `/courses/journal/:id`            | teacher+                                                |
-| GET    | `/courses/assignments/my`         | student                                                 |
+| GET    | `/courses/assignments/my`         | legacy/internal; student route redirects to Moodle      |
 | GET    | `/courses/assignments/:id/submissions` | teacher+                                           |
-| GET    | `/courses/grades/my`              | student                                                 |
+| GET    | `/courses/grades/my`              | legacy/internal; student route redirects to Moodle      |
 | POST   | `/courses/assignments/:id/submit` | student                                                 |
 | DELETE | `/courses/assignments/:id/submit` | student (лише неоцінена робота до дедлайну)             |
 | PATCH  | `/courses/submissions/:id/return` | teacher+ (повернення на доопрацювання до дедлайну)      |
@@ -1000,13 +1005,13 @@ ScheduleEntry
 └── id, courseAssignmentId, classroomId, date, startTime, endTime
     type: lecture|seminar|lab|exam|consultation
     status: scheduled|cancelled|rescheduled|substituted
-    changeReason?, changedBy?, cancelledAt?, rescheduledAt?, substitutedAt?
+    onlineUrl?, changeReason?, changedBy?, cancelledAt?, rescheduledAt?, substitutedAt?
     changeHistory[]
 
 ScheduleTemplate
 └── id, title, courseAssignmentId, classroomId?, dayOfWeek, startTime, endTime
     type: lecture|seminar|lab|exam|consultation
-    status: active|archived
+    onlineUrl?, status: active|archived
 
 Material
 └── id, courseAssignmentId, title, description, category
@@ -1112,9 +1117,10 @@ AuditLogEntry
 | DELETE | `/schedule/:id`                                                   | admin                                                |
 
 Стани `scheduled`, `cancelled`, `rescheduled` і `substituted` зберігаються в
-MongoDB разом із причиною, actor-метаданими та останніми 50 записами історії
-змін. Спеціалізовані workflow endpoints є основним шляхом для адміністративних
-операцій, а `PUT /schedule/:id` використовується для звичайного редагування.
+MongoDB разом із причиною, actor-метаданими, HTTPS-посиланням `onlineUrl` для
+онлайн-пари та останніми 50 записами історії змін. Спеціалізовані workflow
+endpoints є основним шляхом для адміністративних операцій, а `PUT /schedule/:id`
+використовується для звичайного редагування.
 
 ### Курси та навчання `/api/courses`
 
@@ -1125,19 +1131,19 @@ MongoDB разом із причиною, actor-метаданими та ост
 | GET   | `/courses/course-assignments/:id/students` | teacher+ |
 | GET   | `/courses/:caId/materials`        | Авторизований |
 | POST  | `/courses/:caId/materials`        | teacher+      |
-| GET   | `/courses/:caId/assignments`      | Авторизований |
-| POST  | `/courses/:caId/assignments`      | teacher+      |
+| GET   | `/courses/:caId/assignments`      | legacy/internal |
+| POST  | `/courses/:caId/assignments`      | legacy/internal teacher+ |
 | GET   | `/courses/:caId/journal`          | teacher+      |
 | POST  | `/courses/:caId/journal`          | teacher+      |
 | PATCH | `/courses/journal/:id`            | teacher+      |
 | DELETE | `/courses/journal/:id`           | teacher+      |
-| GET   | `/courses/assignments/my`         | student       |
-| GET   | `/courses/assignments/:id/submissions` | teacher+ |
-| POST  | `/courses/assignments/:id/submit` | student       |
-| DELETE | `/courses/assignments/:id/submit` | student (до дедлайну, якщо роботу не оцінено і не повернено) |
-| GET   | `/courses/grades/my`              | student       |
-| PATCH | `/courses/submissions/:id/return` | teacher+ (до дедлайну) |
-| POST  | `/courses/submissions/:id/grade`  | teacher       |
+| GET   | `/courses/assignments/my`         | legacy/internal; student UI redirects to Moodle |
+| GET   | `/courses/assignments/:id/submissions` | legacy/internal teacher+ |
+| POST  | `/courses/assignments/:id/submit` | legacy/internal student |
+| DELETE | `/courses/assignments/:id/submit` | legacy/internal student |
+| GET   | `/courses/grades/my`              | legacy/internal; student UI redirects to Moodle |
+| PATCH | `/courses/submissions/:id/return` | legacy/internal teacher+ |
+| POST  | `/courses/submissions/:id/grade`  | legacy/internal teacher |
 
 ### Опитування `/api/surveys`
 

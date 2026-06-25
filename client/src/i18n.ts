@@ -33,6 +33,15 @@ const resources = {
       'errors.boundary.retry': 'Оновити сторінку',
       'errors.boundary.home': 'На дашборд',
 
+      'moodle.badge': 'Зовнішня LMS',
+      'moodle.title': 'Завдання та оцінювання в Moodle',
+      'moodle.description':
+        'Завдання, здача робіт і офіційне оцінювання ведуться в Moodle МАУП. Кампус не дублює LMS-функції, а допомагає швидко перейти до потрібної навчальної платформи.',
+      'moodle.portalScope':
+        'У кампусі залишаються дисципліни поточного семестру, розклад, журнал занять, додаткові матеріали та посилання на онлайн-пари.',
+      'moodle.open': 'Відкрити Moodle',
+      'moodle.backToCourses': 'Повернутися до дисциплін',
+
       'auth.loginLabel': 'Логін',
       'auth.passwordLabel': 'Пароль',
       'auth.loginPlaceholder': 'Введіть логін',
@@ -172,6 +181,9 @@ const resources = {
       'schedule.group': 'Група',
       'schedule.teacher': 'Викладач',
       'schedule.classroom': 'Аудиторія',
+      'schedule.onlineUrl': 'Посилання на онлайн-пару',
+      'schedule.onlineUrlPlaceholder': 'https://dist.maup.com.ua/ або інше HTTPS-посилання',
+      'schedule.openOnlineClass': 'Відкрити онлайн-пару',
       'schedule.filters': 'Фільтри',
       'schedule.openJournal': 'Відкрити пару в журналі',
       'schedule.startDate': 'Початок',
@@ -261,9 +273,16 @@ const resources = {
       'courses.elective': 'Вибіркова',
       'courses.details': 'Деталі дисципліни',
       'courses.openCourse': 'Перейти до дисципліни',
+      'courses.openMoodle': 'Відкрити Moodle',
+      'courses.moodleNoticeText':
+        'У кампусі відображаються ваші дисципліни, базова інформація, додаткові матеріали й посилання на онлайн-пари. Завдання та оцінювання ведуться окремо в Moodle.',
+      'courses.detailsMoodleTitle':
+        'Завдання й оцінювання не дублюються в кампусі',
+      'courses.detailsMoodleText':
+        'Використовуйте матеріали дисципліни для силабусів, програм, презентацій та корисних HTTPS-посилань. Для завдань, здачі робіт і оцінок відкрийте Moodle.',
       'courses.academicYear': 'Навчальний рік',
       'courses.detailPlaceholder':
-        'Тут будуть відображатися навчальні матеріали та завдання курсу.',
+        'Тут будуть відображатися інформація про дисципліну, додаткові матеріали та корисні посилання.',
       'courses.studentsNotFound': 'Студентів не знайдено',
       'courses.materialsEmpty': 'Матеріалів ще немає',
       'courses.materialTitle': 'Назва та опис',
@@ -1075,6 +1094,15 @@ const resources = {
       'errors.boundary.retry': 'Refresh page',
       'errors.boundary.home': 'Dashboard',
 
+      'moodle.badge': 'External LMS',
+      'moodle.title': 'Assignments and grading are in Moodle',
+      'moodle.description':
+        'Assignments, work submission, and official grading are managed in IAPM Moodle. Campus does not duplicate LMS workflows and provides a quick path to the learning platform.',
+      'moodle.portalScope':
+        'Campus keeps current-semester courses, schedule, lesson journal, additional materials, and online class links.',
+      'moodle.open': 'Open Moodle',
+      'moodle.backToCourses': 'Back to courses',
+
       'auth.loginLabel': 'Login',
       'auth.passwordLabel': 'Password',
       'auth.loginPlaceholder': 'Enter login',
@@ -1211,6 +1239,9 @@ const resources = {
       'schedule.group': 'Group',
       'schedule.teacher': 'Teacher',
       'schedule.classroom': 'Classroom',
+      'schedule.onlineUrl': 'Online class link',
+      'schedule.onlineUrlPlaceholder': 'https://dist.maup.com.ua/ or another HTTPS link',
+      'schedule.openOnlineClass': 'Open online class',
       'schedule.filters': 'Filters',
       'schedule.openJournal': 'Open lesson in journal',
       'schedule.startDate': 'Start',
@@ -1300,9 +1331,16 @@ const resources = {
       'courses.elective': 'Elective',
       'courses.details': 'Course Details',
       'courses.openCourse': 'Open course',
+      'courses.openMoodle': 'Open Moodle',
+      'courses.moodleNoticeText':
+        'Campus shows your courses, basic course information, additional materials, and online class links. Assignments and grading are managed separately in Moodle.',
+      'courses.detailsMoodleTitle':
+        'Assignments and grading are not duplicated in Campus',
+      'courses.detailsMoodleText':
+        'Use course materials for syllabi, programs, presentations, and useful HTTPS links. Open Moodle for assignments, work submission, and grades.',
       'courses.academicYear': 'Academic Year',
       'courses.detailPlaceholder':
-        'Study materials and course assignments will be displayed here.',
+        'Course information, additional materials, and useful links will be displayed here.',
       'courses.studentsNotFound': 'No students found',
       'courses.materialsEmpty': 'No materials yet',
       'courses.materialTitle': 'Title and description',

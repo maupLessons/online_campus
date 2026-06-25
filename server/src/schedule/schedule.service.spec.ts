@@ -232,7 +232,9 @@ describe('ScheduleService', () => {
     ]);
     classroomModel.exists.mockReturnValue(query({ _id: ids.classroom }));
     scheduleEntryModel.find.mockReturnValue(query([]));
-    scheduleEntryModel.findById.mockReturnValue(query(scheduleEntry));
+    scheduleEntryModel.findById.mockReturnValue(
+      query({ ...scheduleEntry, onlineUrl: 'https://dist.maup.com.ua/' }),
+    );
     scheduleEntryModel.create.mockResolvedValue({
       _id: objectId(ids.schedule),
     });
@@ -245,6 +247,7 @@ describe('ScheduleService', () => {
         startTime: '08:30',
         endTime: '10:05',
         type: ScheduleEntryType.LECTURE,
+        onlineUrl: '  https://dist.maup.com.ua/  ',
       },
       audit,
     );
@@ -276,6 +279,11 @@ describe('ScheduleService', () => {
         endTime: '10:05',
       },
     });
+    expect(scheduleEntryModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onlineUrl: 'https://dist.maup.com.ua/',
+      }),
+    );
   });
 
   it('returns only course assignments visible to an elective student', async () => {
@@ -427,6 +435,7 @@ describe('ScheduleService', () => {
     expect(exportArtifact.filename).toBe('schedule.csv');
     expect(exportArtifact.contentType).toBe('text/csv; charset=utf-8');
     expect(csv).toContain('Дата;Початок;Завершення');
+    expect(csv).toContain('Онлайн-пара');
     expect(csv).toContain("'=SEC101");
     expect(csv).toContain('Основи кібербезпеки');
   });

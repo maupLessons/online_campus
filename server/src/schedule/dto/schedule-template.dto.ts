@@ -6,11 +6,13 @@ import {
   IsMongoId,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 import { PartialType } from '@nestjs/swagger';
 import { ScheduleEntryType } from '../schedule.enums';
@@ -63,6 +65,9 @@ export class ScheduleTemplateDto {
   classroom?: string;
 
   @ApiPropertyOptional()
+  onlineUrl?: string;
+
+  @ApiPropertyOptional()
   createdAt?: string;
 
   @ApiPropertyOptional()
@@ -102,6 +107,16 @@ export class CreateScheduleTemplateDto {
   @ApiProperty({ enum: ScheduleEntryType })
   @IsEnum(ScheduleEntryType)
   type: ScheduleEntryType;
+
+  @ApiPropertyOptional({
+    description:
+      'HTTPS link for recurring online classes created from template.',
+    example: 'https://dist.maup.com.ua/',
+  })
+  @ValidateIf((_, value: unknown) => value !== undefined && value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
+  onlineUrl?: string;
 }
 
 export class UpdateScheduleTemplateDto extends PartialType(

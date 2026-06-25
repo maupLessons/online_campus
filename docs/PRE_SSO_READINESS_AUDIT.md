@@ -4,7 +4,7 @@
 
 ## Підсумок
 
-Проєкт уже вийшов зі стадії MVP: object-level academic scope, HttpOnly auth, CSRF, refresh rotation, transactional audit outbox, розклад, журнал, вибіркові дисципліни й aggregate reports реалізовано значно глибше за початкове ТЗ. Основний ризик перед SSO міститься не в UI входу, а в експлуатаційному контурі: файли, backup/restore, identity mapping, cross-instance realtime та observability.
+Проєкт уже вийшов зі стадії MVP: object-level academic scope, HttpOnly auth, CSRF, refresh rotation, transactional audit outbox, розклад, журнал, вибіркові дисципліни й aggregate reports реалізовано значно глибше за початкове ТЗ. Moodle не інтегрується і не вбудовується в портал: завдання, здача робіт та офіційне оцінювання ведуться у зовнішній LMS за посиланням `https://dist.maup.com.ua/`. Основний ризик перед наступними інтеграціями міститься не в UI входу, а в експлуатаційному контурі: файли, backup/restore, identity mapping для зовнішніх академічних API, cross-instance realtime та observability.
 
 Поточна оцінка готовності:
 
@@ -13,7 +13,7 @@
 | Auth/password reset | готово до staging | Додано SMTP-доставку; production startup вимагає SMTP configuration, token не розкривається |
 | Users lifecycle | готово | Блокування відкликає refresh sessions і reset token; hard delete навмисно відсутній |
 | Schedule | готово, крім approval | Conflicts/workflows/templates/export закрито; немає формального dean approval workflow із FR-45 |
-| Courses/journal | готово | Пара відкривається з розкладу безпосередньо на вкладці журналу; schedule query обмежено course assignment |
+| Courses/journal | готово з legacy-застереженням | Пара відкривається з розкладу безпосередньо на вкладці журналу; завдання/оцінки приховано з основного UI і винесено в Moodle |
 | Surveys | готово з UX-gap | Lifecycle/results/export є; немає archive та окремої abandonment analytics |
 | Electives | готово | Lifecycle/finalization сильні; каталог ведуть admin/dean/department_head без доступу rector/president до мутацій |
 | References | готово | Import має dry-run preview, row errors, transaction та export; mutation audit використовує global fallback |
@@ -45,9 +45,9 @@ Gap: FR-45 вимагає approve/reject розкладу кафедр дека�
 
 ### Courses і journal (FR-11—FR-13, FR-20—FR-25)
 
-Матеріали, завдання, submissions, grades, файли/HTTPS resources, attendance та lesson topics реалізовано з academic object scope. Journal може бути пов'язаний із `ScheduleEntry`.
+Матеріали, HTTPS resources, attendance та lesson topics реалізовано з academic object scope. Journal може бути пов'язаний із `ScheduleEntry`. Legacy-код assignments/submissions/grades залишається в API для сумісності даних і звітності, але основний frontend-сценарій приховує локальні завдання/оцінки та веде користувача в Moodle.
 
-Gap: FR-25 обіцяє викладачеві export для власної групи/дисципліни, тоді як ReportsModule доступний управлінським ролям, а окремого teacher journal export немає. Це функціональний P1, якщо Moodle не перебирає звітність на себе.
+Gap: FR-25 обіцяє викладачеві export для власної групи/дисципліни, тоді як ReportsModule доступний управлінським ролям, а окремого teacher journal export немає. Якщо журнал лишається частиною кампуса, це функціональний P1 незалежно від Moodle.
 
 ### Surveys
 

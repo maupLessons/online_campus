@@ -21,6 +21,7 @@ const GradesPage = lazy(() => import('./pages/student/GradesPage'));
 const NotificationsPage = lazy(
   () => import('./pages/shared/NotificationsPage'),
 );
+const NewsPage = lazy(() => import('./pages/shared/NewsPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 const AuditLogPage = lazy(() => import('./pages/admin/AuditLogPage'));
 const ReportsPage = lazy(() => import('./pages/shared/ReportsPage'));
@@ -237,6 +238,14 @@ export default function App() {
             element={
               <LazyPage>
                 <NotificationsPage />
+              </LazyPage>
+            }
+          />
+          <Route
+            path="news"
+            element={
+              <LazyPage>
+                <NewsPage />
               </LazyPage>
             }
           />

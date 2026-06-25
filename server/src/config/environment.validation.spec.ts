@@ -82,6 +82,8 @@ describe('validateEnvironment', () => {
     expect(result.PASSWORD_RESET_EMAIL_ENABLED).toBe('false');
     expect(result.MAUP_API_ENABLED).toBe('false');
     expect(result.MAUP_API_BASE_URL).toBe('');
+    expect(result.MAUP_NEWS_FEED_URL).toBe('https://maup.com.ua/ua/feed.xml');
+    expect(result.MAUP_NEWS_FEED_ALLOWED_HOST).toBe('maup.com.ua');
   });
 
   it('requires credentials only when the MAUP integration is enabled', () => {
@@ -117,6 +119,17 @@ describe('validateEnvironment', () => {
         MAUP_API_PASSWORD: 'integration-password',
       }),
     ).toThrow(/MAUP_API_BASE_URL must use HTTPS in production/);
+  });
+
+  it('restricts the MAUP news feed to the approved host', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'test',
+        MONGODB_URI: 'mongodb://127.0.0.1:27017/campus-test',
+        MAUP_NEWS_FEED_URL: 'https://example.com/feed.xml',
+        MAUP_NEWS_FEED_ALLOWED_HOST: 'maup.com.ua',
+      }),
+    ).toThrow(/MAUP_NEWS_FEED_URL must use MAUP_NEWS_FEED_ALLOWED_HOST/);
   });
 
   it('requires an authenticated password-reset email transport in production', () => {

@@ -15,6 +15,7 @@ const NAV_ITEMS: {
 }[] = [
   { labelKey: 'nav.profile', path: '/profile', roles: ALL_ROLES },
   { labelKey: 'nav.dashboard', path: '/dashboard', roles: ALL_ROLES },
+  { labelKey: 'nav.news', path: '/news', roles: ALL_ROLES },
   { labelKey: 'nav.schedule', path: '/schedule', roles: ALL_ROLES },
   {
     labelKey: 'nav.courses',
@@ -148,6 +149,8 @@ export default function Layout() {
         return t('nav.users');
       case '/notifications':
         return t('nav.notifications');
+      case '/news':
+        return t('nav.news');
       case '/audit-log':
         return t('nav.auditLog');
       case '/reports':

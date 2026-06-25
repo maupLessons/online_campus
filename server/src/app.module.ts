@@ -26,6 +26,7 @@ import { validateEnvironment } from './config/environment.validation';
 import { DatabaseMigrationsModule } from './database-migrations/database-migrations.module';
 import { HealthController } from './health.controller';
 import { MaupStudentApiModule } from './integrations/maup-student-api/maup-student-api.module';
+import { NewsModule } from './news/news.module';
 
 mongoose.set('transactionAsyncLocalStorage', true);
 
@@ -113,6 +114,7 @@ function buildMongoUri(config: ConfigService): string {
     ElectiveDisciplinesModule,
     ReportsModule,
     MaupStudentApiModule,
+    NewsModule,
   ],
   controllers: [HealthController],
   providers: [

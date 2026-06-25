@@ -1,6 +1,6 @@
 # Електронний Кампус МАУП — Технічна документація
 
-> Версія документа: 3.1
+> Версія документа: 3.2
 > Статус: актуальний
 
 ---
@@ -31,7 +31,7 @@
 
 ### Призначення
 
-Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, опитування, вибіркові дисципліни, сповіщення, довідники та аудит. Поточна реалізація також містить локальні модулі розкладу, курсів, завдань і оцінок. Погоджений цільовий стан передбачає отримання академічних даних із API МАУП та використання зовнішніх посилань на Moodle замість дублювання LMS-функцій.
+Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, опитування, вибіркові дисципліни, сповіщення, новини МАУП, довідники та аудит. Поточна реалізація також містить локальні модулі розкладу, курсів, завдань і оцінок. Погоджений цільовий стан передбачає отримання академічних даних із API МАУП та використання зовнішніх посилань на Moodle замість дублювання LMS-функцій.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -42,7 +42,7 @@
 ┌─────────────────────────────────────────────────────────┐
 │                    Кампус — єдина система                │
 │  Auth · Users · Schedule · Courses · Surveys            │
-│  Notifications · References · AuditLog                  │
+│  Notifications · News · References · AuditLog           │
 │  Elective disciplines                                   │
 │                 Власна БД (MongoDB)                      │
 └─────────────────────────────────────────────────────────┘
@@ -61,6 +61,7 @@
 - **Система опитувань** — створення, проходження студентами та викладачами, аналіз результатів
 - **Вибіркові дисципліни** — критичний модуль: вибір студентом із запропонованого переліку та фіксація результату в кабінеті
 - Система сповіщень: зміни розкладу, нові завдання, оголошення
+- Новини МАУП з офіційної RSS-стрічки через backend proxy з cache/fallback
 - Відновлення пароля через одноразовий reset token без розкриття існування акаунта
 - Повний RBAC з явною матрицею дозволів без успадкування ролей та аудит-логом дій
 
@@ -86,9 +87,9 @@
 │  │              CORE MODULES                         │   │
 │  │  AuthModule · UsersModule · ScheduleModule        │   │
 │  │  CoursesModule · SurveysModule                    │   │
-│  │  NotificationsModule · ReferencesModule           │   │
-│  │  ElectiveDisciplinesModule · ReportsModule         │   │
-│  │  AuditLogModule · FilesModule                      │   │
+│  │  NotificationsModule · NewsModule                  │   │
+│  │  ReferencesModule · ElectiveDisciplinesModule      │   │
+│  │  ReportsModule · AuditLogModule · FilesModule      │   │
 │  │  DatabaseMigrationsModule · MaupStudentApiModule   │   │
 │  └──────────────────────────────────────────────────┘   │
 │                                                          │
@@ -599,6 +600,27 @@ replicas потрібен Redis/NATS adapter.
 | `new_survey`      | Опубліковано нове опитування             |
 | `announcement`    | Адмін надіслав оголошення                |
 | `system`          | Технічні повідомлення                    |
+
+---
+
+### 4.8.1 NewsModule
+
+**Файли:** `src/news/`
+
+**Відповідальність:** читання офіційної RSS/Atom-стрічки МАУП через backend,
+нормалізація новин для інтерфейсу та безпечний fallback, якщо зовнішній сайт
+тимчасово недоступний.
+
+**Поточна реалізація:**
+
+- `GET /news?limit=1..20` доступний авторизованим користувачам;
+- source URL за замовчуванням — публічна RSS-стрічка
+  `https://maup.com.ua/ua/feed.xml`;
+- backend обмежує host через `MAUP_NEWS_FEED_ALLOWED_HOST`, перевіряє розмір
+  відповіді, використовує timeout і короткий in-memory cache;
+- якщо RSS недоступний, API повертає кешовані дані як `stale`, а без кешу —
+  порожній список із `unavailable=true`, щоб dashboard не падав;
+- frontend має сторінку `/news` і компактний блок новин на dashboard.
 
 ---
 
@@ -1153,6 +1175,12 @@ MongoDB разом із причиною, actor-метаданими та ост
 | PATCH | `/notifications/read-all`     | Авторизований |
 | POST  | `/notifications/broadcast`    | admin         |
 
+### Новини `/api/news`
+
+| Метод | Шлях               | Доступ        |
+| ----- | ------------------ | ------------- |
+| GET   | `/news?limit=1..20` | Авторизований |
+
 ### Довідники `/api/references`
 
 | Метод           | Шлях                      | Доступ        |
@@ -1267,10 +1295,11 @@ read-only каталог користувачів; управлінські ро
 | 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
 | 9   | NotificationsModule                                     | ✅ In-app сценарії реалізовано              |
 | 10  | UsersModule                                             | ✅ Paginated каталог, multi-part пошук, admin mutations, rector/president read-only |
-| 11  | React auth flow (Zustand, cookies, interceptors)         | ✅ Реалізовано                              |
-| 12  | React layout, lazy routes, RBAC navigation, i18n         | ✅ Реалізовано                              |
-| 13  | Role-based frontend pages                               | ✅ 20 page components                       |
-| 14  | Docker Compose + MongoDB replica set                    | ✅ Реалізовано                              |
+| 11  | NewsModule                                              | ✅ MAUP RSS feed, backend cache/fallback, `/news` UI |
+| 12  | React auth flow (Zustand, cookies, interceptors)         | ✅ Реалізовано                              |
+| 13  | React layout, lazy routes, RBAC navigation, i18n         | ✅ Реалізовано                              |
+| 14  | Role-based frontend pages                               | ✅ 21 page components                       |
+| 15  | Docker Compose + MongoDB replica set                    | ✅ Реалізовано                              |
 
 ### Фаза 2 — База даних + File Upload + Опитування
 
@@ -1446,6 +1475,13 @@ online_campus/
 │       │   ├── notifications.controller.ts
 │       │   └── notifications.service.ts
 │       │
+│       ├── news/              # MAUP RSS/Atom feed proxy with cache/fallback
+│       │   ├── dto/
+│       │   ├── news.module.ts
+│       │   ├── news.controller.ts
+│       │   ├── news.service.ts
+│       │   └── news.types.ts
+│       │
 │       ├── files/             # file upload/download/delete and metadata
 │       │   ├── dto/
 │       │   ├── file.schema.ts
@@ -1533,6 +1569,7 @@ online_campus/
         ├── services/
         │   ├── api.ts
         │   ├── notificationsApi.ts
+        │   ├── newsApi.ts
         │   ├── surveysApi.ts
         │   ├── electivesApi.ts
         │   ├── reportsApi.ts
@@ -1557,6 +1594,7 @@ online_campus/
             │   └── ForgotPasswordPage.tsx
             ├── shared/
             │   ├── DashboardPage.tsx
+            │   ├── NewsPage.tsx
             │   ├── SchedulePage.tsx
             │   ├── NotificationsPage.tsx
             │   ├── ProfilePage.tsx
@@ -1683,6 +1721,14 @@ MAUP_API_RETRY_ATTEMPTS=2
 MAUP_API_CIRCUIT_FAILURE_THRESHOLD=5
 MAUP_API_CIRCUIT_RESET_TIMEOUT_MS=30000
 MAUP_API_MAX_RESPONSE_BYTES=5000000
+
+# Public MAUP news RSS feed (no credentials)
+MAUP_NEWS_FEED_URL=https://maup.com.ua/ua/feed.xml
+MAUP_NEWS_FEED_ALLOWED_HOST=maup.com.ua
+MAUP_NEWS_FEED_CACHE_TTL_MS=600000
+MAUP_NEWS_FEED_TIMEOUT_MS=5000
+MAUP_NEWS_FEED_MAX_ITEMS=12
+MAUP_NEWS_FEED_MAX_RESPONSE_BYTES=1000000
 
 SWAGGER_ENABLED=false
 

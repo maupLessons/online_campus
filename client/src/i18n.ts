@@ -420,8 +420,6 @@ const resources = {
       'common.delete': 'Видалити',
 
       'news.title': 'Новини МАУП',
-      'news.subtitle':
-        'Останні матеріали з офіційної RSS-стрічки МАУП. Посилання відкриваються на сайті академії.',
       'news.source': 'Офіційна стрічка МАУП',
       'news.lastUpdated': 'Оновлено: {{date}}',
       'news.refresh': 'Оновити',
@@ -1482,8 +1480,6 @@ const resources = {
       'common.delete': 'Delete',
 
       'news.title': 'IAPM news',
-      'news.subtitle':
-        'Latest posts from the official IAPM RSS feed. Links open on the academy website.',
       'news.source': 'Official IAPM feed',
       'news.lastUpdated': 'Updated: {{date}}',
       'news.refresh': 'Refresh',

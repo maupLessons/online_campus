@@ -562,8 +562,6 @@ const resources = {
       'users.searchPlaceholder': 'Пошук за ПІБ...',
       'users.searchButton': 'Знайти',
       'users.allRoles': 'Усі ролі',
-      'users.readOnlyDirectory':
-        'Режим перегляду: редагування, зміна ролей і блокування користувачів недоступні.',
       'users.loading': 'Завантаження користувачів...',
       'users.empty': 'Користувачів не знайдено',
       'users.loadError': 'Не вдалося завантажити користувачів',
@@ -1620,8 +1618,6 @@ const resources = {
       'users.searchPlaceholder': 'Search by full name...',
       'users.searchButton': 'Search',
       'users.allRoles': 'All roles',
-      'users.readOnlyDirectory':
-        'Read-only mode: editing, role changes, and blocking are disabled.',
       'users.loading': 'Loading users...',
       'users.empty': 'No users found',
       'users.loadError': 'Could not load users',

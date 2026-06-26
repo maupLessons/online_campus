@@ -120,12 +120,6 @@ export default function UsersPage() {
         )}
       </div>
 
-      {!canManageUsers && (
-        <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-          {t('users.readOnlyDirectory')}
-        </div>
-      )}
-
       <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row">
           <div className="flex flex-1 flex-col gap-2 sm:flex-row">

@@ -276,10 +276,6 @@ const resources = {
       'courses.openMoodle': 'Відкрити Moodle',
       'courses.moodleNoticeText':
         'У кампусі відображаються ваші дисципліни, базова інформація, додаткові матеріали й посилання на онлайн-пари. Завдання та оцінювання ведуться окремо в Moodle.',
-      'courses.detailsMoodleTitle':
-        'Завдання й оцінювання не дублюються в кампусі',
-      'courses.detailsMoodleText':
-        'Використовуйте матеріали дисципліни для силабусів, програм, презентацій та корисних HTTPS-посилань. Для завдань, здачі робіт і оцінок відкрийте Moodle.',
       'courses.academicYear': 'Навчальний рік',
       'courses.detailPlaceholder':
         'Тут будуть відображатися інформація про дисципліну, додаткові матеріали та корисні посилання.',
@@ -420,8 +416,6 @@ const resources = {
       'common.delete': 'Видалити',
 
       'news.title': 'Новини МАУП',
-      'news.subtitle':
-        'Останні матеріали з офіційної RSS-стрічки МАУП. Посилання відкриваються на сайті академії.',
       'news.source': 'Офіційна стрічка МАУП',
       'news.lastUpdated': 'Оновлено: {{date}}',
       'news.refresh': 'Оновити',
@@ -564,8 +558,6 @@ const resources = {
       'users.searchPlaceholder': 'Пошук за ПІБ...',
       'users.searchButton': 'Знайти',
       'users.allRoles': 'Усі ролі',
-      'users.readOnlyDirectory':
-        'Режим перегляду: редагування, зміна ролей і блокування користувачів недоступні.',
       'users.loading': 'Завантаження користувачів...',
       'users.empty': 'Користувачів не знайдено',
       'users.loadError': 'Не вдалося завантажити користувачів',
@@ -1334,10 +1326,6 @@ const resources = {
       'courses.openMoodle': 'Open Moodle',
       'courses.moodleNoticeText':
         'Campus shows your courses, basic course information, additional materials, and online class links. Assignments and grading are managed separately in Moodle.',
-      'courses.detailsMoodleTitle':
-        'Assignments and grading are not duplicated in Campus',
-      'courses.detailsMoodleText':
-        'Use course materials for syllabi, programs, presentations, and useful HTTPS links. Open Moodle for assignments, work submission, and grades.',
       'courses.academicYear': 'Academic Year',
       'courses.detailPlaceholder':
         'Course information, additional materials, and useful links will be displayed here.',
@@ -1482,8 +1470,6 @@ const resources = {
       'common.delete': 'Delete',
 
       'news.title': 'IAPM news',
-      'news.subtitle':
-        'Latest posts from the official IAPM RSS feed. Links open on the academy website.',
       'news.source': 'Official IAPM feed',
       'news.lastUpdated': 'Updated: {{date}}',
       'news.refresh': 'Refresh',
@@ -1624,8 +1610,6 @@ const resources = {
       'users.searchPlaceholder': 'Search by full name...',
       'users.searchButton': 'Search',
       'users.allRoles': 'All roles',
-      'users.readOnlyDirectory':
-        'Read-only mode: editing, role changes, and blocking are disabled.',
       'users.loading': 'Loading users...',
       'users.empty': 'No users found',
       'users.loadError': 'Could not load users',

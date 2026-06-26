@@ -802,11 +802,6 @@ export default function CourseDetailPage() {
         </a>
       </div>
 
-      <div className="rounded-xl border border-blue-100 bg-blue-50 px-5 py-4 text-sm leading-6 text-blue-900">
-        <p className="font-semibold">{t("courses.detailsMoodleTitle")}</p>
-        <p className="mt-1 text-blue-800">{t("courses.detailsMoodleText")}</p>
-      </div>
-
       {statusMessage && (
         <div className="flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
           <span>{statusMessage}</span>

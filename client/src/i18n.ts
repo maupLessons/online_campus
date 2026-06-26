@@ -276,10 +276,6 @@ const resources = {
       'courses.openMoodle': 'Відкрити Moodle',
       'courses.moodleNoticeText':
         'У кампусі відображаються ваші дисципліни, базова інформація, додаткові матеріали й посилання на онлайн-пари. Завдання та оцінювання ведуться окремо в Moodle.',
-      'courses.detailsMoodleTitle':
-        'Завдання й оцінювання не дублюються в кампусі',
-      'courses.detailsMoodleText':
-        'Використовуйте матеріали дисципліни для силабусів, програм, презентацій та корисних HTTPS-посилань. Для завдань, здачі робіт і оцінок відкрийте Moodle.',
       'courses.academicYear': 'Навчальний рік',
       'courses.detailPlaceholder':
         'Тут будуть відображатися інформація про дисципліну, додаткові матеріали та корисні посилання.',
@@ -1330,10 +1326,6 @@ const resources = {
       'courses.openMoodle': 'Open Moodle',
       'courses.moodleNoticeText':
         'Campus shows your courses, basic course information, additional materials, and online class links. Assignments and grading are managed separately in Moodle.',
-      'courses.detailsMoodleTitle':
-        'Assignments and grading are not duplicated in Campus',
-      'courses.detailsMoodleText':
-        'Use course materials for syllabi, programs, presentations, and useful HTTPS links. Open Moodle for assignments, work submission, and grades.',
       'courses.academicYear': 'Academic Year',
       'courses.detailPlaceholder':
         'Course information, additional materials, and useful links will be displayed here.',

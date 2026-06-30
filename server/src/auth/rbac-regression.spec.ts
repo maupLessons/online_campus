@@ -25,6 +25,19 @@ function controllerMethod(
 }
 
 describe('critical RBAC regression policy', () => {
+  it('keeps the dispatcher role out of the active role model', () => {
+    expect(Object.values(Role)).toEqual([
+      Role.STUDENT,
+      Role.TEACHER,
+      Role.DEPARTMENT_HEAD,
+      Role.DEAN,
+      Role.RECTOR,
+      Role.PRESIDENT,
+      Role.ADMIN,
+    ]);
+    expect(Object.values(Role)).not.toContain('dispatcher' as Role);
+  });
+
   const userMutations = ['create', 'update', 'changeRole', 'toggleBlock'].map(
     (methodName) => controllerMethod(UsersController.prototype, methodName),
   );

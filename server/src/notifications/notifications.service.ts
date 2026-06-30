@@ -490,8 +490,52 @@ export class NotificationsService {
     if (query.readState === 'unread') {
       filter.readBy = { $nin: [actorObjId, actorId] };
     }
+    const createdAtFilter = this.buildCreatedAtFilter(query);
+    if (createdAtFilter) {
+      filter.createdAt = createdAtFilter;
+    }
 
     return filter;
+  }
+
+  private buildCreatedAtFilter(
+    query: NotificationQueryDto,
+  ): Record<string, Date> | null {
+    const createdAt: Record<string, Date> = {};
+
+    if (query.dateFrom) {
+      createdAt.$gte = this.parseDateBoundary(query.dateFrom, 'start');
+    }
+    if (query.dateTo) {
+      createdAt.$lte = this.parseDateBoundary(query.dateTo, 'end');
+    }
+
+    if (
+      createdAt.$gte &&
+      createdAt.$lte &&
+      createdAt.$gte.getTime() > createdAt.$lte.getTime()
+    ) {
+      throw new BadRequestException(
+        'Дата початку не може бути пізнішою за дату завершення',
+      );
+    }
+
+    return Object.keys(createdAt).length > 0 ? createdAt : null;
+  }
+
+  private parseDateBoundary(value: string, boundary: 'start' | 'end'): Date {
+    const trimmedValue = value.trim();
+    const normalizedValue =
+      boundary === 'end' && /^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)
+        ? `${trimmedValue}T23:59:59.999Z`
+        : trimmedValue;
+    const parsed = new Date(normalizedValue);
+
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException('Некоректний період фільтрації');
+    }
+
+    return parsed;
   }
 
   private combineFilters(

@@ -94,8 +94,11 @@ describe('UsersService', () => {
 
     const result = await service.findAll(
       { page: 2, limit: 25 },
-      Role.STUDENT,
-      'Петренко Іван',
+      {
+        role: Role.STUDENT,
+        status: 'active',
+        search: 'Петренко Іван',
+      },
       requester,
     );
 
@@ -104,9 +107,10 @@ describe('UsersService', () => {
       Record<string, unknown>,
     ];
     expect(filter.$and[0]).toEqual({ role: Role.STUDENT });
-    expect(filter.$and).toHaveLength(3);
-    expect(filter.$and[1]).toHaveProperty('$or');
+    expect(filter.$and[1]).toEqual({ status: 'active' });
+    expect(filter.$and).toHaveLength(4);
     expect(filter.$and[2]).toHaveProperty('$or');
+    expect(filter.$and[3]).toHaveProperty('$or');
     expect(options).toMatchObject({ page: 2, limit: 25, lean: true });
     expect(academicAccessService.buildVisibleUserFilter).toHaveBeenCalledWith(
       requester,

@@ -3,6 +3,7 @@ import {
   IsBoolean,
   IsEnum,
   IsIn,
+  IsISO8601,
   IsOptional,
   IsString,
   MaxLength,
@@ -49,4 +50,14 @@ export class NotificationQueryDto {
   @IsOptional()
   @IsIn(NotificationTargetTypes)
   targetType?: NotificationTargetType;
+
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  @Transform(({ value }) => trimString(value))
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  @Transform(({ value }) => trimString(value))
+  dateTo?: string;
 }

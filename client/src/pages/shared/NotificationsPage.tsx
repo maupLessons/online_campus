@@ -383,7 +383,7 @@ export default function NotificationsPage() {
       </div>
 
       <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
           <label className="relative md:col-span-2 xl:col-span-1">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
@@ -395,6 +395,38 @@ export default function NotificationsPage() {
               onChange={(event) => setSearchInput(event.target.value)}
               placeholder={t('notifications.filters.searchPlaceholder')}
               className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
+            {t('notifications.filters.dateFrom')}
+            <input
+              type="date"
+              value={filters.dateFrom ?? ''}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  dateFrom: event.target.value || undefined,
+                }))
+              }
+              max={filters.dateTo}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
+            {t('notifications.filters.dateTo')}
+            <input
+              type="date"
+              value={filters.dateTo ?? ''}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  dateTo: event.target.value || undefined,
+                }))
+              }
+              min={filters.dateFrom}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900"
             />
           </label>
 

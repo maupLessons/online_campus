@@ -286,7 +286,7 @@ describe('NotificationsService', () => {
     ]);
   });
 
-  it('combines visibility with search, type, importance, and read filters', async () => {
+  it('combines visibility with search, type, importance, read, and date filters', async () => {
     notificationModel.find.mockReturnValueOnce(sortLeanQuery([]));
 
     await service.findByUser(userId, {
@@ -294,6 +294,8 @@ describe('NotificationsService', () => {
       type: NotificationType.SCHEDULE_CHANGE,
       important: true,
       readState: 'unread',
+      dateFrom: '2026-06-01',
+      dateTo: '2026-06-30',
     });
 
     const [findFilter] = notificationModel.find.mock.calls[0];
@@ -303,6 +305,10 @@ describe('NotificationsService', () => {
     expect(filters[1]).toMatchObject({
       type: NotificationType.SCHEDULE_CHANGE,
       important: true,
+    });
+    expect(filters[1].createdAt).toEqual({
+      $gte: new Date('2026-06-01'),
+      $lte: new Date('2026-06-30T23:59:59.999Z'),
     });
     const readBy = filters[1].readBy as { $nin: unknown[] };
     expect(readBy.$nin).toContain(userId);

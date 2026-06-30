@@ -13,6 +13,8 @@ export type NotificationListFilters = {
   readState?: 'read' | 'unread';
   important?: boolean;
   targetType?: string;
+  dateFrom?: string;
+  dateTo?: string;
 };
 
 const normalizeNotification = (notification: NotificationResponse): Notification => ({

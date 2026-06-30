@@ -104,8 +104,12 @@ export class UsersController {
     @Query() query: UserQueryDto,
     @Req() req: AuthenticatedRequest,
   ): Promise<PaginatedDto<UserDto>> {
-    const { role, search, ...paginationDto } = query;
-    return this.usersService.findAll(paginationDto, role, search, req.user);
+    const { role, status, search, ...paginationDto } = query;
+    return this.usersService.findAll(
+      paginationDto,
+      { role, status, search },
+      req.user,
+    );
   }
 
   @Get('search')

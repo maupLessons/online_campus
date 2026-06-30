@@ -21,6 +21,7 @@ import { PaginatedDto } from '../common/dto/paginated.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangeUserRoleDto } from './dto/change-user-role.dto';
+import type { UserStatus } from './dto/user-query.dto';
 import { toId } from '../common/utils/to-id.util';
 import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
@@ -585,11 +586,15 @@ export class UsersService {
 
   async findAll(
     paginationDto: PaginationDto,
-    role?: Role,
-    search?: string,
+    filtersDto: {
+      role?: Role;
+      status?: UserStatus;
+      search?: string;
+    } = {},
     requester?: AuthenticatedUser,
   ): Promise<PaginatedDto<UserDto>> {
     const { page, limit } = paginationDto;
+    const { role, status, search } = filtersDto;
     const options = {
       page,
       limit,
@@ -599,6 +604,9 @@ export class UsersService {
     const filters: Array<Record<string, unknown>> = [];
     if (role) {
       filters.push({ role });
+    }
+    if (status) {
+      filters.push({ status });
     }
 
     for (const token of normalizeSearchTokens(search)) {

@@ -7,7 +7,8 @@ import { useAuthStore } from '../../store/authStore';
 import type { PaginatedResponse, User } from '../../types';
 import { Role, ROLE_LABEL_KEYS } from '../../types';
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+type UserStatusFilter = User['status'] | '';
 
 const EMPTY_PAGE: PaginatedResponse<User> = {
   docs: [],
@@ -25,6 +26,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | ''>('');
+  const [statusFilter, setStatusFilter] = useState<UserStatusFilter>('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +48,7 @@ export default function UsersPage() {
           page,
           limit,
           role: roleFilter || undefined,
+          status: statusFilter || undefined,
           search: appliedSearch || undefined,
         },
         signal: controller.signal,
@@ -74,7 +77,7 @@ export default function UsersPage() {
       active = false;
       controller.abort();
     };
-  }, [appliedSearch, limit, page, refreshKey, roleFilter, t]);
+  }, [appliedSearch, limit, page, refreshKey, roleFilter, statusFilter, t]);
 
   const handleToggleBlock = async (user: User) => {
     try {
@@ -100,6 +103,21 @@ export default function UsersPage() {
     if (search.trim() === appliedSearch) {
       setRefreshKey((current) => current + 1);
     }
+  };
+  const hasActiveFilters =
+    search.trim() !== '' ||
+    appliedSearch !== '' ||
+    roleFilter !== '' ||
+    statusFilter !== '';
+
+  const resetFilters = () => {
+    setLoading(true);
+    setError(null);
+    setSearch('');
+    setAppliedSearch('');
+    setRoleFilter('');
+    setStatusFilter('');
+    setPage(1);
   };
 
   const currentPage = usersPage.totalPages === 0 ? 0 : usersPage.page;
@@ -162,6 +180,22 @@ export default function UsersPage() {
             ))}
           </select>
 
+          <select
+            value={statusFilter}
+            onChange={(event) => {
+              setLoading(true);
+              setError(null);
+              setStatusFilter(event.target.value as UserStatusFilter);
+              setPage(1);
+            }}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 lg:w-auto"
+            aria-label={t('users.status')}
+          >
+            <option value="">{t('users.allStatuses')}</option>
+            <option value="active">{t('users.statusActive')}</option>
+            <option value="blocked">{t('users.statusBlocked')}</option>
+          </select>
+
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <span className="whitespace-nowrap">{t('users.perPage')}</span>
             <select
@@ -181,6 +215,15 @@ export default function UsersPage() {
               ))}
             </select>
           </label>
+
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!hasActiveFilters}
+            className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:border-gray-200 disabled:text-gray-300 lg:w-auto"
+          >
+            {t('users.resetFilters')}
+          </button>
         </div>
       </div>
 

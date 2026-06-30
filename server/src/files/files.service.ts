@@ -25,21 +25,7 @@ import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { TransactionLifecycleService } from '../audit-log/transaction-lifecycle.service';
 import { AcademicAccessService } from '../common/access/academic-access.service';
-
-const ALLOWED_FILE_TYPES = new Map<string, Set<string>>([
-  ['.png', new Set(['image/png'])],
-  ['.jpeg', new Set(['image/jpeg'])],
-  ['.jpg', new Set(['image/jpeg'])],
-  ['.pdf', new Set(['application/pdf'])],
-  ['.doc', new Set(['application/msword'])],
-  [
-    '.docx',
-    new Set([
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ]),
-  ],
-  ['.zip', new Set(['application/zip', 'application/x-zip-compressed'])],
-]);
+import { validateUploadFile } from './file-upload-validation.util';
 
 @Injectable()
 export class FilesService {
@@ -62,21 +48,11 @@ export class FilesService {
     let writtenFilePath: string | undefined;
 
     try {
-      const correctOriginalName = Buffer.from(
-        file.originalname,
-        'latin1',
-      ).toString('utf8');
-
-      const fileExtension = path.extname(correctOriginalName).toLowerCase();
-      const allowedMimeTypes = ALLOWED_FILE_TYPES.get(fileExtension);
-
-      if (!allowedMimeTypes || !allowedMimeTypes.has(file.mimetype)) {
-        throw new BadRequestException('Недопустимий тип файлу');
-      }
+      const validatedFile = validateUploadFile(file);
 
       const safeFileName = this.transactionLifecycle.getOrCreate(
         'files.upload.storage-name',
-        () => `${randomUUID()}${fileExtension}`,
+        () => `${randomUUID()}${validatedFile.extension}`,
       );
       const uploadPath = path.join(__dirname, '..', '..', 'uploads');
 
@@ -90,10 +66,10 @@ export class FilesService {
       );
 
       const savedFile = await this.fileModel.create({
-        originalName: correctOriginalName,
+        originalName: validatedFile.originalName,
         storagePath: safeFileName,
-        mimetype: file.mimetype,
-        size: file.size,
+        mimetype: validatedFile.mimeType,
+        size: validatedFile.size,
         uploadedBy: new Types.ObjectId(userId),
       });
 
@@ -102,10 +78,10 @@ export class FilesService {
         targetEntity: 'file',
         targetId: toId(savedFile._id),
         details: {
-          originalName: correctOriginalName,
-          extension: fileExtension,
-          mimeType: file.mimetype,
-          sizeBytes: file.size,
+          originalName: validatedFile.originalName,
+          extension: validatedFile.extension,
+          mimeType: validatedFile.mimeType,
+          sizeBytes: validatedFile.size,
         },
       });
 

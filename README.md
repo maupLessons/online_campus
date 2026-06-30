@@ -196,13 +196,13 @@
 
 **Файли:** `src/users/`
 
-**Відповідальність:** управління обліковими записами, серверна пагінація, пошук за кількома частинами ПІБ, фільтрація за роллю та перегляд профілів. Ректор і президент мають глобальний read-only доступ до каталогу; мутації доступні лише адміністратору.
+**Відповідальність:** управління обліковими записами, серверна пагінація, пошук за кількома частинами ПІБ, фільтрація за роллю та статусом, скидання фільтрів і перегляд профілів. Ректор і президент мають глобальний read-only доступ до каталогу; мутації доступні лише адміністратору.
 
 **Ендпоінти та доступ:**
 
 | Метод | Шлях                       | Доступ                         |
 | ----- | -------------------------- | ------------------------------ |
-| GET   | `/users?page=&limit=&role=&search=` | admin, rector, president; глобальний read-only для rector/president |
+| GET   | `/users?page=&limit=&role=&status=&search=` | admin, rector, president; глобальний read-only для rector/president |
 | GET   | `/users/search?q=&role=`   | admin, rector, president, dean, department_head; scoped для dean/department_head |
 | GET   | `/users/:id`               | admin, rector, president, dean; scoped для dean |
 | GET   | `/users/group/:groupId`    | teacher+                       |
@@ -212,7 +212,7 @@
 | PATCH | `/users/:id/block`         | admin                          |
 | PATCH | `/users/:id/role`          | admin                          |
 
-`GET /users` повертає стандартний `PaginatedDto<UserDto>`. Дозволені розміри сторінки — від 1 до 100; frontend пропонує 10, 25 або 50 записів. Пошук обмежено 100 символами, він нечутливий до регістру та підтримує до трьох частин ПІБ у довільному порядку.
+`GET /users` повертає стандартний `PaginatedDto<UserDto>`. Дозволені розміри сторінки — від 1 до 100; frontend пропонує 10, 25, 50 або 100 записів. Пошук обмежено 100 символами, він нечутливий до регістру та підтримує до трьох частин ПІБ у довільному порядку. Фільтр `status` приймає `active` або `blocked`.
 
 ---
 
@@ -579,7 +579,7 @@ interface ElectiveSelection {
 
 | Метод | Шлях                          | Опис                             |
 | ----- | ----------------------------- | -------------------------------- |
-| GET   | `/notifications?search=&type=&readState=&important=&targetType=` | Мої сповіщення з фільтрами |
+| GET   | `/notifications?search=&type=&readState=&important=&targetType=&dateFrom=&dateTo=` | Мої сповіщення з фільтрами |
 | GET   | `/notifications/unread-count` | Кількість непрочитаних           |
 | GET   | `/notifications/stream`       | Authenticated SSE stream         |
 | PATCH | `/notifications/:id/read`     | Позначити прочитаним             |
@@ -592,8 +592,10 @@ SSE передає тільки сигнал про зміну, після як�
 replicas потрібен Redis/NATS adapter.
 
 На сторінці сповіщень доступні debounced-пошук, фільтри за прочитаністю,
-типом і важливістю; адміністратор додатково фільтрує за аудиторією. Фільтри
-застосовуються на backend після перевірки видимого користувачеві scope.
+типом, важливістю та періодом створення; адміністратор додатково фільтрує за
+аудиторією. Фільтри застосовуються на backend після перевірки видимого
+користувачеві scope. Для `dateTo` дата без часу включає весь день до
+`23:59:59.999Z`.
 
 **Типи сповіщень:**
 
@@ -804,12 +806,14 @@ MongoDB E2E quality gate:
 
 **Поточний стан:** авторизоване завантаження й завантаження файлів із
 перевіркою ownership/scope, випадковими storage names, обмеженням розміру та
-allow-list розширень і declared MIME. Файли зберігаються на приватному
-локальному volume і віддаються через контрольований backend endpoint.
+allow-list розширень, declared MIME, сигнатури вмісту файла, базовою
+container validation для ZIP/DOCX та безпечнішою нормалізацією оригінальної
+назви. Файли зберігаються на приватному локальному volume і віддаються через
+контрольований backend endpoint.
 
-**Production gap:** content inspection ще не реалізовано. Перед production
-потрібні quarantine, magic-byte/container validation, antivirus scanning і
-private object storage із контрольованою видачею файлів.
+**Production gap:** базова magic-byte/container validation уже реалізована.
+Перед production ще потрібні quarantine, antivirus scanning і private object
+storage із контрольованою видачею файлів.
 
 ### 4.12 DatabaseMigrationsModule
 
@@ -1217,6 +1221,8 @@ endpoints є основним шляхом для адміністративни
 інваріанти: лише `admin` змінює користувачів і розклад; `rector` та
 `president` не мають операційних mutation permissions, але отримують глобальний
 read-only каталог користувачів; управлінські ролі бачать звіти у своєму scope.
+Regression tests додатково фіксують активну модель із семи ролей і не
+допускають повернення ролі `dispatcher` без явного перегляду RBAC.
 
 ---
 
@@ -1299,8 +1305,8 @@ read-only каталог користувачів; управлінські ро
 | 6   | ScheduleModule backend/frontend workflows, conflicts, audit, CSV/XLSX | ✅ Закрито: admin-only UI, cancel/reschedule/substitution, templates, bulk |
 | 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
 | 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
-| 9   | NotificationsModule                                     | ✅ In-app сценарії реалізовано              |
-| 10  | UsersModule                                             | ✅ Paginated каталог, multi-part пошук, admin mutations, rector/president read-only |
+| 9   | NotificationsModule                                     | ✅ In-app сценарії, SSE і фільтри за датою реалізовано |
+| 10  | UsersModule                                             | ✅ Paginated каталог, multi-part пошук, status/role filters, admin mutations, rector/president read-only |
 | 11  | NewsModule                                              | ✅ MAUP RSS feed, backend cache/fallback, `/news` UI |
 | 12  | React auth flow (Zustand, cookies, interceptors)         | ✅ Реалізовано                              |
 | 13  | React layout, lazy routes, RBAC navigation, i18n         | ✅ Реалізовано                              |
@@ -1313,7 +1319,7 @@ read-only каталог користувачів; управлінські ро
 | --- | --------------------------------------------------- | ------------ |
 | 1   | MongoDB + Mongoose ODM замість runtime mock-даних        | ✅ Реалізовано |
 | 2   | Автоматизована стратегія schema migrations               | ✅ Versioned ledger, checksum, distributed lock + heartbeat |
-| 3   | FilesModule — завантаження файлів (матеріали, здачі)     | ✅ Реалізовано |
+| 3   | FilesModule — завантаження файлів (матеріали, здачі)     | ✅ Реалізовано; додано MIME/signature validation |
 | 4   | CRUD усіх довідників через окремий admin UI              | ✅ Реалізовано |
 | 5   | **SurveysModule** — backend + frontend, результати/export | ✅ Реалізовано |
 | 6   | **ElectiveDisciplinesModule** — повний цикл вибору        | ✅ Реалізовано |

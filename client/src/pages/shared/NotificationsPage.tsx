@@ -36,6 +36,80 @@ function getUserId(user: User | null) {
   return user?.id ?? user?._id ?? null;
 }
 
+function normalizeFilterText(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function getDateBoundary(value: string, boundary: 'start' | 'end') {
+  const isoValue =
+    boundary === 'end'
+      ? `${value}T23:59:59.999Z`
+      : `${value}T00:00:00.000Z`;
+  const date = new Date(isoValue);
+
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function matchesNotificationFilters(
+  notification: Notification,
+  filters: NotificationListFilters,
+) {
+  const search = filters.search ? normalizeFilterText(filters.search) : '';
+
+  if (
+    search &&
+    !normalizeFilterText(
+      `${notification.title} ${notification.message}`,
+    ).includes(search)
+  ) {
+    return false;
+  }
+
+  if (filters.type && notification.type !== filters.type) {
+    return false;
+  }
+
+  if (filters.readState === 'read' && !notification.readFlag) {
+    return false;
+  }
+
+  if (filters.readState === 'unread' && notification.readFlag) {
+    return false;
+  }
+
+  if (
+    filters.important !== undefined &&
+    notification.important !== filters.important
+  ) {
+    return false;
+  }
+
+  if (filters.targetType && notification.targetType !== filters.targetType) {
+    return false;
+  }
+
+  const createdAt = new Date(notification.createdAt).getTime();
+  if (Number.isNaN(createdAt)) {
+    return false;
+  }
+
+  if (filters.dateFrom) {
+    const from = getDateBoundary(filters.dateFrom, 'start');
+    if (from !== null && createdAt < from) {
+      return false;
+    }
+  }
+
+  if (filters.dateTo) {
+    const to = getDateBoundary(filters.dateTo, 'end');
+    if (to !== null && createdAt > to) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export default function NotificationsPage() {
   const [isModalOpen, setIsModalOpen] =
     useState(false);
@@ -112,6 +186,13 @@ export default function NotificationsPage() {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
     staleTime: 10_000,
   });
+  const displayedNotifications = useMemo(
+    () =>
+      notifications.filter((notification) =>
+        matchesNotificationFilters(notification, effectiveFilters),
+      ),
+    [effectiveFilters, notifications],
+  );
 
   const unreadCount = notifications.filter((notification) =>
     isAdmin
@@ -338,7 +419,7 @@ export default function NotificationsPage() {
   };
 
   const getNotificationAudienceLabel = (notification: Notification) => {
-    if (notification.userId === userId) {
+    if (notification.userId) {
       return t('notifications.audience.personal');
     }
 
@@ -360,6 +441,11 @@ export default function NotificationsPage() {
 
     return t('notifications.audience.broadcast');
   };
+
+  const filterLabelClass =
+    'flex min-w-0 flex-col gap-1 text-xs font-medium text-slate-500';
+  const filterControlClass =
+    'h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20';
 
   return (
     <div className="p-5">
@@ -383,23 +469,26 @@ export default function NotificationsPage() {
       </div>
 
       <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
-          <label className="relative md:col-span-2 xl:col-span-1">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder={t('notifications.filters.searchPlaceholder')}
-              className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-            />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-[minmax(220px,1.2fr)_repeat(6,minmax(140px,1fr))]">
+          <label className={filterLabelClass}>
+            <span>{t('notifications.filters.search')}</span>
+            <span className="relative">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder={t('notifications.filters.searchPlaceholder')}
+                className={`${filterControlClass} pl-9`}
+              />
+            </span>
           </label>
 
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
-            {t('notifications.filters.dateFrom')}
+          <label className={filterLabelClass}>
+            <span>{t('notifications.filters.dateFrom')}</span>
             <input
               type="date"
               value={filters.dateFrom ?? ''}
@@ -410,12 +499,12 @@ export default function NotificationsPage() {
                 }))
               }
               max={filters.dateTo}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900"
+              className={filterControlClass}
             />
           </label>
 
-          <label className="flex flex-col gap-1 text-xs font-medium text-slate-500">
-            {t('notifications.filters.dateTo')}
+          <label className={filterLabelClass}>
+            <span>{t('notifications.filters.dateTo')}</span>
             <input
               type="date"
               value={filters.dateTo ?? ''}
@@ -426,120 +515,126 @@ export default function NotificationsPage() {
                 }))
               }
               min={filters.dateFrom}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-normal text-slate-900"
+              className={filterControlClass}
             />
           </label>
 
-          <select
-            value={filters.readState ?? ''}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                readState:
-                  (event.target.value as 'read' | 'unread') || undefined,
-              }))
-            }
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">{t('notifications.filters.allStates')}</option>
-            <option value="unread">{t('notifications.unread')}</option>
-            <option value="read">{t('notifications.read')}</option>
-          </select>
-
-          <select
-            value={filters.type ?? ''}
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                type: event.target.value || undefined,
-              }))
-            }
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">{t('notifications.filters.allTypes')}</option>
-            {notificationTypes.map((type) => (
-              <option key={type} value={type}>
-                {t(`notifications.types.${type}`)}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={
-              filters.important === undefined
-                ? ''
-                : String(filters.important)
-            }
-            onChange={(event) =>
-              setFilters((current) => ({
-                ...current,
-                important:
-                  event.target.value === ''
-                    ? undefined
-                    : event.target.value === 'true',
-              }))
-            }
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            <option value="">{t('notifications.filters.allPriorities')}</option>
-            <option value="true">{t('notifications.filters.important')}</option>
-            <option value="false">{t('notifications.filters.regular')}</option>
-          </select>
-
-          {isAdmin ? (
+          <label className={filterLabelClass}>
+            <span>{t('notifications.filters.state')}</span>
             <select
-              value={filters.targetType ?? ''}
+              value={filters.readState ?? ''}
               onChange={(event) =>
                 setFilters((current) => ({
                   ...current,
-                  targetType: event.target.value || undefined,
+                  readState:
+                    (event.target.value as 'read' | 'unread') || undefined,
                 }))
               }
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              className={filterControlClass}
             >
-              <option value="">{t('notifications.filters.allAudiences')}</option>
-              {notificationTargets.map((target) => (
-                <option key={target} value={target}>
-                  {t(
-                    `notifications.form.targets.${
-                      target === 'students_teachers'
-                        ? 'studentsTeachers'
-                        : target
-                    }`,
-                  )}
+              <option value="">{t('notifications.filters.allStates')}</option>
+              <option value="unread">{t('notifications.unread')}</option>
+              <option value="read">{t('notifications.read')}</option>
+            </select>
+          </label>
+
+          <label className={filterLabelClass}>
+            <span>{t('notifications.filters.type')}</span>
+            <select
+              value={filters.type ?? ''}
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  type: event.target.value || undefined,
+                }))
+              }
+              className={filterControlClass}
+            >
+              <option value="">{t('notifications.filters.allTypes')}</option>
+              {notificationTypes.map((type) => (
+                <option key={type} value={type}>
+                  {t(`notifications.types.${type}`)}
                 </option>
               ))}
             </select>
-          ) : (
-            <button
-              type="button"
-              onClick={resetFilters}
-              disabled={!hasActiveFilters}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          </label>
+
+          <label className={filterLabelClass}>
+            <span>{t('notifications.filters.priority')}</span>
+            <select
+              value={
+                filters.important === undefined ? '' : String(filters.important)
+              }
+              onChange={(event) =>
+                setFilters((current) => ({
+                  ...current,
+                  important:
+                    event.target.value === ''
+                      ? undefined
+                      : event.target.value === 'true',
+                }))
+              }
+              className={filterControlClass}
             >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              {t('notifications.filters.reset')}
-            </button>
+              <option value="">
+                {t('notifications.filters.allPriorities')}
+              </option>
+              <option value="true">
+                {t('notifications.filters.important')}
+              </option>
+              <option value="false">
+                {t('notifications.filters.regular')}
+              </option>
+            </select>
+          </label>
+
+          {isAdmin && (
+            <label className={filterLabelClass}>
+              <span>{t('notifications.filters.audience')}</span>
+              <select
+                value={filters.targetType ?? ''}
+                onChange={(event) =>
+                  setFilters((current) => ({
+                    ...current,
+                    targetType: event.target.value || undefined,
+                  }))
+                }
+                className={filterControlClass}
+              >
+                <option value="">
+                  {t('notifications.filters.allAudiences')}
+                </option>
+                {notificationTargets.map((target) => (
+                  <option key={target} value={target}>
+                    {t(
+                      `notifications.form.targets.${
+                        target === 'students_teachers'
+                          ? 'studentsTeachers'
+                          : target
+                      }`,
+                    )}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
+        <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
           <span>
             {t('notifications.filters.results', {
-              count: notifications.length,
+              count: displayedNotifications.length,
             })}
           </span>
-          {isAdmin && (
-            <button
-              type="button"
-              onClick={resetFilters}
-              disabled={!hasActiveFilters}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              {t('notifications.filters.reset')}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={resetFilters}
+            disabled={!hasActiveFilters}
+            className="inline-flex h-9 items-center justify-center gap-2 self-start rounded-lg border border-slate-300 px-3 font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
+          >
+            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            {t('notifications.filters.reset')}
+          </button>
         </div>
       </section>
 
@@ -586,13 +681,13 @@ export default function NotificationsPage() {
           </div>
         )}
 
-        {!isLoading && !isError && notifications.length === 0 && (
+        {!isLoading && !isError && displayedNotifications.length === 0 && (
           <p className="text-gray-500">
             {t('notifications.empty')}
           </p>
         )}
 
-        {notifications.map((notification) => (
+        {displayedNotifications.map((notification) => (
           <div key={notification.id}>
             <NotificationItem
               notification={notification}

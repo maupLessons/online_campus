@@ -100,7 +100,7 @@ export default function NotificationItem({
 
             {audienceLabel && (
               <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                {audienceLabel}
+                {t('notifications.audienceLabel', { audience: audienceLabel })}
               </span>
             )}
           </div>

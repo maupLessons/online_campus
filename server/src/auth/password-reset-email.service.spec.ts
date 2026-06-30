@@ -1,8 +1,13 @@
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import type { SendMailOptions } from 'nodemailer';
 import { PasswordResetEmailService } from './password-reset-email.service';
 
-jest.mock('nodemailer', () => ({ createTransport: jest.fn() }));
+jest.mock('nodemailer', () => ({ createTransport: jest.fn() }), {
+  virtual: true,
+});
+
+const createTransportMock = jest.mocked(nodemailer.createTransport);
 
 describe('PasswordResetEmailService', () => {
   it('does not construct a transport when delivery is disabled', () => {
@@ -15,16 +20,16 @@ describe('PasswordResetEmailService', () => {
     const service = new PasswordResetEmailService(config);
 
     expect(service.isEnabled()).toBe(false);
-    expect(nodemailer.createTransport).not.toHaveBeenCalled();
+    expect(createTransportMock).not.toHaveBeenCalled();
   });
 
   it('sends the reset URL without loading remote or local content', async () => {
     const sendMail = jest
-      .fn<Promise<{ messageId: string }>, [{ to?: string; text?: string }]>()
+      .fn<Promise<{ messageId: string }>, [SendMailOptions]>()
       .mockResolvedValue({ messageId: 'mail-1' });
-    jest.mocked(nodemailer.createTransport).mockReturnValue({
+    createTransportMock.mockReturnValue({
       sendMail,
-    } as never);
+    });
     const values: Record<string, string> = {
       PASSWORD_RESET_EMAIL_ENABLED: 'true',
       EMAIL_FROM: 'campus@example.edu',
@@ -46,7 +51,7 @@ describe('PasswordResetEmailService', () => {
       expiresAt: new Date('2026-06-18T12:00:00.000Z'),
     });
 
-    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+    expect(createTransportMock).toHaveBeenCalledWith(
       expect.objectContaining({
         disableFileAccess: true,
         disableUrlAccess: true,

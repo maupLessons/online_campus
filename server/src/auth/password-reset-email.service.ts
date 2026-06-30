@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
+import type { Transporter, TransportOptions } from 'nodemailer';
 
 export type PasswordResetEmail = {
   to: string;
@@ -15,7 +14,8 @@ export class PasswordResetEmailService {
   private readonly logger = new Logger(PasswordResetEmailService.name);
   private readonly enabled: boolean;
   private readonly from: string;
-  private readonly transporter?: Transporter;
+  private readonly transportOptions?: TransportOptions;
+  private transporter?: Transporter;
 
   constructor(config: ConfigService) {
     this.enabled =
@@ -35,7 +35,7 @@ export class PasswordResetEmailService {
       throw new Error('Password reset email transport is not configured');
     }
 
-    this.transporter = nodemailer.createTransport({
+    this.transportOptions = {
       host,
       port,
       secure: config.get<string>('SMTP_SECURE') === 'true',
@@ -47,7 +47,7 @@ export class PasswordResetEmailService {
       socketTimeout: 20_000,
       disableFileAccess: true,
       disableUrlAccess: true,
-    });
+    };
   }
 
   isEnabled(): boolean {
@@ -55,12 +55,13 @@ export class PasswordResetEmailService {
   }
 
   async sendPasswordReset(message: PasswordResetEmail): Promise<void> {
-    if (!this.enabled || !this.transporter) {
+    if (!this.enabled) {
       return;
     }
 
+    const transporter = await this.getTransporter();
     const expiresAt = message.expiresAt.toISOString();
-    await this.transporter.sendMail({
+    await transporter.sendMail({
       from: this.from,
       to: message.to,
       subject: 'Відновлення пароля — Електронний кампус МАУП',
@@ -77,6 +78,21 @@ export class PasswordResetEmailService {
     });
 
     this.logger.log('Password reset email accepted by SMTP transport');
+  }
+
+  private async getTransporter(): Promise<Transporter> {
+    if (this.transporter) {
+      return this.transporter;
+    }
+
+    if (!this.transportOptions) {
+      throw new Error('Password reset email transport is not configured');
+    }
+
+    const { createTransport } = await import('nodemailer');
+    this.transporter = createTransport(this.transportOptions);
+
+    return this.transporter;
   }
 }
 

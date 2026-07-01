@@ -24,6 +24,7 @@ interface UserProfile {
   studentProfile?: {
     group?: ReferenceItem | string | null;
     recordBookNumber?: string;
+    externalStudentId?: string;
     year?: number;
   };
   teacherProfile?: {
@@ -43,6 +44,7 @@ type UserFormData = {
   phone: string;
   groupId: string;
   recordBookNumber: string;
+  externalStudentId: string;
   year: number;
   departmentId: string;
   position: string;
@@ -76,6 +78,7 @@ function buildInitialFormData(userToEdit?: UserProfile | null): UserFormData {
       phone: "",
       groupId: "",
       recordBookNumber: "",
+      externalStudentId: "",
       year: 1,
       departmentId: "",
       position: "",
@@ -93,6 +96,7 @@ function buildInitialFormData(userToEdit?: UserProfile | null): UserFormData {
     phone: userToEdit.phone || "",
     groupId: getReferenceId(userToEdit.studentProfile?.group),
     recordBookNumber: userToEdit.studentProfile?.recordBookNumber || "",
+    externalStudentId: userToEdit.studentProfile?.externalStudentId || "",
     year: userToEdit.studentProfile?.year || 1,
     departmentId: getReferenceId(userToEdit.teacherProfile?.department),
     position: userToEdit.teacherProfile?.position || "",
@@ -179,6 +183,8 @@ export default function CreateUserModal({
     if (formData.role === Role.STUDENT) {
       payload.groupId = formData.groupId;
       payload.recordBookNumber = formData.recordBookNumber.trim();
+      payload.externalStudentId =
+        formData.externalStudentId.trim() || undefined;
       payload.year = formData.year;
     }
 
@@ -478,6 +484,23 @@ export default function CreateUserModal({
                     max={6}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t("users.form.externalStudentId")}
+                  </label>
+                  <input
+                    type="text"
+                    name="externalStudentId"
+                    value={formData.externalStudentId}
+                    onChange={handleChange}
+                    maxLength={128}
+                    placeholder={t("users.form.externalStudentIdPlaceholder")}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    {t("users.form.externalStudentIdHint")}
+                  </p>
                 </div>
               </div>
             )}

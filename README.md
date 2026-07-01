@@ -266,8 +266,12 @@
 «Відкрити онлайн-пару».
 
 > **Погоджений напрямок:** офіційний основний і сесійний розклад має надходити
-> з API МАУП. Локальний ScheduleModule залишається описом поточної реалізації до
-> авторизованої перевірки зовнішнього контракту та окремого плану переходу.
+> з API МАУП. Для студентського `/schedule/my` і schedule export підключено
+> backend-only read-through до MAUP API: якщо `MAUP_API_ENABLED=true` і профіль
+> студента має `externalStudentId` або `recordBookNumber`, сервер читає
+> `/schedule` МАУП, нормалізує відповідь до `ScheduleEntryDto` і не передає
+> credentials у browser. Якщо інтеграція вимкнена або student lookup відсутній,
+> використовується поточний локальний scoped schedule.
 
 ---
 
@@ -827,14 +831,18 @@ migrations. У production `DB_MIGRATIONS_ENABLED=true` є обов'язкови�
 
 **Файли:** `src/integrations/maup-student-api/`
 
-Підготовлено вимкнений за замовчуванням backend-only клієнт студентського API:
-Basic credentials не передаються у browser, доступні timeout, обмежені retry,
-circuit breaker, ліміт відповіді, нормалізація зовнішніх помилок і безпечний
-mapper без копіювання ІПН та фінансових полів до профільної моделі.
+Підготовлено backend-only клієнт студентського API: Basic credentials не
+передаються у browser, доступні timeout, обмежені retry, circuit breaker, ліміт
+відповіді, нормалізація зовнішніх помилок і безпечний mapper без копіювання ІПН
+та фінансових полів до профільної моделі.
 
-Модуль не підключений до користувацьких сценаріїв і не виконує зовнішніх
-запитів, доки `MAUP_API_ENABLED=false`. URL та credentials не зберігаються в
-репозиторії. Умови активації описані в
+Модуль залишається вимкненим за замовчуванням і не виконує зовнішніх запитів,
+доки `MAUP_API_ENABLED=false`. Коли інтеграція ввімкнена, студентський
+`/schedule/my` і schedule export можуть читати розклад із MAUP API за
+`studentProfile.externalStudentId`; якщо він ще не прив'язаний, сервер
+використовує `recordBookNumber` як `nsb` fallback, що підтримано офіційною
+специфікацією API. URL та credentials не зберігаються в репозиторії. Умови
+активації описані в
 [`docs/integrations/maup-student-api.md`](docs/integrations/maup-student-api.md).
 
 ---
@@ -1222,7 +1230,7 @@ endpoints є основним шляхом для адміністративни
 `president` не мають операційних mutation permissions, але отримують глобальний
 read-only каталог користувачів; управлінські ролі бачать звіти у своєму scope.
 Regression tests додатково фіксують активну модель із семи ролей і не
-допускають повернення ролі `dispatcher` без явного перегляду RBAC.
+допускають неузгодженого розширення RBAC без явного перегляду політик доступу.
 
 ---
 
@@ -1302,7 +1310,7 @@ Regression tests додатково фіксують активну модель
 | 3   | Demo fixtures для локального seed                        | ✅ Реалізовано; не runtime data layer       |
 | 4   | AuthModule (cookies, JWT rotation, CSRF, password reset) | ✅ Реалізовано                              |
 | 5   | RBAC Guards та академічна object-level authorization     | ✅ Реалізовано                              |
-| 6   | ScheduleModule backend/frontend workflows, conflicts, audit, CSV/XLSX | ✅ Закрито: admin-only UI, cancel/reschedule/substitution, templates, bulk |
+| 6   | ScheduleModule backend/frontend workflows, conflicts, audit, CSV/XLSX | ✅ Закрито: admin-only UI, cancel/reschedule/substitution, templates, bulk; student `/schedule/my` може читати MAUP API |
 | 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
 | 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
 | 9   | NotificationsModule                                     | ✅ In-app сценарії, SSE і фільтри за датою реалізовано |
@@ -1349,7 +1357,7 @@ Regression tests додатково фіксують активну модель
 | 7   | i18n (українська + англійська)                              | ✅ Реалізовано                              |
 | 8   | Production email delivery для password reset                | ✅ Authenticated SMTP + production env validation           |
 | 9   | Antivirus/content scanning і private object storage файлів  | ⏳ Наступний етап                           |
-| 10  | Backend-каркас студентського API МАУП                      | ✅ Підготовлено й вимкнено; активація після contract check |
+| 10  | Backend-каркас студентського API МАУП                      | ✅ Підготовлено; student schedule read-through підключено за feature flag |
 
 ---
 
@@ -1721,7 +1729,7 @@ SMTP_USER=campus
 SMTP_PASSWORD=provider-app-password
 SMTP_CONNECTION_TIMEOUT_MS=10000
 
-# MAUP student API (backend only; disabled until authenticated contract check)
+# MAUP student API (backend only; keep disabled until credentials are configured)
 MAUP_API_ENABLED=false
 MAUP_API_BASE_URL=
 MAUP_API_ALLOWED_HOST=
@@ -1808,7 +1816,10 @@ Demo seeders копіюють fixture-дані з `server/src/common/mock-data` 
 GitHub Secrets, ані до `.env` на Hetzner. Перед активацією потрібно окремо
 перевірити автентифікований контракт, додати передачу змінних у deploy workflow
 та безпечно налаштувати URL, allow-listed host і credentials у цільовому
-середовищі. Реальний endpoint і credentials у репозиторії не зберігаються.
+середовищі. Після активації студентський `/schedule/my` і schedule export
+читатимуть розклад із MAUP API за `externalStudentId` або `recordBookNumber`
+як `nsb` fallback. Реальний endpoint і credentials у репозиторії не
+зберігаються.
 
 У локальному `docker-compose.yml` MongoDB доступна backend-контейнеру через
 внутрішню Docker network (`mongodb:27017`) і не публікується на host-порт за

@@ -191,6 +191,9 @@ describe('ScheduleService', () => {
       scheduleMutation,
       new ScheduleExportService(),
       scheduleTemplates,
+      {
+        findMySchedule: jest.fn().mockResolvedValue(null),
+      } as never,
     );
   });
 

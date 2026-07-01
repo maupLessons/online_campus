@@ -77,6 +77,52 @@ describe('MaupStudentApiClient', () => {
     expect(init.body).toBeUndefined();
   });
 
+  it('requests schedule by student id without sending fallback identifiers', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse([]));
+    const client = createClient(fetchMock);
+
+    await client.getScheduleByStudentLookup(
+      {
+        studentId: 'student-10',
+        recordBookNumber: 'П-007264',
+      },
+      { calendarYear: 2026 },
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(init.body).toBe(
+      JSON.stringify({
+        student_id: 'student-10',
+        nsb: null,
+        semestr: null,
+        zes_schedule: null,
+        year_navch: null,
+        year: 2026,
+      }),
+    );
+  });
+
+  it('requests schedule by NSB when immutable student id is missing', async () => {
+    const fetchMock = jest.fn().mockResolvedValue(jsonResponse([]));
+    const client = createClient(fetchMock);
+
+    await client.getScheduleByStudentLookup({
+      recordBookNumber: 'П-007264',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(init.body).toBe(
+      JSON.stringify({
+        student_id: null,
+        nsb: 'П-007264',
+        semestr: null,
+        zes_schedule: null,
+        year_navch: null,
+        year: null,
+      }),
+    );
+  });
+
   it('does not expose an upstream body or credentials in errors', async () => {
     const fetchMock = jest
       .fn()

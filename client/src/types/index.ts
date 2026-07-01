@@ -44,6 +44,7 @@ export interface User {
   studentProfile?: {
     group: string | null;
     recordBookNumber: string;
+    externalStudentId?: string;
     year: number;
   };
   teacherProfile?: {

@@ -5,6 +5,7 @@ import {
   IsMongoId,
   IsNotEmpty,
   IsString,
+  MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
@@ -33,6 +34,18 @@ export class ChangeUserRoleDto {
   @IsString()
   @IsNotEmpty()
   recordBookNumber?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional immutable MAUP student_id used for backend API integrations',
+  })
+  @ValidateIf(
+    (dto: ChangeUserRoleDto) =>
+      dto.role === Role.STUDENT && dto.externalStudentId !== undefined,
+  )
+  @IsString()
+  @MaxLength(128)
+  externalStudentId?: string;
 
   @ApiPropertyOptional({
     description: 'Required when changing the user role to student',

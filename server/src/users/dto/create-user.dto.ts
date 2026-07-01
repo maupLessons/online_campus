@@ -8,6 +8,7 @@ import {
   MinLength,
   Matches,
   IsIn,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Role } from '../../common/types/roles.enum';
@@ -79,6 +80,15 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   recordBookNumber?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'External immutable MAUP student_id used for backend API integrations.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  externalStudentId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

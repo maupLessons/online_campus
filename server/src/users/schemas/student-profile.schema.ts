@@ -10,6 +10,9 @@ export class StudentProfile {
   @Prop({ required: true, unique: true, sparse: true })
   recordBookNumber: string;
 
+  @Prop({ trim: true, maxlength: 128 })
+  externalStudentId?: string;
+
   @Prop({ type: Number, required: true })
   year: number;
 }

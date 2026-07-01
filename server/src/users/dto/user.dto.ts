@@ -67,6 +67,10 @@ class StudentProfileDto {
   @Expose()
   recordBookNumber: string;
 
+  @ApiProperty({ required: false })
+  @Expose()
+  externalStudentId?: string;
+
   @ApiProperty()
   @Expose()
   year: number;

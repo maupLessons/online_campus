@@ -259,6 +259,7 @@ export class UsersService {
       password,
       groupId,
       recordBookNumber,
+      externalStudentId,
       year,
       departmentId,
       position,
@@ -276,11 +277,23 @@ export class UsersService {
       );
     }
 
+    const normalizedExternalStudentId =
+      normalizeOptionalExternalId(externalStudentId);
+    await this.assertExternalStudentIdAvailable(
+      undefined,
+      normalizedExternalStudentId,
+    );
+
     const passwordHash = await bcrypt.hash(password, 12);
 
     const studentProfile =
       rest.role === Role.STUDENT && groupId && recordBookNumber && year
-        ? { group: groupId, recordBookNumber, year }
+        ? {
+            group: groupId,
+            recordBookNumber,
+            externalStudentId: normalizedExternalStudentId,
+            year,
+          }
         : undefined;
 
     const teacherProfile =
@@ -313,6 +326,7 @@ export class UsersService {
       password,
       groupId,
       recordBookNumber,
+      externalStudentId,
       year,
       departmentId,
       position,
@@ -342,6 +356,12 @@ export class UsersService {
     }
 
     const updateData: Record<string, unknown> = { ...rest };
+    const normalizedExternalStudentId =
+      normalizeOptionalExternalId(externalStudentId);
+    await this.assertExternalStudentIdAvailable(
+      id,
+      normalizedExternalStudentId,
+    );
 
     if (login) updateData.login = login;
     if (email) updateData.email = email;
@@ -377,6 +397,7 @@ export class UsersService {
           role,
           groupId,
           recordBookNumber,
+          externalStudentId,
           year,
           departmentId,
           position,
@@ -396,6 +417,7 @@ export class UsersService {
       const hasStudentProfileUpdates =
         groupId !== undefined ||
         recordBookNumber !== undefined ||
+        externalStudentId !== undefined ||
         year !== undefined;
       const hasTeacherProfileUpdates =
         departmentId !== undefined || position !== undefined;
@@ -405,6 +427,10 @@ export class UsersService {
           group: groupId ?? existingUser.studentProfile?.group,
           recordBookNumber:
             recordBookNumber ?? existingUser.studentProfile?.recordBookNumber,
+          externalStudentId:
+            externalStudentId !== undefined
+              ? normalizedExternalStudentId
+              : existingUser.studentProfile?.externalStudentId,
           year: year !== undefined ? year : existingUser.studentProfile?.year,
         };
       } else if (
@@ -741,6 +767,10 @@ export class UsersService {
         id,
         studentProfile.recordBookNumber,
       );
+      await this.assertExternalStudentIdAvailable(
+        id,
+        studentProfile.externalStudentId,
+      );
 
       return {
         $set: {
@@ -790,6 +820,7 @@ export class UsersService {
     const hasStudentFields =
       dto.groupId !== undefined ||
       dto.recordBookNumber !== undefined ||
+      dto.externalStudentId !== undefined ||
       dto.year !== undefined;
     const hasTeacherFields =
       dto.departmentId !== undefined || dto.position !== undefined;
@@ -820,10 +851,14 @@ export class UsersService {
   private buildStudentProfile(dto: ChangeUserRoleDto): {
     group: string;
     recordBookNumber: string;
+    externalStudentId?: string;
     year: number;
   } {
     const group = dto.groupId?.trim();
     const recordBookNumber = dto.recordBookNumber?.trim();
+    const externalStudentId = normalizeOptionalExternalId(
+      dto.externalStudentId,
+    );
     const year = dto.year;
 
     if (
@@ -845,6 +880,7 @@ export class UsersService {
     return {
       group,
       recordBookNumber,
+      ...(externalStudentId ? { externalStudentId } : {}),
       year,
     };
   }
@@ -906,6 +942,30 @@ export class UsersService {
     }
 
     await this.assertAnotherActiveAdminExists(existingUser, id);
+  }
+
+  private async assertExternalStudentIdAvailable(
+    currentUserId: string | undefined,
+    externalStudentId: string | undefined,
+  ): Promise<void> {
+    if (!externalStudentId) {
+      return;
+    }
+
+    const duplicate = await this.userModel
+      .findOne({
+        'studentProfile.externalStudentId': externalStudentId,
+        ...(currentUserId ? { _id: { $ne: currentUserId } } : {}),
+      })
+      .select('_id')
+      .lean()
+      .exec();
+
+    if (duplicate) {
+      throw new ConflictException(
+        'Користувач з таким MAUP student_id вже існує',
+      );
+    }
   }
 
   private async assertAnotherActiveAdminExists(
@@ -973,4 +1033,9 @@ function normalizeSearchTokens(value?: string): string[] {
   }
 
   return value.trim().split(/\s+/).filter(Boolean).slice(0, 3);
+}
+
+function normalizeOptionalExternalId(value?: string): string | undefined {
+  const normalized = value?.trim();
+  return normalized || undefined;
 }

@@ -638,6 +638,10 @@ const resources = {
       'users.form.selectGroup': 'Оберіть групу',
       'users.form.recordBookNumber': 'Номер заліковки',
       'users.form.studyYear': 'Курс',
+      'users.form.externalStudentId': 'MAUP student_id',
+      'users.form.externalStudentIdPlaceholder': 'Наприклад: 123456',
+      'users.form.externalStudentIdHint':
+        'Незмінний ідентифікатор студента з API МАУП. Якщо не задано, сервер використає номер залікової книжки як NSB fallback.',
       'users.form.teacherData': 'Дані викладача',
       'users.form.department': 'Кафедра',
       'users.form.selectDepartment': 'Оберіть кафедру',
@@ -1699,6 +1703,10 @@ const resources = {
       'users.form.selectGroup': 'Select a group',
       'users.form.recordBookNumber': 'Record book number',
       'users.form.studyYear': 'Study year',
+      'users.form.externalStudentId': 'MAUP student_id',
+      'users.form.externalStudentIdPlaceholder': 'Example: 123456',
+      'users.form.externalStudentIdHint':
+        'Immutable student identifier from the MAUP API. If omitted, the server will use the record book number as an NSB fallback.',
       'users.form.teacherData': 'Teacher details',
       'users.form.department': 'Department',
       'users.form.selectDepartment': 'Select a department',

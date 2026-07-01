@@ -36,6 +36,11 @@ export interface MaupScheduleOptions {
   calendarYear?: number;
 }
 
+export interface MaupStudentScheduleLookup {
+  studentId?: string;
+  recordBookNumber?: string;
+}
+
 export interface MaupCalendarOptions {
   studentId?: string;
   groupId?: string;

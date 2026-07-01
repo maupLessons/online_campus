@@ -8,6 +8,7 @@ import {
   MaupReferenceEndpoint,
   MaupScheduleOptions,
   MaupStudentApiDiagnostics,
+  MaupStudentScheduleLookup,
   MaupWireArray,
   MaupWireValue,
 } from './maup-student-api.types';
@@ -79,8 +80,26 @@ export class MaupStudentApiClient {
     externalStudentId: string,
     options: MaupScheduleOptions = {},
   ): Promise<MaupWireArray> {
+    return this.getScheduleByStudentLookup(
+      { studentId: externalStudentId },
+      options,
+    );
+  }
+
+  getScheduleByStudentLookup(
+    lookup: MaupStudentScheduleLookup,
+    options: MaupScheduleOptions = {},
+  ): Promise<MaupWireArray> {
+    const studentId = optionalExternalId(lookup.studentId);
+    const recordBookNumber = optionalExternalId(lookup.recordBookNumber);
+
+    if (!studentId && !recordBookNumber) {
+      throw new TypeError('studentId or recordBookNumber is required');
+    }
+
     return this.requestArray('schedule', {
-      student_id: requiredExternalId(externalStudentId),
+      student_id: studentId,
+      nsb: studentId ? null : recordBookNumber,
       semestr: optionalInteger(options.semester),
       zes_schedule:
         options.examSession === undefined ? null : options.examSession ? 1 : 0,

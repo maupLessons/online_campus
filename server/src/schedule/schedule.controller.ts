@@ -71,7 +71,7 @@ export class ScheduleController {
     @Query() query: ScheduleQueryDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.scheduleService.findForUser(req.user, query);
+    return this.scheduleService.findMyForUser(req.user, query);
   }
 
   @Get('export')

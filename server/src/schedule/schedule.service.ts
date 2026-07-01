@@ -23,6 +23,7 @@ import {
   UpdateScheduleTemplateDto,
 } from './dto';
 import { ScheduleExportService } from './schedule-export.service';
+import { MaupScheduleService } from './maup-schedule.service';
 import { ScheduleMutationService } from './schedule-mutation.service';
 import { ScheduleReaderService } from './schedule-reader.service';
 import { ScheduleTemplatesService } from './schedule-templates.service';
@@ -35,6 +36,7 @@ export class ScheduleService {
     private readonly scheduleMutation: ScheduleMutationService,
     private readonly scheduleExport: ScheduleExportService,
     private readonly scheduleTemplates: ScheduleTemplatesService,
+    private readonly maupSchedule: MaupScheduleService,
   ) {}
 
   findAll(query: ScheduleQueryDto = {}): Promise<ScheduleEntryDto[]> {
@@ -46,6 +48,17 @@ export class ScheduleService {
     query: ScheduleQueryDto = {},
   ): Promise<ScheduleEntryDto[]> {
     return this.scheduleReader.findForUser(user, query);
+  }
+
+  async findMyForUser(
+    user: AuthenticatedUser,
+    query: ScheduleQueryDto = {},
+  ): Promise<ScheduleEntryDto[]> {
+    const externalSchedule = await this.maupSchedule.findMySchedule(
+      user,
+      query,
+    );
+    return externalSchedule ?? this.scheduleReader.findForUser(user, query);
   }
 
   findOne(id: string): Promise<ScheduleEntryDto> {
@@ -193,7 +206,7 @@ export class ScheduleService {
     query: ScheduleExportQueryDto = {},
   ): Promise<SpreadsheetExportArtifact> {
     const { format, locale, ...scheduleQuery } = query;
-    const entries = await this.scheduleReader.findForUser(user, scheduleQuery);
+    const entries = await this.findMyForUser(user, scheduleQuery);
 
     return this.scheduleExport.export(entries, format, locale);
   }

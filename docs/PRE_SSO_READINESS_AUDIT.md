@@ -20,7 +20,7 @@
 | Notifications | готово для одного instance | Додано authenticated SSE, heartbeat і серверні/UI-фільтри; для horizontal scaling потрібен Redis/NATS pub/sub |
 | Audit | готово до compliance review | Append-only/outbox, redaction, domain presets, CSV/XLSX export із лімітом 10k |
 | Reports | функціонально готово | Scoped aggregate/export є; snapshots, scheduling і period comparison відсутні |
-| Files | production blocker | Local private-by-controller disk, extension/MIME check; немає magic-byte/AV scan/quarantine/object storage |
+| Files | production blocker | Local private-by-controller disk, extension/MIME/signature/container validation і quarantine/status workflow є; немає реального AV provider та object storage; рекомендований майбутній production-provider — ClamAV/`clamd` sidecar у приватній Docker network |
 | Infra | staging-ready | CI, replica set, migrations, readiness endpoint і runbook є; metrics/central alerts не під'єднано |
 
 ## Зіставлення з ТЗ
@@ -79,7 +79,9 @@ Department/faculty/institution scope, privacy-preserving aggregates, pagination 
 
 ### Files
 
-Є auth, ownership/academic scope, random storage names, size limit, allow-list extension+declared MIME та audit. Це не content inspection: MIME контролює клієнт, а DOCX/ZIP можуть містити небезпечний вміст. До production потрібен ланцюжок quarantine → magic-byte/container validation → antivirus → clean/private object storage → signed або controller-mediated download. Local volume ускладнює replicas і disaster recovery.
+Є auth, ownership/academic scope, random storage names, size limit, allow-list extension+declared MIME, magic-byte/container validation, quarantine path, `scanStatus` та audit. Нові файли проходять scanner abstraction і стають доступними для download/attach лише після статусу `clean`.
+
+Обмеження: поточний provider `local-signature-validation` не є антивірусом. До production потрібен реальний AV provider, fail-closed policy, clean/private object storage, lifecycle для rejected файлів і контрольована видача файлів через signed або controller-mediated download. Рекомендований self-hosted варіант — ClamAV/`clamd` sidecar: окремий container у приватній Docker network, без публікації TCP-порту `3310` в Internet, зі скануванням quarantine-файлів перед переведенням у `clean` storage. Для маленького dev-сервера цей provider має бути optional через високий RAM footprint `clamd`; для production/staging потрібен окремий memory budget і моніторинг оновлення сигнатур. Local volume ускладнює replicas і disaster recovery.
 
 ### Infra та NFR
 
@@ -91,7 +93,7 @@ Responsive UI візуально використовує breakpoints, але au
 
 ## Пріоритет до SSO
 
-1. P0 — antivirus/quarantine + private S3-compatible storage і migration наявних upload metadata.
+1. P0 — реальний antivirus provider, рекомендовано ClamAV/`clamd` sidecar для self-hosted production, + private S3-compatible storage і migration наявних upload metadata.
 2. P0 — identity linking model, provider allow-list, account-link/recovery policy та role/scope source-of-truth.
 3. P0 — автоматичний off-site backup, quarterly restore drill, metrics/alerts і centralized logs.
 4. P1 — schedule publication/dean approval.

@@ -6,6 +6,8 @@
 
 До отримання тестового доступу клієнт не можна вмикати у спільному середовищі. Надана специфікація не визначає однозначний HTTP-метод, тому метод запиту залишається параметром конфігурації.
 
+Для експлуатаційного контролю додано admin-only endpoint `GET /integrations/maup-student-api/diagnostics`. Він повертає тільки feature flag, circuit state, counters і timestamps останнього успіху/помилки. URL, username, password, Basic token або upstream response body не повертаються.
+
 ## Безпекові обмеження
 
 - Basic credentials використовуються виключно сервером.
@@ -37,7 +39,7 @@ MAUP_API_MAX_RESPONSE_BYTES=5000000
 ## Підготовлені операції
 
 - загальна інформація студента;
-- основний і сесійний розклад — підключено до студентського `/schedule/my` і schedule export через feature flag;
+- основний і сесійний розклад — підключено до студентського `/schedule/my` і schedule export через feature flag; вкладену відповідь `/schedule[].schedule[]` зафіксовано contract fixture у `src/integrations/maup-student-api/fixtures/`;
 - сальдо та платежі;
 - накази;
 - оцінки;
@@ -55,7 +57,7 @@ MAUP_API_MAX_RESPONSE_BYTES=5000000
 1. Отримати тестові або read-only credentials через захищений канал.
 2. Підтвердити HTTP-метод і формат запиту.
 3. Зберегти обезособлені fixtures реальних відповідей.
-4. Перевірити contract-тести для всіх потрібних операцій, особливо вкладену структуру `/schedule[].schedule[]`.
+4. Оновити обезособлені fixtures реальними відповідями тестового API та перевірити contract-тести для всіх потрібних операцій, особливо вкладену структуру `/schedule[].schedule[]`.
 5. Погодити джерела істини, правила кешування та строки зберігання.
 6. Погодити зв'язок SSO subject із зовнішнім `student_id`.
 

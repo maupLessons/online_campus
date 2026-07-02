@@ -812,12 +812,20 @@ MongoDB E2E quality gate:
 перевіркою ownership/scope, випадковими storage names, обмеженням розміру та
 allow-list розширень, declared MIME, сигнатури вмісту файла, базовою
 container validation для ZIP/DOCX та безпечнішою нормалізацією оригінальної
-назви. Файли зберігаються на приватному локальному volume і віддаються через
-контрольований backend endpoint.
+назви. Нові файли проходять через quarantine path, scanner abstraction і
+отримують `scanStatus`; download/attach дозволено лише для `clean` файлів.
+Файли зберігаються на приватному локальному volume і віддаються через
+контрольований backend endpoint із безпечним обчисленням storage path.
 
-**Production gap:** базова magic-byte/container validation уже реалізована.
-Перед production ще потрібні quarantine, antivirus scanning і private object
-storage із контрольованою видачею файлів.
+**Production gap:** базова magic-byte/container validation і quarantine/status
+workflow уже реалізовані. Перед production ще потрібні реальний antivirus
+provider замість локального `local-signature-validation` scanner та private
+object storage із контрольованою видачею файлів. Рекомендований production
+варіант для self-hosted контуру — ClamAV/`clamd` sidecar у приватній Docker
+network: backend надсилає файл на сканування з quarantine storage, публікує
+його лише після verdict `clean`, працює за fail-closed policy і не відкриває
+порт `3310` назовні. Для dev-середовищ із малою RAM цей provider варто
+вмикати тільки опційно, оскільки `clamd` потребує окремого memory budget.
 
 ### 4.12 DatabaseMigrationsModule
 
@@ -844,6 +852,10 @@ migrations. У production `DB_MIGRATIONS_ENABLED=true` є обов'язкови�
 специфікацією API. URL та credentials не зберігаються в репозиторії. Умови
 активації описані в
 [`docs/integrations/maup-student-api.md`](docs/integrations/maup-student-api.md).
+Для експлуатації доступний admin-only endpoint
+`GET /integrations/maup-student-api/diagnostics`, який показує лише безпечні
+runtime counters і circuit state без URL, username, password або
+`Authorization`.
 
 ---
 
@@ -907,6 +919,18 @@ src/
         ├── CoursesPage.tsx
         └── CourseDetailPage.tsx
 ```
+
+### Політика локалізації
+
+Проєкт є двомовним: кожен новий user-facing текст має мати українську та
+англійську версії. Frontend-рядки додаються тільки через `client/src/i18n.ts`;
+hardcoded повідомлення у компонентах, store або Zod-схемах не допускаються.
+
+Backend-ендпоінти, які повертають user-facing помилки або повідомлення, мають
+надавати стабільний machine-readable `code` і локалізований payload
+`messages.uk`/`messages.en`. Поле `message` може залишатися backward-compatible
+fallback, але нові клієнтські сценарії повинні читати локалізовану версію за
+поточною мовою інтерфейсу.
 
 ---
 
@@ -1356,7 +1380,7 @@ Regression tests додатково фіксують активну модель
 | 6   | XLSX/CSV export                                             | ✅ Спільна інфраструктура для reports, surveys, electives, references і schedule |
 | 7   | i18n (українська + англійська)                              | ✅ Реалізовано                              |
 | 8   | Production email delivery для password reset                | ✅ Authenticated SMTP + production env validation           |
-| 9   | Antivirus/content scanning і private object storage файлів  | ⏳ Наступний етап                           |
+| 9   | Antivirus/content scanning і private object storage файлів  | 🟡 Quarantine/status/scanner abstraction реалізовано; потрібні реальний AV provider і object storage |
 | 10  | Backend-каркас студентського API МАУП                      | ✅ Підготовлено; student schedule read-through підключено за feature flag |
 
 ---

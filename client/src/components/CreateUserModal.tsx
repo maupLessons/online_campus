@@ -4,6 +4,7 @@ import api from "../services/api";
 import { Role, ROLE_LABEL_KEYS } from "../types";
 import { useTranslation } from "react-i18next";
 import { useAutoDismissState } from "../hooks/useAutoDismissState";
+import { getLocalizedApiErrorMessage } from "../utils/apiErrorMessage";
 
 interface ReferenceItem {
   id?: string;
@@ -109,7 +110,7 @@ export default function CreateUserModal({
   onSuccess,
   userToEdit,
 }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [formData, setFormData] = useState<UserFormData>(() =>
     buildInitialFormData(userToEdit),
@@ -239,14 +240,16 @@ export default function CreateUserModal({
       onClose();
       setFormData(buildInitialFormData());
     } catch (err: unknown) {
-      const errorObj = err as { response?: { data?: { message?: string } } };
       setError(
-        errorObj.response?.data?.message ||
+        getLocalizedApiErrorMessage(
+          err,
+          i18n.language,
           t(
             userToEdit
               ? "users.form.errors.update"
               : "users.form.errors.create",
           ),
+        ),
       );
     } finally {
       setLoading(false);

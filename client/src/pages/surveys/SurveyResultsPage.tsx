@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
 import {
   ArrowLeft,
   BarChart3,
@@ -24,19 +23,10 @@ import {
   type TextQuestionResult,
 } from "../../types";
 import { downloadBlob } from "../../utils/spreadsheetExport";
+import { getLocalizedApiErrorMessage } from "../../utils/apiErrorMessage";
 
 function barWidth(value: number) {
   return `${Math.max(0, Math.min(100, value))}%`;
-}
-
-function getRequestErrorMessage(error: unknown, fallback: string) {
-  if (axios.isAxiosError(error)) {
-    const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(", ");
-    if (typeof message === "string") return message;
-  }
-
-  return fallback;
 }
 
 function ChoiceResultCard({ question }: { question: ChoiceQuestionResult }) {
@@ -229,7 +219,7 @@ function QuestionResultCard({ question }: { question: SurveyQuestionResult }) {
 
 export default function SurveyResultsPage() {
   const { id } = useParams<{ id: string }>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [exportError, setExportError] = useAutoDismissState("");
   const [exportingFormat, setExportingFormat] =
     useState<SurveyExportFormat | null>(null);
@@ -257,7 +247,11 @@ export default function SurveyResultsPage() {
       downloadBlob(blob, `survey-${id}-results.${format}`);
     } catch (error) {
       setExportError(
-        getRequestErrorMessage(error, t("surveys.results.exportError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("surveys.results.exportError"),
+        ),
       );
     } finally {
       setExportingFormat(null);

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../store/authStore";
 import { ROLE_LABEL_KEYS } from "../../types";
@@ -25,12 +25,16 @@ function InfoRow({ label, value }: InfoRowProps) {
 }
 
 import {
-  changePasswordSchema,
+  createChangePasswordSchema,
   type ChangePasswordFormData,
 } from "../../schemas/authSchema";
 
 export default function ProfilePage() {
   const { t } = useTranslation();
+  const changePasswordSchema = useMemo(
+    () => createChangePasswordSchema(t),
+    [t],
+  );
   const { user, loadProfile, isAuthenticated } = useAuthStore();
   const [isPasswordFormOpen, setIsPasswordFormOpen] = useState(false);
   const { changePassword } = useAuthStore();
@@ -78,11 +82,13 @@ export default function ProfilePage() {
         values.oldPassword,
         values.newPassword,
       );
-      setPasswordSuccess(message);
+      setPasswordSuccess(t(message));
       reset();
     } catch (err) {
       setPasswordError(
-        err instanceof Error ? err.message : t("profile.changePasswordError"),
+        err instanceof Error
+          ? t(err.message, { defaultValue: err.message })
+          : t("profile.changePasswordError"),
       );
     }
   };

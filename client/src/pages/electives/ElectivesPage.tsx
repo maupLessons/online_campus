@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import axios from 'axios';
 import {
   BookOpenCheck,
   CalendarClock,
@@ -19,21 +18,12 @@ import type {
   ReferenceView,
 } from '../../types';
 import { ElectivePeriodStatus } from '../../types';
+import { getLocalizedApiErrorMessage } from '../../utils/apiErrorMessage';
 
 type EntityWithId = {
   id?: string;
   _id?: string;
 };
-
-function getRequestErrorMessage(error: unknown, fallback: string) {
-  if (axios.isAxiosError(error)) {
-    const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(', ');
-    if (typeof message === 'string') return message;
-  }
-
-  return fallback;
-}
 
 function formatDate(value: string, locale: string) {
   return new Intl.DateTimeFormat(locale, {
@@ -392,7 +382,11 @@ export default function ElectivesPage() {
   if (isError) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-        {getRequestErrorMessage(error, t('electives.loadError'))}
+        {getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t('electives.loadError'),
+        )}
       </div>
     );
   }
@@ -417,7 +411,11 @@ export default function ElectivesPage() {
 
       {actionError && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {getRequestErrorMessage(actionError, t('electives.actionError'))}
+          {getLocalizedApiErrorMessage(
+            actionError,
+            i18n.language,
+            t('electives.actionError'),
+          )}
         </div>
       )}
 

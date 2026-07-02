@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
 import {
   Archive,
   CheckCircle2,
@@ -38,6 +37,7 @@ import {
   useAutoDismissState,
 } from "../../hooks/useAutoDismissState";
 import { downloadBlob } from "../../utils/spreadsheetExport";
+import { getLocalizedApiErrorMessage } from "../../utils/apiErrorMessage";
 
 type DisciplineFormState = {
   code: string;
@@ -101,16 +101,6 @@ function toDateTimeLocalValue(value?: string) {
 function toIsoDateTime(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-}
-
-function getRequestErrorMessage(error: unknown, fallback: string) {
-  if (axios.isAxiosError(error)) {
-    const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(", ");
-    if (typeof message === "string") return message;
-  }
-
-  return fallback;
 }
 
 function buildDisciplinePayload(
@@ -292,7 +282,11 @@ export default function ElectiveAdminPage() {
     onError: (error) => {
       setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t("electives.admin.saveError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("electives.admin.saveError"),
+        ),
       );
     },
   });
@@ -315,7 +309,11 @@ export default function ElectiveAdminPage() {
     onError: (error) => {
       setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t("electives.admin.saveError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("electives.admin.saveError"),
+        ),
       );
     },
   });
@@ -332,7 +330,11 @@ export default function ElectiveAdminPage() {
     onError: (error) => {
       setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t("electives.admin.saveError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("electives.admin.saveError"),
+        ),
       );
     },
   });
@@ -355,7 +357,11 @@ export default function ElectiveAdminPage() {
     onError: (error) => {
       setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t("electives.admin.saveError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("electives.admin.saveError"),
+        ),
       );
     },
   });
@@ -416,7 +422,11 @@ export default function ElectiveAdminPage() {
     finalizePeriodMutation.error ||
     exportMutation.error;
   const actionErrorMessage = actionError
-    ? getRequestErrorMessage(actionError, t("electives.admin.actionError"))
+    ? getLocalizedApiErrorMessage(
+        actionError,
+        i18n.language,
+        t("electives.admin.actionError"),
+      )
     : "";
 
   useEffect(() => {

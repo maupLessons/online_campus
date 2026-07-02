@@ -1,58 +1,74 @@
 import { z } from 'zod';
+import type { TFunction } from 'i18next';
 
-export const loginSchema = z.object({
-  login: z
-    .string()
-    .min(2, 'Логін має містити мінімум 2 символи'),
+const keyT = ((key: string) => key) as TFunction;
 
-  password: z
-    .string()
-    .min(8, 'Пароль має містити мінімум 8 символів')
-    .regex(
-      /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/,
-     // /^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&_\-#])[A-Za-z\d@$!%*?&_\-#]+$/, Роздокументувати, коли будуть створенні нові користувачі у бд
-      'Пароль має містити англійські літери, цифри та спецсимвол',
-    ),
-});
-export const changePasswordSchema = z
-  .object({
-    oldPassword: z.string().min(1, 'Введіть поточний пароль'),
+export function createLoginSchema(t: TFunction) {
+  return z.object({
+    login: z.string().min(2, t('login.validation.loginMin')),
 
-    newPassword: z
+    password: z
       .string()
-      .min(8, 'Пароль має бути не коротшим за 8 символів')
-      .max(50, 'Пароль має бути не довшим за 50 символів')
+      .min(8, t('login.validation.passwordMin'))
       .regex(
-        /((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,
-        'Пароль має містити хоча б одну велику літеру, одну малу та одну цифру або спецсимвол',
+        /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/,
+        t('login.validation.passwordFormat'),
       ),
-
-    confirmPassword: z.string().min(1, 'Повторіть новий пароль'),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: 'Паролі не співпадають',
-    path: ['confirmPassword'],
   });
+}
 
-export type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
+export function createChangePasswordSchema(t: TFunction) {
+  return z
+    .object({
+      oldPassword: z
+        .string()
+        .min(1, t('profile.validation.currentPasswordRequired')),
 
-export type LoginFormData = z.infer<typeof loginSchema>;
+      newPassword: z
+        .string()
+        .min(8, t('profile.validation.passwordMin'))
+        .max(50, t('profile.validation.passwordMax'))
+        .regex(
+          /((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,
+          t('profile.validation.passwordComplexity'),
+        ),
 
-const passwordRecoveryPasswordSchema = z
-  .string()
-  .min(8, 'Пароль має бути не коротшим за 8 символів')
-  .max(50, 'Пароль має бути не довшим за 50 символів')
-  .regex(
-    /((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,
-    'Пароль має містити велику літеру, малу літеру та цифру або спецсимвол',
-  );
+      confirmPassword: z
+        .string()
+        .min(1, t('profile.validation.confirmPasswordRequired')),
+    })
+    .refine((data) => data.newPassword === data.confirmPassword, {
+      message: t('profile.validation.passwordsMismatch'),
+      path: ['confirmPassword'],
+    });
+}
+
+export const loginSchema = createLoginSchema(keyT);
+export const changePasswordSchema = createChangePasswordSchema(keyT);
+
+export type ChangePasswordFormData = z.infer<
+  ReturnType<typeof createChangePasswordSchema>
+>;
+
+export type LoginFormData = z.infer<ReturnType<typeof createLoginSchema>>;
+
+function createPasswordRecoveryPasswordSchema(t: TFunction) {
+  return z
+    .string()
+    .min(8, t('passwordReset.validation.passwordMin'))
+    .max(50, t('passwordReset.validation.passwordMax'))
+    .regex(
+      /((?=.*\d)|(?=.*\W+))(?![.\n])(?=.*[A-Z])(?=.*[a-z]).*$/,
+      t('passwordReset.validation.passwordComplexity'),
+    );
+}
 
 export const passwordResetRequestSchema = z.object({
   identifier: z
     .string()
     .trim()
-    .min(2, 'Введіть логін або email')
-    .max(120, 'Значення занадто довге'),
+    .min(2, keyT('passwordReset.validation.identifierRequired'))
+    .max(120, keyT('passwordReset.validation.identifierMax')),
 });
 
 export const passwordResetConfirmSchema = z
@@ -60,13 +76,13 @@ export const passwordResetConfirmSchema = z
     token: z
       .string()
       .trim()
-      .min(32, 'Некоректне посилання для відновлення')
-      .max(200, 'Некоректне посилання для відновлення'),
-    newPassword: passwordRecoveryPasswordSchema,
+      .min(32, keyT('passwordReset.validation.tokenInvalid'))
+      .max(200, keyT('passwordReset.validation.tokenInvalid')),
+    newPassword: createPasswordRecoveryPasswordSchema(keyT),
     confirmPassword: z.string(),
   })
   .refine((values) => values.newPassword === values.confirmPassword, {
-    message: 'Паролі не збігаються',
+    message: keyT('passwordReset.validation.passwordsMismatch'),
     path: ['confirmPassword'],
   });
 

@@ -3,7 +3,6 @@ import type { SyntheticEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -21,6 +20,7 @@ import {
   type SurveyQuestion,
 } from "../../types";
 import { useAutoDismissState } from "../../hooks/useAutoDismissState";
+import { getLocalizedApiErrorMessage } from "../../utils/apiErrorMessage";
 
 type AnswersState = Record<string, SurveyAnswerValue | undefined>;
 
@@ -48,16 +48,6 @@ function normalizeAnswer(question: SurveyQuestion, value: SurveyAnswerValue) {
   }
 
   return value;
-}
-
-function getRequestErrorMessage(error: unknown, fallback: string) {
-  if (axios.isAxiosError(error)) {
-    const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(", ");
-    if (typeof message === "string") return message;
-  }
-
-  return fallback;
 }
 
 function PreviousAnswer({
@@ -112,7 +102,7 @@ function PreviousAnswer({
 
 export default function SurveyPlayerPage() {
   const { id } = useParams<{ id: string }>();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [answers, setAnswers] = useState<AnswersState>({});
   const [formError, setFormError] = useAutoDismissState("");
@@ -153,7 +143,11 @@ export default function SurveyPlayerPage() {
     onError: (error) => {
       setSuccessMessage("");
       setFormError(
-        getRequestErrorMessage(error, t("surveys.player.submitError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("surveys.player.submitError"),
+        ),
       );
     },
   });

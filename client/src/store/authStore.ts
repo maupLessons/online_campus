@@ -103,10 +103,10 @@ export const useAuthStore = create<AuthState>((set) => ({
 
       const message =
         status === 401
-          ? "Неправильний логін або пароль"
+          ? "auth.login.invalidCredentials"
           : status === 403
-            ? "Обліковий запис заблоковано. Зверніться до адміністратора."
-            : "Помилка входу. Спробуйте ще раз.";
+            ? "auth.login.blocked"
+            : "auth.login.failed";
 
       set({
         error: message,
@@ -149,26 +149,20 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   changePassword: async (oldPassword: string, newPassword: string) => {
     try {
-      const { data } = await api.post("/auth/change-password", {
+      await api.post("/auth/change-password", {
         oldPassword,
         newPassword,
       });
 
-      return data.message || "Пароль успішно змінено";
+      return "profile.changePasswordSuccess";
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
-        const message = err.response?.data?.message;
-
-        if (Array.isArray(message)) {
-          throw new Error(message.join(", "));
-        }
-
-        if (typeof message === "string") {
-          throw new Error(message);
+        if (err.response?.status === 400) {
+          throw new Error("profile.changePasswordInvalidOldPassword");
         }
       }
 
-      throw new Error("Не вдалося змінити пароль");
+      throw new Error("profile.changePasswordError");
     }
   },
 

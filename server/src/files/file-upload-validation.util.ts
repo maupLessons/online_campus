@@ -1,6 +1,6 @@
 import 'multer';
-import { BadRequestException } from '@nestjs/common';
 import * as path from 'path';
+import { FileErrorCode, fileBadRequest } from './file-errors';
 
 export type ValidatedUploadFile = {
   originalName: string;
@@ -37,11 +37,11 @@ export function validateUploadFile(
   file: Express.Multer.File,
 ): ValidatedUploadFile {
   if (!file?.buffer || file.buffer.length === 0) {
-    throw new BadRequestException('Файл порожній або пошкоджений');
+    throw fileBadRequest(FileErrorCode.EMPTY_OR_CORRUPTED);
   }
 
   if (file.size !== undefined && file.size !== file.buffer.length) {
-    throw new BadRequestException('Некоректний розмір файлу');
+    throw fileBadRequest(FileErrorCode.INVALID_SIZE);
   }
 
   const originalName = normalizeOriginalFileName(file.originalname);
@@ -49,11 +49,11 @@ export function validateUploadFile(
   const allowedMimeTypes = ALLOWED_FILE_TYPES.get(extension);
 
   if (!allowedMimeTypes || !allowedMimeTypes.has(file.mimetype)) {
-    throw new BadRequestException('Недопустимий тип файлу');
+    throw fileBadRequest(FileErrorCode.TYPE_NOT_ALLOWED);
   }
 
   if (!hasExpectedFileSignature(extension, file.buffer)) {
-    throw new BadRequestException('Вміст файлу не відповідає його типу');
+    throw fileBadRequest(FileErrorCode.SIGNATURE_MISMATCH);
   }
 
   return {
@@ -79,7 +79,7 @@ export function normalizeOriginalFileName(originalName: string): string {
     .slice(0, MAX_ORIGINAL_NAME_LENGTH);
 
   if (!normalized || normalized === '.' || normalized === '..') {
-    throw new BadRequestException('Некоректна назва файлу');
+    throw fileBadRequest(FileErrorCode.INVALID_ORIGINAL_NAME);
   }
 
   return normalized;

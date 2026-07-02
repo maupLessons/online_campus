@@ -3,6 +3,7 @@ import {
   normalizeOriginalFileName,
   validateUploadFile,
 } from './file-upload-validation.util';
+import { FileErrorCode } from './file-errors';
 
 function uploadFile(
   overrides: Partial<Express.Multer.File> = {},
@@ -45,6 +46,22 @@ describe('file upload validation', () => {
     });
 
     expect(() => validateUploadFile(file)).toThrow(BadRequestException);
+    try {
+      validateUploadFile(file);
+    } catch (error) {
+      const response = (error as BadRequestException).getResponse() as {
+        code?: unknown;
+        message?: unknown;
+        messages?: {
+          uk?: unknown;
+          en?: unknown;
+        };
+      };
+      expect(response.code).toBe(FileErrorCode.SIGNATURE_MISMATCH);
+      expect(typeof response.message).toBe('string');
+      expect(typeof response.messages?.uk).toBe('string');
+      expect(typeof response.messages?.en).toBe('string');
+    }
   });
 
   it('rejects a mismatched reported file size', () => {

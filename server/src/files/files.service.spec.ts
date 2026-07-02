@@ -1,6 +1,8 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { FileScanStatus } from './file.schema';
 import { FilesService } from './files.service';
+import { FileErrorCode } from './file-errors';
 import { Role } from '../common/types/roles.enum';
 
 type QueryChain<T> = {
@@ -68,6 +70,12 @@ function createService(
       onCommit: jest.fn().mockReturnValue(false),
     } as never,
     academicAccessService as never,
+    {
+      scan: jest.fn().mockResolvedValue({
+        status: FileScanStatus.CLEAN,
+        provider: 'test-scanner',
+      }),
+    },
   );
 }
 
@@ -169,5 +177,40 @@ describe('FilesService security checks', () => {
         Role.STUDENT,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks downloads before a file is marked clean by the scanner', async () => {
+    const fileId = new Types.ObjectId();
+    const ownerId = new Types.ObjectId();
+    const service = createService({
+      file: {
+        _id: fileId,
+        uploadedBy: ownerId,
+        scanStatus: FileScanStatus.PENDING_SCAN,
+      },
+    });
+
+    try {
+      await service.getDownloadableFileById(
+        fileId.toHexString(),
+        ownerId.toHexString(),
+        Role.STUDENT,
+      );
+      throw new Error('Expected pending scan download to be blocked');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ForbiddenException);
+      const response = (error as ForbiddenException).getResponse() as {
+        code?: unknown;
+        message?: unknown;
+        messages?: {
+          uk?: unknown;
+          en?: unknown;
+        };
+      };
+      expect(response.code).toBe(FileErrorCode.PENDING_SCAN);
+      expect(typeof response.message).toBe('string');
+      expect(typeof response.messages?.uk).toBe('string');
+      expect(typeof response.messages?.en).toBe('string');
+    }
   });
 });

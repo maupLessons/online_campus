@@ -52,6 +52,10 @@ const resources = {
       'auth.title': 'Вхід до системи',
       'auth.subtitle': 'Введіть логін та пароль для доступу до кабінету.',
       'auth.forgotPassword': 'Забули пароль?',
+      'auth.login.invalidCredentials': 'Неправильний логін або пароль',
+      'auth.login.blocked':
+        'Обліковий запис заблоковано. Зверніться до адміністратора.',
+      'auth.login.failed': 'Помилка входу. Спробуйте ще раз.',
 
       'passwordReset.pageTitleRequest': 'Відновлення пароля',
       'passwordReset.pageTitleConfirm': 'Новий пароль',
@@ -111,6 +115,11 @@ const resources = {
       'login.stats.access': 'доступ',
       'login.stats.courses': 'курсів',
       'login.logoAlt': 'МАУП',
+      'login.validation.loginMin': 'Логін має містити мінімум 2 символи',
+      'login.validation.passwordMin':
+        'Пароль має містити мінімум 8 символів',
+      'login.validation.passwordFormat':
+        'Пароль має містити англійські літери та цифри',
 
       'roles.student': 'Студент',
       'roles.teacher': 'Викладач',
@@ -609,7 +618,21 @@ const resources = {
       'profile.showPassword': 'Показати пароль',
       'profile.hidePassword': 'Приховати пароль',
       'profile.changePasswordLoading': 'Зміна пароля...',
+      'profile.changePasswordSuccess': 'Пароль успішно змінено',
       'profile.changePasswordError': 'Не вдалося змінити пароль',
+      'profile.changePasswordInvalidOldPassword':
+        'Невірний поточний пароль',
+      'profile.validation.currentPasswordRequired':
+        'Введіть поточний пароль',
+      'profile.validation.passwordMin':
+        'Пароль має бути не коротшим за 8 символів',
+      'profile.validation.passwordMax':
+        'Пароль має бути не довшим за 50 символів',
+      'profile.validation.passwordComplexity':
+        'Пароль має містити хоча б одну велику літеру, одну малу та одну цифру або спецсимвол',
+      'profile.validation.confirmPasswordRequired':
+        'Повторіть новий пароль',
+      'profile.validation.passwordsMismatch': 'Паролі не співпадають',
 
       'status.active': 'Активний',
       'status.blocked': 'Заблокований',
@@ -1119,6 +1142,10 @@ const resources = {
       'auth.title': 'Sign in',
       'auth.subtitle': 'Enter your login and password to access your account.',
       'auth.forgotPassword': 'Forgot password?',
+      'auth.login.invalidCredentials': 'Incorrect login or password',
+      'auth.login.blocked':
+        'The account is blocked. Contact the administrator.',
+      'auth.login.failed': 'Sign-in failed. Please try again.',
 
       'passwordReset.pageTitleRequest': 'Password recovery',
       'passwordReset.pageTitleConfirm': 'New password',
@@ -1176,6 +1203,11 @@ const resources = {
       'login.stats.access': 'access',
       'login.stats.courses': 'courses',
       'login.logoAlt': 'IAPM',
+      'login.validation.loginMin': 'Login must contain at least 2 characters',
+      'login.validation.passwordMin':
+        'Password must contain at least 8 characters',
+      'login.validation.passwordFormat':
+        'Password must contain English letters and numbers',
 
       'roles.student': 'Student',
       'roles.teacher': 'Teacher',
@@ -1674,7 +1706,21 @@ const resources = {
       'profile.showPassword': 'Show password',
       'profile.hidePassword': 'Hide password',
       'profile.changePasswordLoading': 'Changing password...',
+      'profile.changePasswordSuccess': 'Password changed successfully',
       'profile.changePasswordError': 'Could not change password',
+      'profile.changePasswordInvalidOldPassword':
+        'The current password is incorrect',
+      'profile.validation.currentPasswordRequired':
+        'Enter the current password',
+      'profile.validation.passwordMin':
+        'Password must be at least 8 characters long',
+      'profile.validation.passwordMax':
+        'Password must be no longer than 50 characters',
+      'profile.validation.passwordComplexity':
+        'Password must include at least one uppercase letter, one lowercase letter, and a number or special character',
+      'profile.validation.confirmPasswordRequired':
+        'Repeat the new password',
+      'profile.validation.passwordsMismatch': 'Passwords do not match',
 
       'status.active': 'Active',
       'status.blocked': 'Blocked',

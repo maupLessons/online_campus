@@ -19,15 +19,6 @@ export const ROLE_LABEL_KEYS: Record<Role, string> = {
   [Role.PRESIDENT]: 'roles.president',
   [Role.ADMIN]: 'roles.admin',
 };
-export const ROLE_LABELS: Record<Role, string> = {
-  [Role.STUDENT]: 'Студент',
-  [Role.TEACHER]: 'Викладач',
-  [Role.DEPARTMENT_HEAD]: 'Зав. кафедри',
-  [Role.DEAN]: 'Декан',
-  [Role.RECTOR]: 'Ректор',
-  [Role.PRESIDENT]: 'Президент',
-  [Role.ADMIN]: 'Адмін',
-};
 
 export interface User {
   id: string;

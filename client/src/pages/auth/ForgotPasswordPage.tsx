@@ -30,10 +30,8 @@ type PasswordResetRequestResponse = {
   resetUrl?: string;
 };
 
-const API_ERROR_TRANSLATION_KEYS: Record<string, string> = {
-  "Посилання для відновлення пароля недійсне або протерміноване":
-    "passwordReset.errors.invalidToken",
-};
+const PASSWORD_RESET_INVALID_TOKEN_ERROR_KEY =
+  "passwordReset.errors.invalidToken";
 
 function createPasswordResetRequestSchema(t: TFunction) {
   return z.object({
@@ -69,12 +67,6 @@ function createPasswordResetConfirmSchema(t: TFunction) {
     });
 }
 
-function translateApiMessage(message: string, t: TFunction): string {
-  const translationKey = API_ERROR_TRANSLATION_KEYS[message];
-
-  return translationKey ? t(translationKey) : message;
-}
-
 function getApiErrorMessage(
   error: unknown,
   fallback: string,
@@ -84,20 +76,8 @@ function getApiErrorMessage(
     return fallback;
   }
 
-  const message = error.response?.data?.message;
-  if (typeof message === "string") {
-    return translateApiMessage(message, t);
-  }
-
-  if (Array.isArray(message)) {
-    const validationMessages = message.filter(
-      (item): item is string => typeof item === "string",
-    );
-    if (validationMessages.length > 0) {
-      return validationMessages
-        .map((item) => translateApiMessage(item, t))
-        .join("\n");
-    }
+  if (error.response?.status === 400) {
+    return t(PASSWORD_RESET_INVALID_TOKEN_ERROR_KEY);
   }
 
   return fallback;

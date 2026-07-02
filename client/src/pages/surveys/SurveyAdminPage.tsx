@@ -3,7 +3,6 @@ import type { SyntheticEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import axios from "axios";
 import {
   ArrowDown,
   ArrowUp,
@@ -34,6 +33,7 @@ import {
   type CreateSurveyQuestionInput,
   type Survey,
 } from "../../types";
+import { getLocalizedApiErrorMessage } from "../../utils/apiErrorMessage";
 
 type BuilderQuestion = {
   localId: string;
@@ -102,16 +102,6 @@ function toDateTimeLocalValue(value?: string) {
 
   const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return localDate.toISOString().slice(0, 16);
-}
-
-function getRequestErrorMessage(error: unknown, fallback: string) {
-  if (axios.isAxiosError(error)) {
-    const message = error.response?.data?.message;
-    if (Array.isArray(message)) return message.join(", ");
-    if (typeof message === "string") return message;
-  }
-
-  return fallback;
 }
 
 function surveyToFormState(survey: Survey): SurveyFormState {
@@ -390,7 +380,7 @@ function SurveyManagementRow({
 }
 
 export default function SurveyAdminPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const [filters, setFilters] = useState<SurveyListFilters>({
@@ -479,7 +469,11 @@ export default function SurveyAdminPage() {
     onError: (error) => {
       setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t("surveys.admin.createError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("surveys.admin.createError"),
+        ),
       );
     },
   });
@@ -497,7 +491,11 @@ export default function SurveyAdminPage() {
     onError: (error) => {
       setNotice("");
       setFormError(
-        getRequestErrorMessage(error, t("surveys.admin.updateError")),
+        getLocalizedApiErrorMessage(
+          error,
+          i18n.language,
+          t("surveys.admin.updateError"),
+        ),
       );
     },
   });
@@ -529,7 +527,11 @@ export default function SurveyAdminPage() {
   const actionError =
     publishMutation.error || closeMutation.error || removeMutation.error;
   const actionErrorMessage = actionError
-    ? getRequestErrorMessage(actionError, t("surveys.admin.actionError"))
+    ? getLocalizedApiErrorMessage(
+        actionError,
+        i18n.language,
+        t("surveys.admin.actionError"),
+      )
     : "";
   const isWorking =
     createMutation.isPending ||

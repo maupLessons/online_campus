@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import { Download, Trash2, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -7,6 +6,7 @@ import { FileUploader } from "../../components/FileUploader";
 import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import api, { filesApi } from "../../services/api";
 import type { Assignment, PaginatedResponse } from "../../types";
+import { getLocalizedApiErrorMessage } from "../../utils/apiErrorMessage";
 
 export default function AssignmentsPage() {
   const { t, i18n } = useTranslation();
@@ -116,13 +116,11 @@ export default function AssignmentsPage() {
       await filesApi.submitAssignment(assignmentId, fileToUpload);
       await refetch();
     } catch (error: unknown) {
-      const responseMessage = axios.isAxiosError(error)
-        ? error.response?.data?.message
-        : undefined;
-      const message =
-        typeof responseMessage === "string"
-          ? responseMessage
-          : t("assignments.uploadError");
+      const message = getLocalizedApiErrorMessage(
+        error,
+        i18n.language,
+        t("assignments.uploadError"),
+      );
 
       showStatus(t("assignments.uploadWarning", { message }));
       throw error;

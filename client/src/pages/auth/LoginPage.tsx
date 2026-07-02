@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuthStore } from "../../store/authStore";
-import { loginSchema, type LoginFormData } from "../../schemas/authSchema";
+import {
+  createLoginSchema,
+  type LoginFormData,
+} from "../../schemas/authSchema";
 import { Eye, EyeOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import LanguageSwitcher from "../../components/LanguageSwitcher";
@@ -21,6 +24,7 @@ export default function LoginPage() {
     clearError,
   } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
+  const loginSchema = useMemo(() => createLoginSchema(t), [t]);
 
   const {
     register,
@@ -54,7 +58,7 @@ export default function LoginPage() {
       await doLogin(values.login, values.password);
       navigate("/dashboard");
     } catch {
-      // помилка вже обробляється в authStore
+      // The error is already handled in authStore.
     }
   };
 
@@ -146,7 +150,7 @@ export default function LoginPage() {
 
           {error && (
             <div className=" mb-5 text-red-600 text-sm bg-red-50 border border-red-100 p-3 rounded-xl">
-              {error}
+              {t(error)}
             </div>
           )}
 

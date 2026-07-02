@@ -1,16 +1,12 @@
 import 'multer';
-import {
-  Injectable,
-  BadRequestException,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as fs from 'fs';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
-import { File, FileDocument } from './file.schema';
+import { File, FileDocument, FileScanStatus } from './file.schema';
+import { FILE_SCANNER, FileScanner } from './file-scanner.types';
 import {
   Assignment,
   AssignmentDocument,
@@ -26,6 +22,18 @@ import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { TransactionLifecycleService } from '../audit-log/transaction-lifecycle.service';
 import { AcademicAccessService } from '../common/access/academic-access.service';
 import { validateUploadFile } from './file-upload-validation.util';
+import {
+  FileErrorCode,
+  FileSuccessCode,
+  fileBadRequest,
+  fileForbidden,
+  fileNotFound,
+  fileSuccessResponse,
+} from './file-errors';
+
+const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'uploads');
+const QUARANTINE_STORAGE_PREFIX = 'quarantine';
+const CLEAN_STORAGE_PREFIX = 'clean';
 
 @Injectable()
 export class FilesService {
@@ -38,6 +46,7 @@ export class FilesService {
     private submissionModel: Model<SubmissionDocument>,
     private readonly transactionLifecycle: TransactionLifecycleService,
     private readonly academicAccessService: AcademicAccessService,
+    @Inject(FILE_SCANNER) private readonly fileScanner: FileScanner,
   ) {}
 
   async saveFile(
@@ -54,23 +63,54 @@ export class FilesService {
         'files.upload.storage-name',
         () => `${randomUUID()}${validatedFile.extension}`,
       );
-      const uploadPath = path.join(__dirname, '..', '..', 'uploads');
-
-      await fs.promises.mkdir(uploadPath, { recursive: true });
-
-      const filePath = path.join(uploadPath, safeFileName);
-      await fs.promises.writeFile(filePath, file.buffer);
-      writtenFilePath = filePath;
-      this.transactionLifecycle.onRollback(() =>
-        this.removePhysicalFile(filePath),
+      const quarantineStoragePath = path.posix.join(
+        QUARANTINE_STORAGE_PREFIX,
+        safeFileName,
       );
+      const cleanStoragePath = path.posix.join(
+        CLEAN_STORAGE_PREFIX,
+        safeFileName,
+      );
+      const quarantinePath = this.resolveStoredFilePath(quarantineStoragePath);
+      const cleanPath = this.resolveStoredFilePath(cleanStoragePath);
+
+      await fs.promises.mkdir(path.dirname(quarantinePath), {
+        recursive: true,
+      });
+      await fs.promises.mkdir(path.dirname(cleanPath), { recursive: true });
+
+      await fs.promises.writeFile(quarantinePath, file.buffer);
+      writtenFilePath = quarantinePath;
+      this.transactionLifecycle.onRollback(async () => {
+        await this.removePhysicalFile(quarantinePath);
+        await this.removePhysicalFile(cleanPath);
+      });
+
+      const scanResult = await this.fileScanner.scan({
+        filePath: quarantinePath,
+        originalName: validatedFile.originalName,
+        mimeType: validatedFile.mimeType,
+        size: validatedFile.size,
+      });
+
+      if (scanResult.status !== FileScanStatus.CLEAN) {
+        await this.removePhysicalFile(quarantinePath);
+        writtenFilePath = undefined;
+        throw fileBadRequest(FileErrorCode.SCAN_REJECTED);
+      }
+
+      await fs.promises.rename(quarantinePath, cleanPath);
+      writtenFilePath = cleanPath;
 
       const savedFile = await this.fileModel.create({
         originalName: validatedFile.originalName,
-        storagePath: safeFileName,
+        storagePath: cleanStoragePath,
         mimetype: validatedFile.mimeType,
         size: validatedFile.size,
         uploadedBy: new Types.ObjectId(userId),
+        scanStatus: FileScanStatus.CLEAN,
+        scanProvider: scanResult.provider,
+        scannedAt: new Date(),
       });
 
       await audit?.record({
@@ -82,11 +122,13 @@ export class FilesService {
           extension: validatedFile.extension,
           mimeType: validatedFile.mimeType,
           sizeBytes: validatedFile.size,
+          scanStatus: FileScanStatus.CLEAN,
+          scanProvider: scanResult.provider,
         },
       });
 
       return {
-        message: 'Файл успішно завантажено',
+        ...fileSuccessResponse(FileSuccessCode.UPLOAD_SUCCESS),
         fileId: savedFile._id,
         fileLink: `/api/files/download/${savedFile._id.toString()}`,
       };
@@ -97,18 +139,18 @@ export class FilesService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException('Помилка при збереженні файлу');
+      throw fileBadRequest(FileErrorCode.SAVE_FAILED);
     }
   }
 
   async getFileById(fileId: string) {
     if (!Types.ObjectId.isValid(fileId)) {
-      throw new BadRequestException('Некоректний ID файлу');
+      throw fileBadRequest(FileErrorCode.INVALID_ID);
     }
 
     const file = await this.fileModel.findById(fileId);
     if (!file) {
-      throw new NotFoundException('Файл не знайдено');
+      throw fileNotFound(FileErrorCode.NOT_FOUND);
     }
     return file;
   }
@@ -116,11 +158,17 @@ export class FilesService {
   async getDownloadableFileById(fileId: string, userId: string, role: Role) {
     const file = await this.getFileById(fileId);
 
+    this.assertFileIsClean(file);
+
     if (!(await this.canAccessFile(file, userId, role))) {
-      throw new ForbiddenException('Немає прав для завантаження цього файлу');
+      throw fileForbidden(FileErrorCode.DOWNLOAD_FORBIDDEN);
     }
 
     return file;
+  }
+
+  getPhysicalPath(file: FileDocument): string {
+    return this.resolveStoredFilePath(file.storagePath);
   }
 
   async assertFilesCanBeAttached(
@@ -137,11 +185,15 @@ export class FilesService {
       uniqueFileIds.some((fileId) => !Types.ObjectId.isValid(fileId)) ||
       !Types.ObjectId.isValid(userId)
     ) {
-      throw new BadRequestException('Некоректний ID файлу');
+      throw fileBadRequest(FileErrorCode.INVALID_ID);
     }
 
     const filter: Record<string, unknown> = {
       _id: { $in: uniqueFileIds.map((fileId) => new Types.ObjectId(fileId)) },
+      $or: [
+        { scanStatus: FileScanStatus.CLEAN },
+        { scanStatus: { $exists: false } },
+      ],
     };
 
     if (role !== Role.ADMIN) {
@@ -153,7 +205,7 @@ export class FilesService {
       .exec();
 
     if (availableFilesCount !== uniqueFileIds.length) {
-      throw new ForbiddenException('Немає прав для використання файлу');
+      throw fileForbidden(FileErrorCode.ATTACH_FORBIDDEN);
     }
   }
 
@@ -166,16 +218,10 @@ export class FilesService {
     const file = await this.getFileById(fileId);
 
     if (role !== Role.ADMIN && file.uploadedBy.toString() !== userId) {
-      throw new ForbiddenException('Немає прав для видалення цього файлу');
+      throw fileForbidden(FileErrorCode.DELETE_FORBIDDEN);
     }
 
-    const filePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      'uploads',
-      file.storagePath,
-    );
+    const filePath = this.resolveStoredFilePath(file.storagePath);
 
     try {
       await this.fileModel.findByIdAndDelete(fileId);
@@ -198,9 +244,9 @@ export class FilesService {
         await this.removePhysicalFile(filePath);
       }
 
-      return { message: 'Файл видалено' };
+      return fileSuccessResponse(FileSuccessCode.DELETE_SUCCESS);
     } catch {
-      throw new BadRequestException('Помилка при видаленні файлу');
+      throw fileBadRequest(FileErrorCode.DELETE_FAILED);
     }
   }
 
@@ -278,6 +324,44 @@ export class FilesService {
     }
 
     return false;
+  }
+
+  private assertFileIsClean(file: FileDocument): void {
+    if (
+      file.scanStatus === undefined ||
+      file.scanStatus === FileScanStatus.CLEAN
+    ) {
+      return;
+    }
+
+    if (file.scanStatus === FileScanStatus.PENDING_SCAN) {
+      throw fileForbidden(FileErrorCode.PENDING_SCAN);
+    }
+
+    throw fileForbidden(FileErrorCode.REJECTED_BY_SCAN);
+  }
+
+  private resolveStoredFilePath(storagePath: string): string {
+    const normalized = storagePath.replace(/\\/g, '/');
+    const segments = normalized.split('/');
+
+    if (
+      !normalized ||
+      path.isAbsolute(normalized) ||
+      segments.some(
+        (segment) => !segment || segment === '.' || segment === '..',
+      )
+    ) {
+      throw fileBadRequest(FileErrorCode.INVALID_STORAGE_PATH);
+    }
+
+    const root = path.resolve(UPLOADS_ROOT);
+    const resolved = path.resolve(root, ...segments);
+    if (resolved !== root && resolved.startsWith(`${root}${path.sep}`)) {
+      return resolved;
+    }
+
+    throw fileBadRequest(FileErrorCode.INVALID_STORAGE_PATH);
   }
 
   private async removePhysicalFile(filePath: string): Promise<void> {

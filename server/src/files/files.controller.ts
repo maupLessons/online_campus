@@ -15,9 +15,9 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
-import * as path from 'path';
 import { ApiConsumes, ApiBody, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FilesService } from './files.service';
+import { FileErrorCode, fileErrorResponse } from './file-errors';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Role } from '../common/types/roles.enum';
 import { AuditLogService } from '../audit-log/audit-log.service';
@@ -99,13 +99,7 @@ export class FilesController {
       req.user.role,
     );
 
-    const filePath = path.join(
-      __dirname,
-      '..',
-      '..',
-      'uploads',
-      fileInfo.storagePath,
-    );
+    const filePath = this.filesService.getPhysicalPath(fileInfo);
 
     const encodedFileName = encodeURIComponent(fileInfo.originalName);
 
@@ -118,7 +112,7 @@ export class FilesController {
     return res.sendFile(filePath, (err) => {
       if (err) {
         if (!res.headersSent) {
-          res.status(404).send('Файл фізично не знайдено на сервері');
+          res.status(404).json(fileErrorResponse(FileErrorCode.NOT_FOUND));
         }
       }
     });

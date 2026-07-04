@@ -7,6 +7,15 @@ import { configureApp, isSwaggerEnabled } from './app.config';
 
 const logger = new Logger('Bootstrap');
 
+function logBootstrapError(error: unknown): void {
+  if (error instanceof Error) {
+    logger.error(`Error during bootstrap: ${error.message}`, error.stack);
+    return;
+  }
+
+  logger.error(`Error during bootstrap: ${String(error)}`);
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
@@ -25,6 +34,6 @@ async function bootstrap() {
 }
 
 bootstrap().catch((err: unknown) => {
-  logger.error('Error during bootstrap', err);
+  logBootstrapError(err);
   process.exit(1);
 });

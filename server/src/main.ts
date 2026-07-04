@@ -1,8 +1,11 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { useContainer } from 'class-validator';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { configureApp, isSwaggerEnabled } from './app.config';
+
+const logger = new Logger('Bootstrap');
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
@@ -12,16 +15,16 @@ async function bootstrap() {
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
-  console.log(`Server running on http://localhost:${port}`);
-  console.log(`Backend API routes: http://localhost:${port}/api`);
+  logger.log(`Server running on http://localhost:${port}`);
+  logger.log(`Backend API routes: http://localhost:${port}/api`);
   if (isSwaggerEnabled()) {
-    console.log(
+    logger.log(
       `Swagger documentation available on http://localhost:${port}/api/docs`,
     );
   }
 }
 
 bootstrap().catch((err: unknown) => {
-  console.error('Error during bootstrap:', err);
+  logger.error('Error during bootstrap', err);
   process.exit(1);
 });

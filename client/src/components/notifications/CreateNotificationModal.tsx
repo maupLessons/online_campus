@@ -28,11 +28,7 @@ interface NotificationFormProps {
 }
 
 type NotificationTargetType =
-  | "all"
-  | "students"
-  | "teachers"
-  | "students_teachers"
-  | "group";
+  "all" | "students" | "teachers" | "students_teachers" | "group";
 
 const notificationTargetTypes: NotificationTargetType[] = [
   "all",
@@ -86,8 +82,7 @@ function NotificationForm({
 
       await onCreated(savedNotification);
       onClose();
-    } catch (err) {
-      console.error(err);
+    } catch {
       setError(
         t(
           isEditing

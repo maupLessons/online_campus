@@ -192,7 +192,7 @@ export class AssignmentsService {
     }
 
     await this.coursesService.validateOwnership(
-      String(assignment.courseAssignment as any),
+      toId(assignment.courseAssignment),
       userId,
       role,
     );
@@ -223,7 +223,7 @@ export class AssignmentsService {
     }
 
     await this.coursesService.validateOwnership(
-      String(assignment.courseAssignment as any),
+      toId(assignment.courseAssignment),
       userId,
       role,
     );

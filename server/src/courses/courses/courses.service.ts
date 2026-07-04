@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types, PaginateModel } from 'mongoose';
+import { Model, Types, PaginateModel, PaginateOptions } from 'mongoose';
 
 import { CourseAssignmentDto, CourseDto } from './dto';
 import { Role } from '../../common/types/roles.enum';
@@ -94,7 +94,7 @@ export class CoursesService {
     pagination: PaginationDto,
     user: AuthenticatedUser,
   ): Promise<PaginatedDto<CourseDto>> {
-    const options = {
+    const options: PaginateOptions = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
       sort: { name: 1 },
@@ -102,7 +102,7 @@ export class CoursesService {
     };
 
     const filter = await this.academicAccessService.buildCourseFilter(user);
-    const result = await this.courseModel.paginate(filter, options as any);
+    const result = await this.courseModel.paginate(filter, options);
     return transformToPaginatedDto(CourseDto, result);
   }
 
@@ -223,7 +223,7 @@ export class CoursesService {
     if (role === Role.STUDENT) {
       return this.findCoursesByStudent(userId, pagination);
     }
-    const options = {
+    const options: PaginateOptions = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
       populate: ['course', 'teacher', 'group'],
@@ -237,10 +237,7 @@ export class CoursesService {
         role,
       },
     );
-    const result = await this.courseAssignmentModel.paginate(
-      filter,
-      options as any,
-    );
+    const result = await this.courseAssignmentModel.paginate(filter, options);
     return transformToPaginatedDto(CourseAssignmentDto, result);
   }
 
@@ -248,12 +245,12 @@ export class CoursesService {
     pagination: PaginationDto,
     user: AuthenticatedUser,
   ): Promise<PaginatedDto<CourseAssignmentDto>> {
-    const options = {
+    const options: PaginateOptions = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
       populate: [
-        'course',
-        'teacher',
+        { path: 'course' },
+        { path: 'teacher' },
         {
           path: 'group',
           populate: { path: 'specialty' },
@@ -265,10 +262,7 @@ export class CoursesService {
 
     const filter =
       await this.academicAccessService.buildCourseAssignmentFilter(user);
-    const result = await this.courseAssignmentModel.paginate(
-      filter,
-      options as any,
-    );
+    const result = await this.courseAssignmentModel.paginate(filter, options);
 
     return transformToPaginatedDto(CourseAssignmentDto, result);
   }
@@ -290,7 +284,7 @@ export class CoursesService {
       };
     }
 
-    const options = {
+    const options: PaginateOptions = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
       populate: ['course', 'teacher'],
@@ -303,7 +297,7 @@ export class CoursesService {
         studentId,
         toId(user.studentProfile.group),
       ),
-      options as any,
+      options,
     );
 
     return transformToPaginatedDto(CourseAssignmentDto, result);
@@ -329,12 +323,12 @@ export class CoursesService {
     teacherId: string,
     pagination: PaginationDto,
   ): Promise<PaginatedDto<CourseAssignmentDto>> {
-    const options = {
+    const options: PaginateOptions = {
       page: pagination.page || 1,
       limit: pagination.limit || 10,
       populate: [
-        'course',
-        'teacher',
+        { path: 'course' },
+        { path: 'teacher' },
         {
           path: 'group',
           populate: { path: 'specialty' },
@@ -345,7 +339,7 @@ export class CoursesService {
 
     const result = await this.courseAssignmentModel.paginate(
       { teacher: new Types.ObjectId(teacherId) },
-      options as any,
+      options,
     );
 
     return transformToPaginatedDto(CourseAssignmentDto, result);

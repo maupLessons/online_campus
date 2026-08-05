@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { SyntheticEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,

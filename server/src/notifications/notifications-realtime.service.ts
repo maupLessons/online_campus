@@ -19,20 +19,16 @@ export class NotificationsRealtimeService {
     });
     const changes = this.changes.pipe(
       filter((signal) => !signal.userId || signal.userId === userId),
-      map(
-        (signal): MessageEvent => ({
-          type: 'notifications.changed',
-          data: { reason: signal.reason },
-        }),
-      ),
+      map((signal): MessageEvent => ({
+        type: 'notifications.changed',
+        data: { reason: signal.reason },
+      })),
     );
     const heartbeat = interval(25_000).pipe(
-      map(
-        (): MessageEvent => ({
-          type: 'notifications.heartbeat',
-          data: { timestamp: new Date().toISOString() },
-        }),
-      ),
+      map((): MessageEvent => ({
+        type: 'notifications.heartbeat',
+        data: { timestamp: new Date().toISOString() },
+      })),
     );
 
     return merge(connected, changes, heartbeat);

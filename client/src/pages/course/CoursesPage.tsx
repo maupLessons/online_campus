@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLink } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import api from '../../services/api';
 import { moodleBaseUrl } from '../../config/externalLearning';
 import type { CourseAssignment, PaginatedResponse } from '../../types';

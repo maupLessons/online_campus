@@ -201,9 +201,7 @@ export class TextQuestionResultDto extends BaseQuestionResultDto {
 }
 
 export type SurveyQuestionResultDto =
-  | ChoiceQuestionResultDto
-  | RatingQuestionResultDto
-  | TextQuestionResultDto;
+  ChoiceQuestionResultDto | RatingQuestionResultDto | TextQuestionResultDto;
 
 @ApiExtraModels(
   ChoiceQuestionResultDto,

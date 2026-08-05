@@ -16,11 +16,7 @@ import { ReferenceType } from './reference.types';
 import type { ReferenceReadFilter } from './references-access.service';
 
 export type ReferenceAdminRecord =
-  | ClassroomDto
-  | DepartmentDto
-  | FacultyDto
-  | GroupDto
-  | SpecialtyDto;
+  ClassroomDto | DepartmentDto | FacultyDto | GroupDto | SpecialtyDto;
 
 @Injectable()
 export class ReferencesAdminService {

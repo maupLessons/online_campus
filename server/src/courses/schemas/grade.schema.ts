@@ -29,9 +29,7 @@ export class Grade {
     default: null,
   })
   lessonJournalEntry?:
-    | LessonJournalEntry
-    | MongooseSchema.Types.ObjectId
-    | null;
+    LessonJournalEntry | MongooseSchema.Types.ObjectId | null;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: Assignment.name })
   assignment?: Assignment | MongooseSchema.Types.ObjectId;

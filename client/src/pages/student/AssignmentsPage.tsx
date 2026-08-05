@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Download, Trash2, X } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { FileUploader } from "../../components/FileUploader";
 import { useAutoDismissState } from "../../hooks/useAutoDismissState";

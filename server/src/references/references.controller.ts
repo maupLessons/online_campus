@@ -57,6 +57,7 @@ import {
   ReferenceType,
 } from './reference.types';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
+import { singleFileUploadLimits } from '../common/upload/single-file-upload-limits';
 import {
   ReferenceReadFilter,
   ReferencesAccessService,
@@ -124,7 +125,7 @@ export class ReferencesController {
   @Roles(Role.ADMIN)
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: REFERENCE_IMPORT_FILE_LIMIT, files: 1 },
+      limits: singleFileUploadLimits(REFERENCE_IMPORT_FILE_LIMIT),
     }),
   )
   importReferences(

@@ -56,7 +56,6 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginFormData) => {
     try {
       await doLogin(values.login, values.password);
-      navigate("/dashboard");
     } catch {
       // The error is already handled in authStore.
     }

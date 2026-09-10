@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router';
+import { Link, Outlet, useLocation } from 'react-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
@@ -81,7 +81,6 @@ const NAV_ITEMS: {
 ];
 
 export default function Layout() {
-  const navigate = useNavigate();
   const location = useLocation();
   const { t, i18n } = useTranslation();
 
@@ -102,7 +101,6 @@ export default function Layout() {
   const handleLogout = async () => {
     setSidebarOpen(false);
     await logout().catch(() => undefined);
-    navigate('/login', { replace: true });
   };
 
   const pageTitle = useMemo(() => {

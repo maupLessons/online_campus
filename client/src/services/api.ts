@@ -1,6 +1,8 @@
 import axios, {
   AxiosError,
   AxiosHeaders,
+  CanceledError,
+  type AxiosAdapter,
   type InternalAxiosRequestConfig,
 } from 'axios';
 
@@ -11,6 +13,8 @@ const api = axios.create({
 
 type RetriableRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
+  _sessionGeneration?: number;
+  _sessionAdapter?: AxiosAdapter;
 };
 
 const AUTH_ENDPOINTS = [
@@ -29,14 +33,50 @@ export const AUTH_SESSION_EXPIRED_EVENT = 'campus:auth-session-expired';
 
 let refreshPromise: Promise<void> | null = null;
 let sessionExpirationHandled = false;
+let sessionGeneration = 0;
+let cookieMutationQueue: Promise<void> = Promise.resolve();
+const pendingProtectedRequests = new Set<AbortController>();
+
+export function invalidateApiSession() {
+  sessionGeneration += 1;
+  refreshPromise = null;
+  sessionExpirationHandled = false;
+  for (const controller of pendingProtectedRequests) controller.abort();
+  pendingProtectedRequests.clear();
+}
+
+function staleSession(config?: InternalAxiosRequestConfig) {
+  return new CanceledError(
+    'The request belongs to a previous session.',
+    config,
+  );
+}
+
+async function serializeCookieMutation<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = cookieMutationQueue;
+  let release!: () => void;
+  cookieMutationQueue = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+  }
+}
 
 function clearLegacyAuthStorage() {
   if (typeof window === 'undefined') {
     return;
   }
 
-  for (const key of LEGACY_TOKEN_KEYS) {
-    localStorage.removeItem(key);
+  try {
+    for (const key of LEGACY_TOKEN_KEYS) localStorage.removeItem(key);
+  } catch {
+    // Restricted storage must not prevent session invalidation.
   }
 }
 
@@ -77,7 +117,9 @@ function getRequestPath(url?: string) {
 
   try {
     const origin =
-      typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+      typeof window === 'undefined'
+        ? 'http://localhost'
+        : window.location.origin;
 
     return new URL(url, origin).pathname.replace(/^\/api/, '');
   } catch {
@@ -117,35 +159,106 @@ function expireSession() {
   }
 }
 
-async function refreshSession() {
+async function refreshSession(generation: number) {
+  if (generation !== sessionGeneration) throw staleSession();
   if (!refreshPromise) {
-    refreshPromise = api
+    const current = api
       .post('/auth/refresh', {})
       .then(() => undefined)
       .finally(() => {
-        refreshPromise = null;
+        if (refreshPromise === current) refreshPromise = null;
       });
+    refreshPromise = current;
   }
 
   return refreshPromise;
 }
 
-api.interceptors.request.use((config) => {
-  config.withCredentials = true;
-
+function attachCsrfToken(config: InternalAxiosRequestConfig) {
   if (MUTATING_METHODS.has(config.method?.toLowerCase() ?? '')) {
     const csrfToken = readCookie(CSRF_COOKIE_NAME);
+    config.headers = AxiosHeaders.from(config.headers);
     if (csrfToken) {
-      config.headers = AxiosHeaders.from(config.headers);
       config.headers.set(CSRF_HEADER_NAME, csrfToken);
+    } else {
+      config.headers.delete(CSRF_HEADER_NAME);
     }
   }
+}
 
-  return config;
-});
+api.interceptors.request.use(
+  (request) => {
+    const config = request as RetriableRequestConfig;
+    config.withCredentials = true;
+    config._sessionGeneration ??= sessionGeneration;
+    const generation = config._sessionGeneration;
+    const path = getRequestPath(config.url);
+    const writesCookies = [
+      '/auth/login',
+      '/auth/logout',
+      '/auth/refresh',
+    ].includes(path);
+    if (writesCookies || path === '/auth/profile') {
+      config.timeout =
+        config.timeout && config.timeout > 0
+          ? Math.min(config.timeout, 20_000)
+          : 20_000;
+    }
+    const protectedRequest = !isAuthEndpoint(config.url);
+    const transport =
+      config._sessionAdapter ??
+      axios.getAdapter(config.adapter ?? api.defaults.adapter);
+    config._sessionAdapter = transport;
+
+    // Keep the underlying adapter on retries; wrapping a wrapper would enqueue
+    // cookie writers recursively and could deadlock the FIFO queue.
+    config.adapter = async (adapterConfig) => {
+      const execute = async () => {
+        // Login/logout preserve the user's FIFO intent even if their UI scope
+        // changed while queued. Obsolete refreshes must never touch new cookies.
+        if (
+          generation !== sessionGeneration &&
+          (!writesCookies || path === '/auth/refresh')
+        ) {
+          throw staleSession(adapterConfig);
+        }
+        attachCsrfToken(adapterConfig);
+        const controller = protectedRequest ? new AbortController() : null;
+        const callerSignal = adapterConfig.signal;
+        const abort = () => controller?.abort();
+        if (controller) {
+          pendingProtectedRequests.add(controller);
+          if (callerSignal?.aborted) controller.abort();
+          else callerSignal?.addEventListener?.('abort', abort);
+          adapterConfig.signal = controller.signal;
+        }
+        try {
+          const response = await transport(adapterConfig);
+          if (generation !== sessionGeneration)
+            throw staleSession(adapterConfig);
+          return response;
+        } finally {
+          if (controller) pendingProtectedRequests.delete(controller);
+          callerSignal?.removeEventListener?.('abort', abort);
+          adapterConfig.signal = callerSignal;
+        }
+      };
+      return writesCookies ? serializeCookieMutation(execute) : execute();
+    };
+    return config;
+  },
+  undefined,
+  { synchronous: true },
+);
 
 api.interceptors.response.use(
   (response) => {
+    if (
+      (response.config as RetriableRequestConfig)._sessionGeneration !==
+      sessionGeneration
+    ) {
+      return Promise.reject(staleSession(response.config));
+    }
     const path = getRequestPath(response.config.url);
     if (path === '/auth/login' || path === '/auth/refresh') {
       resetSessionExpirationHandling();
@@ -156,6 +269,14 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as RetriableRequestConfig | undefined;
     const requestPath = getRequestPath(originalRequest?.url);
+
+    if (
+      originalRequest?._sessionGeneration !== undefined &&
+      originalRequest._sessionGeneration !== sessionGeneration
+    ) {
+      return Promise.reject(staleSession(originalRequest));
+    }
+    if (axios.isCancel(error)) return Promise.reject(error);
 
     if (error.response?.status === 401 && requestPath === '/auth/refresh') {
       expireSession();
@@ -169,11 +290,17 @@ api.interceptors.response.use(
       !isAuthEndpoint(originalRequest.url)
     ) {
       originalRequest._retry = true;
+      const generation =
+        originalRequest._sessionGeneration ?? sessionGeneration;
 
       try {
-        await refreshSession();
+        await refreshSession(generation);
+        if (generation !== sessionGeneration)
+          throw staleSession(originalRequest);
         return api(originalRequest);
       } catch {
+        if (generation !== sessionGeneration)
+          return Promise.reject(staleSession(originalRequest));
         expireSession();
       }
     }

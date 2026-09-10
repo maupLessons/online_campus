@@ -25,6 +25,7 @@ import { createAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { AuditEvent } from '../audit-log/audit.decorator';
 import { RequestWithId } from '../common/middleware/request-id.middleware';
+import { singleFileUploadLimits } from '../common/upload/single-file-upload-limits';
 
 const MAX_UPLOAD_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
@@ -50,7 +51,7 @@ export class FilesController {
   @AuditEvent(AUDIT_ACTIONS.FILE_UPLOAD, 'file')
   @UseInterceptors(
     FileInterceptor('file', {
-      limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES },
+      limits: singleFileUploadLimits(MAX_UPLOAD_FILE_SIZE_BYTES),
     }),
   )
   @ApiConsumes('multipart/form-data')

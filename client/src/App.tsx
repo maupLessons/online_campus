@@ -1,14 +1,12 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import { Routes, Route, Navigate } from 'react-router';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import RouteErrorBoundary from './components/RouteErrorBoundary';
 import LoginPage from './pages/auth/LoginPage';
 import { Role } from './types';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import type { ReactNode } from 'react';
-import { useAuthStore } from './store/authStore';
-import { AUTH_SESSION_EXPIRED_EVENT } from './services/api';
 
 const ALL_ROLES = Object.values(Role) as Role[];
 
@@ -60,23 +58,7 @@ function LazyPage({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
-  const initializeAuth = useAuthStore((state) => state.initializeAuth);
-  const expireSession = useAuthStore((state) => state.expireSession);
-
-  useEffect(() => {
-    initializeAuth();
-  }, [initializeAuth]);
-
-  useEffect(() => {
-    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, expireSession);
-
-    return () => {
-      window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, expireSession);
-    };
-  }, [expireSession]);
-
   return (
-    <BrowserRouter>
       <RouteErrorBoundary>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -317,6 +299,5 @@ export default function App() {
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </RouteErrorBoundary>
-    </BrowserRouter>
   );
 }

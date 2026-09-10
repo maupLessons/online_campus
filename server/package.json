@@ -25,7 +25,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
+    "test:e2e": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./test/jest-e2e.json --runInBand",
     "test:e2e:db": "jest --config ./test/jest-e2e-db.json --runInBand"
   },
   "dependencies": {
@@ -47,9 +47,9 @@
     "helmet": "^8.1.0",
     "mongoose": "^9.4.1",
     "mongoose-paginate-v2": "^1.9.4",
-    "multer": "2.2.0",
+    "multer": "2.3.0",
     "nestjs-pino": "^4.6.1",
-    "nodemailer": "9.0.6",
+    "nodemailer": "9.1.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pino": "^10.3.1",
@@ -92,8 +92,8 @@
     "typescript-eslint": "^8.20.0"
   },
   "overrides": {
-    "js-yaml": "4.3.1",
-    "multer": "2.2.0",
+    "js-yaml": "4.3.2",
+    "multer": "2.3.0",
     "tmp": "0.2.7",
     "exceljs": {
       "uuid": "11.1.1"

@@ -1269,6 +1269,42 @@ Regression tests додатково фіксують активну модель
 - **Token rotation** — refresh endpoint перевипускає access/refresh cookies і відкликає використаний refresh token
 - **CSRF** — signed double-submit token для unsafe методів (`POST`, `PUT`, `PATCH`, `DELETE`) з прив'язкою до HttpOnly binding cookie
 
+### Ізоляція клієнтських сесій / Client session isolation
+
+**Українською:** кожне покоління сесії має окремий `QueryClient`. Вихід,
+завершення сесії, новий вхід і оновлення профілю знищують попередній кеш
+запитів та мутацій і перемонтовують компоненти сторінок. Запізнілі відповіді
+автентифікації не можуть відновити попереднього користувача. Перевірки цих
+меж виконуються командою `npm test` у `client/` і входять до CI.
+HTTP-запити попередньої сесії скасовуються; їхні відповіді та помилки `401`
+не можуть змінити нову сесію. Запити login/logout/refresh виконуються послідовно
+в межах вкладки та перечитують CSRF cookie перед відправленням. Auth-запити
+та читання профілю обмежені 20 секундами (явний коротший timeout зберігається),
+щоб завислий bootstrap не блокував форму входу.
+
+**English:** each session generation owns a separate `QueryClient`. Logout,
+expiry, a new login and profile refresh destroy the previous query/mutation
+cache and remount page components. Late authentication responses cannot
+restore the previous user. Run `npm test` in `client/` for the session-boundary
+regressions; the same checks run in CI. Previous-session HTTP requests are
+cancelled; their responses and `401` errors cannot change the new session.
+Login/logout/refresh requests are serialized within the tab and read the
+current CSRF cookie immediately before dispatch. Authentication and profile
+requests have a 20-second timeout cap (explicit shorter timeouts are preserved),
+so a stalled bootstrap cannot indefinitely disable the login form.
+
+### Межі завантаження файлів / Upload boundaries
+
+**Українською:** upload та імпорт довідників приймають лише один файл у полі
+`file`, без текстових multipart-полів. Ліміти розміру залишаються 10 MiB та
+2 MiB відповідно. Кількість частин і довжина назв полів також обмежені;
+параметри імпорту передаються через query string.
+
+**English:** file upload and reference import accept exactly one `file` part,
+without multipart text fields. Size limits remain 10 MiB and 2 MiB respectively.
+Part count and field-name length are bounded; import options remain query
+parameters. These restrictions complement, but do not replace, patched Multer.
+
 ### HTTP-безпека
 
 - **HTTPS** обов'язково в production
@@ -1924,6 +1960,7 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: npm run test:e2e
+      - run: npm run test:e2e:db
 
   client:
     runs-on: ubuntu-latest
@@ -1940,12 +1977,23 @@ jobs:
       - run: npm ci
       - run: npm audit --audit-level=moderate
       - run: npm run lint:check
+      - run: npm test
       - run: npm run build
 ```
 
 `npm ci` є обов'язковим для CI та deployment-перевірок: він встановлює залежності строго з `package-lock.json` і падає, якщо `package.json` та lockfile не синхронізовані. Root `package.json` використовується тільки для репозиторних інструментів, зокрема Husky.
 
 Backend `npm run test:e2e` запускає швидкі smoke-перевірки без MongoDB, щоб CI мав детермінований e2e-сигнал. Повний DB-backed набір із Testcontainers запускається окремо командою `npm run test:e2e:db` у `server/` і потребує доступного Docker daemon.
+
+**Українською:** smoke-набір також перевіряє реальний multipart parser і
+сигнатури файлів. Команда сама вмикає `--experimental-vm-modules` лише для
+Jest, оскільки перевірка сигнатур завантажує ESM-пакет `file-type`.
+Production-команда цього прапорця не використовує.
+
+**English:** the smoke suite also exercises the real multipart parser and file
+signatures. Its command enables `--experimental-vm-modules` for Jest only,
+because signature validation dynamically loads the ESM `file-type` package.
+The production start command does not use this flag.
 
 CI окремо запускає `academic-access.e2e-spec.ts`, який блокує регресії
 об'єктної авторизації для elective files/schedule/notifications та

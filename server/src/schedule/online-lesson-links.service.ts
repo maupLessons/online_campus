@@ -133,13 +133,14 @@ export class OnlineLessonLinksService {
       date: dto.date ?? null,
       startTime: dto.date ? (dto.startTime ?? null) : null,
     };
-    // Fix round 1 (minor): we store the canonical URL form (new URL(...).href), not the raw string.
-    const canonicalUrl = new URL(dto.url).href;
+    // Spec §5.2/§8 and plan 02: store the input as given (schema `trim: true` only strips
+    // whitespace); `new URL(...).href` would rewrite e.g. `https://pair.example` to
+    // `https://pair.example/`, which the spec does not ask for.
     const doc = await this.linkModel
       .findOneAndUpdate(
         filter,
         {
-          $set: { url: canonicalUrl, updatedBy: new Types.ObjectId(user.sub) },
+          $set: { url: dto.url, updatedBy: new Types.ObjectId(user.sub) },
           $setOnInsert: { createdBy: new Types.ObjectId(user.sub) },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true },

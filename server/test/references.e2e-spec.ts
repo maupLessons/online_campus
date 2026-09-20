@@ -249,6 +249,12 @@ describe('References management (e2e)', () => {
       ),
     ]);
 
+    // This CourseAssignment is what gives `head`/`dean` group visibility below: it's picked up
+    // by AcademicAccessService.buildCourseAssignmentFilter (course.department in their managed
+    // departments), which is how ReferencesAccessService derives their `groupIds` scope.
+    // (Schedule itself is now read from MAUP API snapshots (spec 02 §4.1), not stored per
+    // classroom, so — unlike before the merge — there is no ScheduleEntry to seed here;
+    // reference-integrity.service.ts's assertClassroomCanBeDeleted is a no-op.)
     const courseId = new Types.ObjectId();
     const assignmentId = new Types.ObjectId();
     const termId = new Types.ObjectId();
@@ -281,18 +287,6 @@ describe('References management (e2e)', () => {
       term: termId,
       source: 'standard',
       enrolledStudents: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    await collection('ScheduleEntry').insertOne({
-      _id: new Types.ObjectId(),
-      courseAssignment: assignmentId,
-      classroom: new Types.ObjectId(classroomId),
-      date: new Date('2026-09-01T00:00:00.000Z'),
-      startTime: '09:00',
-      endTime: '10:30',
-      type: 'lecture',
-      status: 'scheduled',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -429,13 +423,14 @@ describe('References management (e2e)', () => {
       expect.objectContaining({ id: fixture.facultyId }),
     ]);
 
+    // Plan 02 §2961-2965: classroom scope is no longer derived from the schedule (the MAUP API
+    // snapshot doesn't reference the classrooms book), so `references-access.service.ts` returns
+    // an empty classroom scope for every non-global role — teacher included.
     const teacherClassrooms = await request(app.getHttpServer())
       .get('/api/references/catalog/classrooms?page=1&limit=10')
       .auth(fixture.teacher.token, { type: 'bearer' })
       .expect(200);
-    expect((teacherClassrooms.body as CatalogBody).docs).toEqual([
-      expect.objectContaining({ id: fixture.classroomId }),
-    ]);
+    expect((teacherClassrooms.body as CatalogBody).docs).toEqual([]);
 
     const globalCatalog = await request(app.getHttpServer())
       .get('/api/references/catalog/groups?page=1&limit=10')

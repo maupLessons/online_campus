@@ -301,6 +301,39 @@ describe('Courses catalog (e2e)', () => {
 
   const auth = (actor: Actor) => ({ Authorization: `Bearer ${actor.token}` });
 
+  // Audit entries are written through a transactional outbox (AuditOutboxProcessor), which
+  // flushes on a separate timer (AUDIT_OUTBOX_POLL_INTERVAL_MS, default 500ms) — not
+  // synchronously with the request response. Poll instead of reading right after the request,
+  // matching the pattern in schedule.e2e-spec.ts / electives.e2e-spec.ts.
+  async function waitForAuditEntry(
+    filter: Record<string, unknown>,
+  ): Promise<Record<string, unknown> | null> {
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const entry = await collection('AuditLog').findOne(filter);
+      if (entry) return entry;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return null;
+  }
+
+  async function waitForAuditEntries(
+    filter: Record<string, unknown>,
+    minCount: number,
+  ): Promise<Record<string, unknown>[]> {
+    let entries: Record<string, unknown>[] = [];
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      // Sort by timestamp (request time), not insertion order: the outbox processor writes
+      // to AuditLog on its own poll timer, so two audit rows can be flushed out of request order.
+      entries = await collection('AuditLog')
+        .find(filter)
+        .sort({ timestamp: 1 })
+        .toArray();
+      if (entries.length >= minCount) return entries;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return entries;
+  }
+
   describe('catalog write', () => {
     it('department_head creates a course only in own department', async () => {
       const f = await seed();
@@ -328,9 +361,7 @@ describe('Courses catalog (e2e)', () => {
           credits: 3,
         })
         .expect(403);
-      const audit = await collection('AuditLog').findOne({
-        action: 'course.created',
-      });
+      const audit = await waitForAuditEntry({ action: 'course.created' });
       expect(audit).not.toBeNull();
     });
 
@@ -344,12 +375,12 @@ describe('Courses catalog (e2e)', () => {
       await request(app.getHttpServer())
         .patch(`/api/courses/${f.courseB.toHexString()}`)
         .set(auth(f.headA))
-        .send({ name: 'x' })
+        .send({ name: 'Чужий' })
         .expect(403);
       await request(app.getHttpServer())
         .patch(`/api/courses/${f.courseA.toHexString()}`)
         .set(auth(f.dean))
-        .send({ name: 'x' })
+        .send({ name: 'Чужий' })
         .expect(403);
       await request(app.getHttpServer())
         .get(`/api/courses/${f.courseA.toHexString()}`)
@@ -418,9 +449,10 @@ describe('Courses catalog (e2e)', () => {
         .expect(({ body }: { body: CourseBody }) =>
           expect(body.moodleUrl).toBeUndefined(),
         );
-      const audit = await collection('AuditLog')
-        .find({ action: 'course.moodle_url.changed' })
-        .toArray();
+      const audit = await waitForAuditEntries(
+        { action: 'course.moodle_url.changed' },
+        2,
+      );
       expect(audit).toHaveLength(2);
       expect(audit[1].details).toMatchObject({ reason: 'Помилкове посилання' });
     });
@@ -466,9 +498,7 @@ describe('Courses catalog (e2e)', () => {
         .set(auth(f.headA))
         .send({ externalSubjectId: '1001; DROP' })
         .expect(400);
-      const audit = await collection('AuditLog').findOne({
-        action: 'course.updated',
-      });
+      const audit = await waitForAuditEntry({ action: 'course.updated' });
       expect(audit).not.toBeNull();
     });
 
@@ -569,7 +599,7 @@ describe('Courses catalog (e2e)', () => {
           expect(body.resources).toHaveLength(1);
           expect(body.resources[0].type).toBe('video');
         });
-      const audit = await collection('AuditLog').findOne({
+      const audit = await waitForAuditEntry({
         action: 'course_assignment.resources.updated',
       });
       expect(audit?.details).toMatchObject({

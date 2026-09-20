@@ -50,7 +50,7 @@ describe('Courses (e2e)', () => {
   let coursesService: CoursesService;
 
   beforeAll(async () => {
-    container = await new GenericContainer('mongo')
+    container = await new GenericContainer('mongo:7.0')
       .withExposedPorts(27017)
       .start();
 
@@ -82,6 +82,7 @@ describe('Courses (e2e)', () => {
       await connection.collection('courseassignments').deleteMany({});
       await connection.collection('departments').deleteMany({});
       await connection.collection('academicterms').deleteMany({});
+      await connection.collection('groups').deleteMany({});
     }
     if (app) {
       await app.close();
@@ -111,6 +112,16 @@ describe('Courses (e2e)', () => {
     await connection.collection('departments').insertOne({
       _id: deptId,
       name: 'Test Dept',
+    });
+
+    // getActiveStudentProfile() populates studentProfiles.group (plan 01) and callers read
+    // profile.group._id/.code off the populated doc — without a real Group document, populate
+    // returns null and CoursesService.findCoursesByStudent crashes on `profile.group._id`.
+    await connection.collection('groups').insertOne({
+      _id: groupId,
+      code: 'TC-101',
+      specialty: new Types.ObjectId(),
+      course: 1,
     });
 
     await connection.collection('users').insertOne({

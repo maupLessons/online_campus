@@ -49,7 +49,7 @@ describe('Academic terms (e2e)', () => {
   let jwtService: JwtService;
 
   beforeAll(async () => {
-    container = await new GenericContainer('mongo')
+    container = await new GenericContainer('mongo:7.0')
       .withExposedPorts(27017)
       .start();
     process.env.MONGODB_URI = `mongodb://${container.getHost()}:${container.getMappedPort(27017)}/test-db`;

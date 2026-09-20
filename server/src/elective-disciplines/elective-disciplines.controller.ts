@@ -139,13 +139,24 @@ export class ElectiveDisciplinesController {
 
   @Patch('disciplines/:id/status')
   @Roles(...disciplineManagers)
-  @ApiOperation({ summary: 'Change elective discipline status' })
+  @AuditEvent(
+    AUDIT_ACTIONS.ELECTIVE_DISCIPLINE_STATUS_CHANGE,
+    'elective_discipline',
+  )
+  @ApiOperation({
+    summary: 'Change elective discipline status (cancelled requires reason)',
+  })
   setDisciplineStatus(
     @Param('id') id: string,
     @Body() dto: SetElectiveDisciplineStatusDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.electivesService.setDisciplineStatus(id, dto, req.user);
+    return this.electivesService.setDisciplineStatus(
+      id,
+      dto,
+      req.user,
+      createAuditContext(req, this.auditLogService),
+    );
   }
 
   @Post('periods')

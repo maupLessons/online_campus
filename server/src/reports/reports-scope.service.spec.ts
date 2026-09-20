@@ -1,5 +1,6 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { AcademicTermsService } from '../academic-terms/academic-terms.service';
 import { AcademicAccessService } from '../common/access/academic-access.service';
 import { Role } from '../common/types/roles.enum';
 import { CourseAssignmentSource } from '../courses/schemas';
@@ -20,6 +21,7 @@ describe('ReportsScopeService', () => {
   const departmentId = new Types.ObjectId();
   const groupId = new Types.ObjectId();
   const assignmentId = new Types.ObjectId();
+  const termAId = new Types.ObjectId();
   const courseAssignmentModel = { find: jest.fn() };
   const countQuery = {
     maxTimeMS: jest.fn().mockReturnThis(),
@@ -35,6 +37,7 @@ describe('ReportsScopeService', () => {
   const academicAccess = {
     buildCourseAssignmentFilter: jest.fn(),
   };
+  const academicTerms = { getCurrent: jest.fn().mockResolvedValue(null) };
   const academicFilter = {
     course: { $in: [new Types.ObjectId()] },
   };
@@ -48,6 +51,7 @@ describe('ReportsScopeService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     capturedStudentFilter = undefined;
+    academicTerms.getCurrent.mockResolvedValue(null);
     academicAccess.buildCourseAssignmentFilter.mockResolvedValue(
       academicFilter,
     );
@@ -55,8 +59,7 @@ describe('ReportsScopeService', () => {
       assignmentQuery([
         {
           _id: assignmentId,
-          academicYear: '2025-2026',
-          semester: 1,
+          term: { _id: termAId, academicYear: '2025/2026', termNumber: 1 },
           source: CourseAssignmentSource.STANDARD,
           enrolledStudents: [],
           course: {
@@ -81,6 +84,7 @@ describe('ReportsScopeService', () => {
       courseAssignmentModel as never,
       userModel as never,
       academicAccess as unknown as AcademicAccessService,
+      academicTerms as unknown as AcademicTermsService,
     );
   });
 
@@ -88,19 +92,30 @@ describe('ReportsScopeService', () => {
     const scope = await service.resolve({}, user);
 
     expect(scope.selectedAssignments).toHaveLength(1);
-    expect(scope.filters.selected.academicYear).toBe('2025/2026');
     expect(scope.filters.departments).toEqual([
       { id: departmentId.toHexString(), label: 'Information Systems' },
     ]);
     expect(courseAssignmentModel.find).toHaveBeenCalledWith(academicFilter);
   });
 
-  it('accepts the legacy academic year separator and returns one canonical value', async () => {
-    const scope = await service.resolve({ academicYear: '2025-2026' }, user);
+  it('exposes available terms and selects the newest one by default', async () => {
+    const scope = await service.resolve({}, user);
+    expect(scope.filters.terms.map((item) => item.id)).toEqual([
+      termAId.toHexString(),
+    ]);
+    expect(scope.filters.selected.termId).toBe(termAId.toHexString());
+  });
 
-    expect(scope.filters.academicYears).toEqual(['2025/2026']);
-    expect(scope.filters.selected.academicYear).toBe('2025/2026');
-    expect(scope.selectedAssignments).toHaveLength(1);
+  it('prefers the current term when it is inside the authorized scope', async () => {
+    academicTerms.getCurrent.mockResolvedValue({ _id: termAId });
+    const scope = await service.resolve({}, user);
+    expect(scope.filters.selected.termId).toBe(termAId.toHexString());
+  });
+
+  it('rejects a term outside the authorized scope', async () => {
+    await expect(
+      service.resolve({ termId: new Types.ObjectId().toHexString() }, user),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('deduplicates concurrent scope loads without caching authorization data', async () => {

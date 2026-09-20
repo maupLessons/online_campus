@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Transform } from 'class-transformer';
 import { CourseAssignment } from '../../schemas';
 import { toId } from '../../../common/utils/to-id.util';
+import { AcademicTermRefDto, termRef } from './academic-term-ref.dto';
 
 export class StudentCourseResponseDto {
   @ApiProperty()
@@ -19,11 +20,8 @@ export class StudentCourseResponseDto {
   @Transform(({ obj }: { obj: CourseAssignment }) => obj.course?.code)
   courseCode: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: () => AcademicTermRefDto })
   @Expose()
-  academicYear: string;
-
-  @ApiProperty()
-  @Expose()
-  semester: number;
+  @Transform(({ obj }: { obj: CourseAssignment }) => termRef(obj.term))
+  term: AcademicTermRefDto | null;
 }

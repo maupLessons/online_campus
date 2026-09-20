@@ -65,7 +65,9 @@ services:
           --bind_ip_all \
           --keyFile "$$keyfile"
     volumes:
-      - ./data/db:/data/db
+      # Named volume, not a bind mount: on macOS/Windows Docker Desktop a bind
+      # mount hands mongod's own files back as root-owned on restart (EPERM).
+      - mongodb-data:/data/db
     healthcheck:
       test: ['CMD-SHELL', 'mongosh --quiet "mongodb://localhost:27017/admin?directConnection=true" -u "$$MONGO_INITDB_ROOT_USERNAME" -p "$$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval "db.adminCommand({ ping: 1 }).ok" | grep 1']
       interval: 5s
@@ -130,4 +132,7 @@ services:
 networks:
   campus:
     driver: bridge
+
+volumes:
+  mongodb-data:
     

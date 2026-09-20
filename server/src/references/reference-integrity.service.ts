@@ -2,8 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import {
-  Assignment,
-  AssignmentDocument,
   Course,
   CourseAssignment,
   CourseAssignmentDocument,
@@ -21,7 +19,6 @@ import {
   Notification,
   NotificationDocument,
 } from '../notifications/schemas/notification.schema';
-import { ScheduleService } from '../schedule/schedule.service';
 import { Survey, SurveyDocument, SurveyTargetType } from '../surveys/schemas';
 import { User, UserDocument } from '../users/schemas';
 import { Department, Group } from './schemas';
@@ -40,8 +37,6 @@ export class ReferenceIntegrityService {
     private readonly courseModel: Model<CourseDocument>,
     @InjectModel(CourseAssignment.name)
     private readonly courseAssignmentModel: Model<CourseAssignmentDocument>,
-    @InjectModel(Assignment.name)
-    private readonly assignmentModel: Model<AssignmentDocument>,
     @InjectModel(Survey.name)
     private readonly surveyModel: Model<SurveyDocument>,
     @InjectModel(ElectiveDiscipline.name)
@@ -52,7 +47,6 @@ export class ReferenceIntegrityService {
     private readonly electiveSelectionModel: Model<ElectiveSelectionDocument>,
     @InjectModel(Notification.name)
     private readonly notificationModel: Model<NotificationDocument>,
-    private readonly scheduleService: ScheduleService,
   ) {}
 
   async assertFacultyCanBeDeleted(id: Types.ObjectId): Promise<void> {
@@ -105,7 +99,7 @@ export class ReferenceIntegrityService {
       {
         resource: 'studentProfiles',
         count: await this.userModel
-          .countDocuments({ 'studentProfile.group': id as unknown as Group })
+          .countDocuments({ 'studentProfiles.group': id as unknown as Group })
           .exec(),
       },
       {
@@ -113,10 +107,6 @@ export class ReferenceIntegrityService {
         count: await this.courseAssignmentModel
           .countDocuments({ group: id })
           .exec(),
-      },
-      {
-        resource: 'assignments',
-        count: await this.assignmentModel.countDocuments({ group: id }).exec(),
       },
       {
         resource: 'surveys',
@@ -148,14 +138,10 @@ export class ReferenceIntegrityService {
     ]);
   }
 
-  async assertClassroomCanBeDeleted(id: Types.ObjectId): Promise<void> {
-    throwReferenceInUse('classroom', [
-      {
-        resource: 'scheduleEntries',
-        count: (await this.scheduleService.isClassroomUsed(id.toHexString()))
-          ? 1
-          : 0,
-      },
-    ]);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- signature is kept for callers (classrooms.service.ts)
+  async assertClassroomCanBeDeleted(_id: Types.ObjectId): Promise<void> {
+    // The schedule is read from MAUP API snapshots (spec 02 §4.1) and stores the classroom as a string,
+    // so there are no more references to the classrooms reference book — nothing to check.
+    // The fate of the reference book itself is decided by spec 06 (§12).
   }
 }

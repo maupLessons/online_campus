@@ -14,7 +14,10 @@ export class UserProfileDto {
   status: string;
 
   @ApiProperty({ required: false })
-  studentProfile?: any;
+  studentProfiles?: unknown[];
+
+  @ApiProperty({ required: false, nullable: true })
+  activeStudentProfileId?: string | null;
 
   @ApiProperty({ required: false })
   teacherProfile?: any;

@@ -6,6 +6,11 @@ import { User } from '../../users/schemas';
 import { CourseAssignment } from '../../courses/schemas';
 import { ElectiveDiscipline } from './elective-discipline.schema';
 import { ElectiveSelectionPeriod } from './elective-selection-period.schema';
+import {
+  ELECTIVE_SELECTION_CANCEL_REASONS,
+  ElectiveSelectionCancelReason,
+  ElectiveSelectionStatus,
+} from './elective.enums';
 
 export type ElectiveSelectionDocument = ElectiveSelection & Document;
 
@@ -44,6 +49,25 @@ export class ElectiveSelection {
   @Prop({ type: Date, required: true, default: Date.now })
   selectedAt: Date;
 
+  @Prop({
+    type: String,
+    enum: Object.values(ElectiveSelectionStatus),
+    default: ElectiveSelectionStatus.SELECTED,
+    required: true,
+    index: true,
+  })
+  status: ElectiveSelectionStatus;
+
+  @Prop({
+    type: String,
+    enum: ELECTIVE_SELECTION_CANCEL_REASONS,
+    default: null,
+  })
+  cancelReason?: ElectiveSelectionCancelReason | null;
+
+  @Prop({ type: Date, default: null })
+  cancelledAt?: Date | null;
+
   @Prop({ type: Number, min: 0, max: 4 })
   choiceSlot?: number;
 
@@ -74,13 +98,21 @@ export const ElectiveSelectionSchema =
 ElectiveSelectionSchema.plugin(paginate);
 ElectiveSelectionSchema.index(
   { period: 1, student: 1, discipline: 1 },
-  { unique: true },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: { $in: ['selected', 'enrolled'] },
+    },
+  },
 );
 ElectiveSelectionSchema.index(
   { period: 1, student: 1, choiceSlot: 1 },
   {
     unique: true,
-    partialFilterExpression: { choiceSlot: { $type: 'number' } },
+    partialFilterExpression: {
+      choiceSlot: { $type: 'number' },
+      status: { $in: ['selected', 'enrolled'] },
+    },
   },
 );
 ElectiveSelectionSchema.index({ period: 1, student: 1, selectedAt: -1 });

@@ -5,7 +5,7 @@ import { toId } from '../common/utils/to-id.util';
 import { CoursesService } from '../courses/courses/courses.service';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { NotificationsService } from '../notifications/notifications.service';
-import { UserDto } from '../users/dto/user.dto';
+import { pickActiveStudentProfile, UserDto } from '../users/dto/user.dto';
 import { UsersService } from '../users/users.service';
 import { SurveyDocument, SurveyTargetType } from './schemas';
 
@@ -37,11 +37,12 @@ export class SurveyAudienceService {
     }
 
     if (survey.targetType === SurveyTargetType.GROUPS) {
+      const activeGroupId = pickActiveStudentProfile(profile)?.group?.id;
       return (
         user.role === Role.STUDENT &&
-        profile.studentProfile?.group !== undefined &&
-        profile.studentProfile.group !== null &&
-        survey.targetIds.includes(profile.studentProfile.group)
+        activeGroupId !== undefined &&
+        activeGroupId !== null &&
+        survey.targetIds.includes(activeGroupId)
       );
     }
 
@@ -53,12 +54,12 @@ export class SurveyAudienceService {
       userId: user.sub,
       role: user.role,
       targetIds: survey.targetIds,
-      groupId: profile.studentProfile?.group,
+      groupId: pickActiveStudentProfile(profile)?.group?.id,
     });
   }
 
   async countExpectedRecipients(survey: SurveyDocument): Promise<number> {
-    const recipients = await this.resolveRecipients(survey);
+    const recipients = await this.resolveRecipientIds(survey);
     return new Set(recipients).size;
   }
 
@@ -110,7 +111,7 @@ export class SurveyAudienceService {
         return;
       }
 
-      const recipients = await this.resolveRecipients(survey);
+      const recipients = await this.resolveRecipientIds(survey);
       if (recipients.length === 0) {
         this.logger.warn(
           `Survey notification skipped: no recipients for survey ${surveyId}`,
@@ -130,7 +131,7 @@ export class SurveyAudienceService {
     }
   }
 
-  private async resolveRecipients(survey: SurveyDocument): Promise<string[]> {
+  async resolveRecipientIds(survey: SurveyDocument): Promise<string[]> {
     if (survey.targetType === SurveyTargetType.ALL) {
       return this.usersService.findActiveUserIdsByRoles([Role.STUDENT]);
     }

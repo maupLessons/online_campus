@@ -26,6 +26,10 @@ type ReportBody = {
     averageGrade: number | null;
     attendanceRate: number | null;
   };
+  filters: {
+    terms: unknown[];
+    selected: { termId: string | null };
+  };
 };
 
 type CourseBreakdownBody = {
@@ -38,6 +42,29 @@ type CourseBreakdownBody = {
   page: number;
   totalPages: number;
 };
+
+function studentProfileFields(input: {
+  group: Types.ObjectId;
+  recordBookNumber: string;
+  year: number;
+  externalStudentId?: string;
+}) {
+  const _id = new Types.ObjectId();
+  return {
+    studentProfiles: [
+      {
+        _id,
+        externalStudentId: input.externalStudentId ?? input.recordBookNumber,
+        group: input.group,
+        recordBookNumber: input.recordBookNumber,
+        year: input.year,
+        status: 'active',
+        syncedAt: new Date(),
+      },
+    ],
+    activeStudentProfileId: _id,
+  };
+}
 
 describe('Reports (e2e)', () => {
   let app: NestExpressApplication;
@@ -135,23 +162,18 @@ describe('Reports (e2e)', () => {
     const courseBId = new Types.ObjectId();
     const assignmentAId = new Types.ObjectId();
     const assignmentBId = new Types.ObjectId();
+    const termAId = new Types.ObjectId();
+    const termBId = new Types.ObjectId();
 
     const head = await createActor(Role.DEPARTMENT_HEAD, 'head');
     const dean = await createActor(Role.DEAN, 'dean');
     const rector = await createActor(Role.RECTOR, 'rector');
     const student = await createActor(Role.STUDENT, 'student', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupAId,
         recordBookNumber: 'REPORT-001',
         year: 2,
-      },
-    });
-    const foreignStudent = await createActor(Role.STUDENT, 'foreign', {
-      studentProfile: {
-        group: groupBId,
-        recordBookNumber: 'REPORT-002',
-        year: 2,
-      },
+      }),
     });
     const teacher = await createActor(Role.TEACHER, 'teacher');
 
@@ -199,7 +221,6 @@ describe('Reports (e2e)', () => {
         name: 'Scoped Analytics',
         code: 'SA-101',
         department: departmentAId,
-        semester: 1,
         credits: 4,
       },
       {
@@ -207,8 +228,29 @@ describe('Reports (e2e)', () => {
         name: 'Foreign Analytics',
         code: 'FA-101',
         department: departmentBId,
-        semester: 1,
         credits: 4,
+      },
+    ]);
+    await collection('AcademicTerm').insertMany([
+      {
+        _id: termAId,
+        academicYear: '2025/2026',
+        termNumber: 1,
+        startsAt: new Date('2025-09-01'),
+        endsAt: new Date('2026-01-31'),
+        status: 'current',
+        maupAcademicYear: 2025,
+        maupSemester: 1,
+      },
+      {
+        _id: termBId,
+        academicYear: '2024/2025',
+        termNumber: 2,
+        startsAt: new Date('2025-02-01'),
+        endsAt: new Date('2025-06-30'),
+        status: 'closed',
+        maupAcademicYear: 2024,
+        maupSemester: 2,
       },
     ]);
     await collection('CourseAssignment').insertMany([
@@ -217,8 +259,7 @@ describe('Reports (e2e)', () => {
         course: courseAId,
         group: groupAId,
         teacher: teacher.id,
-        academicYear: '2025-2026',
-        semester: 1,
+        term: termAId,
         source: 'standard',
         enrolledStudents: [],
       },
@@ -227,49 +268,11 @@ describe('Reports (e2e)', () => {
         course: courseBId,
         group: groupBId,
         teacher: teacher.id,
-        academicYear: '2025/2026',
-        semester: 1,
+        term: termBId,
         source: 'standard',
         enrolledStudents: [],
       },
     ]);
-    await collection('Grade').insertMany([
-      {
-        student: student.id,
-        courseAssignment: assignmentAId,
-        date: new Date('2025-10-01T00:00:00.000Z'),
-        type: 'current',
-        value: 80,
-        status: 'active',
-      },
-      {
-        student: foreignStudent.id,
-        courseAssignment: assignmentBId,
-        date: new Date('2025-10-01T00:00:00.000Z'),
-        type: 'current',
-        value: 40,
-        status: 'active',
-      },
-    ]);
-    await collection('LessonJournalEntry').insertMany([
-      {
-        courseAssignment: assignmentAId,
-        teacher: teacher.id,
-        date: new Date('2025-10-01T00:00:00.000Z'),
-        topic: 'Scoped lesson',
-        attendance: [{ student: student.id, status: 'present', comment: '' }],
-      },
-      {
-        courseAssignment: assignmentBId,
-        teacher: teacher.id,
-        date: new Date('2025-10-01T00:00:00.000Z'),
-        topic: 'Foreign lesson',
-        attendance: [
-          { student: foreignStudent.id, status: 'present', comment: '' },
-        ],
-      },
-    ]);
-
     return {
       head,
       dean,
@@ -277,6 +280,8 @@ describe('Reports (e2e)', () => {
       student,
       teacher,
       departmentBId,
+      termAId,
+      termBId,
     };
   };
 
@@ -291,8 +296,6 @@ describe('Reports (e2e)', () => {
     expect(headReport.headers['cache-control']).toBe('private, no-store');
     expect(headReport.headers.vary).toContain('Cookie');
     expect(headBody.scope.assignmentCount).toBe(1);
-    expect(headBody.summary.averageGrade).toBe(80);
-    expect(headBody.summary.attendanceRate).toBe(100);
     expect(JSON.stringify(headBody)).not.toContain(
       fixture.student.id.toHexString(),
     );
@@ -309,8 +312,6 @@ describe('Reports (e2e)', () => {
     });
     expect(headCoursesBody.docs[0]).toMatchObject({
       courseName: 'Scoped Analytics',
-      averageGrade: 80,
-      attendanceRate: 100,
     });
 
     const deanReport = await request(app.getHttpServer())
@@ -325,8 +326,18 @@ describe('Reports (e2e)', () => {
       .set('Authorization', `Bearer ${fixture.rector.token}`)
       .expect(200);
     const rectorBody = rectorReport.body as unknown as ReportBody;
-    expect(rectorBody.scope.assignmentCount).toBe(2);
-    expect(rectorBody.summary.averageGrade).toBe(60);
+    // Default (no termId) selects the current term (term A) only, even
+    // though the rector's institution-wide scope spans both terms.
+    expect(rectorBody.scope.assignmentCount).toBe(1);
+    expect(rectorBody.filters.terms).toHaveLength(2);
+
+    const rectorTermB = await request(app.getHttpServer())
+      .get(`/api/reports/overview?termId=${fixture.termBId.toHexString()}`)
+      .set('Authorization', `Bearer ${fixture.rector.token}`)
+      .expect(200);
+    expect(
+      (rectorTermB.body as unknown as ReportBody).scope.assignmentCount,
+    ).toBe(1);
 
     await request(app.getHttpServer())
       .get('/api/reports/overview')
@@ -345,14 +356,14 @@ describe('Reports (e2e)', () => {
       .set('Authorization', `Bearer ${fixture.head.token}`)
       .expect(403);
 
-    const legacyYear = await request(app.getHttpServer())
-      .get('/api/reports/overview?academicYear=2025-2026')
+    const termFiltered = await request(app.getHttpServer())
+      .get(`/api/reports/overview?termId=${fixture.termAId.toHexString()}`)
       .set('Authorization', `Bearer ${fixture.rector.token}`)
       .expect(200);
-    expect((legacyYear.body as ReportBody).scope.assignmentCount).toBe(2);
+    expect((termFiltered.body as ReportBody).scope.assignmentCount).toBe(1);
 
     await request(app.getHttpServer())
-      .get('/api/reports/overview?academicYear=2025_2026')
+      .get('/api/reports/overview?termId=not-an-id')
       .set('Authorization', `Bearer ${fixture.rector.token}`)
       .expect(400);
 
@@ -360,6 +371,30 @@ describe('Reports (e2e)', () => {
       .get('/api/reports/overview?from=2024-01-01&to=2025-12-31')
       .set('Authorization', `Bearer ${fixture.rector.token}`)
       .expect(400);
+  });
+
+  it('filters the report by academic term', async () => {
+    const fixture = await seedFixture();
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/reports/overview?termId=${fixture.termAId.toHexString()}`)
+      .set('Authorization', `Bearer ${fixture.head.token}`);
+    const body = res.body as unknown as ReportBody;
+
+    expect(res.status).toBe(200);
+    expect(body.filters.selected.termId).toBe(fixture.termAId.toHexString());
+    expect(body.filters.terms).toHaveLength(1); // head sees only their own department
+    expect(body.scope.assignmentCount).toBe(1);
+  });
+
+  it('rejects a term outside the authorized scope', async () => {
+    const fixture = await seedFixture();
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/reports/overview?termId=${new Types.ObjectId().toHexString()}`)
+      .set('Authorization', `Bearer ${fixture.head.token}`);
+
+    expect(res.status).toBe(400);
   });
 
   it('exports only aggregate rows from the authorized scope', async () => {

@@ -13,14 +13,14 @@ import {
   ReportExportDataDto,
   ReportExportLocale,
   ReportScopeType,
+  ReportTermOptionDto,
 } from './dto';
 
 type Labels = {
   title: string;
   generatedAt: string;
   scope: string;
-  academicYear: string;
-  semester: string;
+  term: string;
   dateRange: string;
   assignments: string;
   students: string;
@@ -51,8 +51,7 @@ const LABELS: Record<ReportExportLocale, Labels> = {
     title: 'Аналітичний звіт успішності та відвідуваності',
     generatedAt: 'Сформовано',
     scope: 'Область даних',
-    academicYear: 'Навчальний рік',
-    semester: 'Семестр',
+    term: 'Навчальний період',
     dateRange: 'Період',
     assignments: 'Навчальних дисциплін',
     students: 'Студентів у вибірці',
@@ -81,8 +80,7 @@ const LABELS: Record<ReportExportLocale, Labels> = {
     title: 'Academic performance and attendance report',
     generatedAt: 'Generated at',
     scope: 'Data scope',
-    academicYear: 'Academic year',
-    semester: 'Semester',
+    term: 'Academic term',
     dateRange: 'Period',
     assignments: 'Course assignments',
     students: 'Students covered',
@@ -118,8 +116,7 @@ export function buildReportsCsv(
     [labels.title],
     [labels.generatedAt, report.generatedAt],
     [labels.scope, formatScope(report, labels)],
-    [labels.academicYear, report.filters.selected.academicYear ?? labels.all],
-    [labels.semester, report.filters.selected.semester ?? labels.all],
+    [labels.term, formatSelectedTerm(report, labels)],
     [labels.dateRange, formatDateRange(report, labels)],
     [labels.assignments, report.scope.assignmentCount],
     [labels.students, report.scope.studentCount],
@@ -173,8 +170,7 @@ function addSummarySheet(
   const rows: Array<[string, unknown]> = [
     [labels.generatedAt, report.generatedAt],
     [labels.scope, formatScope(report, labels)],
-    [labels.academicYear, report.filters.selected.academicYear ?? labels.all],
-    [labels.semester, report.filters.selected.semester ?? labels.all],
+    [labels.term, formatSelectedTerm(report, labels)],
     [labels.dateRange, formatDateRange(report, labels)],
     [labels.assignments, report.scope.assignmentCount],
     [labels.students, report.scope.studentCount],
@@ -227,7 +223,7 @@ function addCoursesSheet(
     styleSpreadsheetDataRow(row);
   }
 
-  fitWorksheetColumns(sheet, [30, 14, 14, 28, 28, 16, 12, 16, 12, 18, 16, 14]);
+  fitWorksheetColumns(sheet, [30, 14, 14, 28, 28, 18, 16, 12, 18, 16, 14]);
 }
 
 function courseHeaders(labels: Labels): string[] {
@@ -237,8 +233,7 @@ function courseHeaders(labels: Labels): string[] {
     labels.group,
     labels.department,
     labels.faculty,
-    labels.academicYear,
-    labels.semester,
+    labels.term,
     labels.averageGrade,
     labels.grades,
     labels.attendanceRate,
@@ -256,8 +251,7 @@ function courseRow(
     row.groupCode,
     row.departmentName,
     row.facultyName,
-    row.academicYear,
-    row.semester,
+    row.termLabel,
     row.averageGrade ?? '',
     row.gradeCount,
     row.attendanceRate ?? '',
@@ -275,6 +269,23 @@ function formatScope(report: ReportExportDataDto, labels: Labels): string {
   return report.scope.names.length > 0
     ? `${prefix[report.scope.type]}: ${report.scope.names.join(', ')}`
     : prefix[report.scope.type];
+}
+
+function termOf(
+  filters: ReportExportDataDto['filters'],
+  termId: string,
+): ReportTermOptionDto | undefined {
+  return filters.terms.find((term) => term.id === termId);
+}
+
+function formatSelectedTerm(
+  report: ReportExportDataDto,
+  labels: Labels,
+): string {
+  const { termId } = report.filters.selected;
+  if (!termId) return labels.all;
+  const term = termOf(report.filters, termId);
+  return term ? term.label : labels.all;
 }
 
 function formatDateRange(report: ReportExportDataDto, labels: Labels): string {

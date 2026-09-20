@@ -10,13 +10,9 @@ import {
   Course,
   CourseAssignment,
   Classroom,
-  ScheduleEntry,
-  Material,
-  Assignment,
-  Submission,
-  Grade,
   Notification,
   Specialty, // Add Specialty here
+  AcademicTermSeed,
 } from '../types/entities';
 
 const hash = bcrypt.hashSync('password123', 10);
@@ -87,6 +83,7 @@ const ids = {
   'ntf-5': '6622b2a00f3a22d5b625db05',
   'spec-1': '6622b2a00f3a22d5b625dc01', // New Specialty ID
   'spec-2': '6622b2a00f3a22d5b625dc02', // New Specialty ID
+  'term-1': '6622b2a00f3a22d5b625dd01',
 };
 
 // ============ FACULTIES & DEPARTMENTS ============
@@ -298,47 +295,76 @@ export const users: User[] = [
 export const studentProfiles: StudentProfile[] = [
   {
     userId: ids['user-s1'],
+    externalStudentId: 'seed-1001',
     groupId: ids['grp-1'],
     recordBookNumber: 'КН-2024-001',
     year: 1,
+    studyForm: 'денна',
+    institute: 'Інститут комп’ютерно-інформаційних технологій',
+    specialty: "Комп'ютерні науки",
   },
   {
     userId: ids['user-s2'],
+    externalStudentId: 'seed-1002',
     groupId: ids['grp-1'],
     recordBookNumber: 'КН-2024-002',
     year: 1,
+    studyForm: 'денна',
+    institute: 'Інститут комп’ютерно-інформаційних технологій',
+    specialty: "Комп'ютерні науки",
   },
   {
     userId: ids['user-s3'],
+    externalStudentId: 'seed-1003',
     groupId: ids['grp-2'],
     recordBookNumber: 'ПІ-2024-001',
     year: 2,
+    studyForm: 'денна',
+    institute: 'Інститут комп’ютерно-інформаційних технологій',
+    specialty: 'Інженерія програмного забезпечення',
   },
   {
     userId: ids['user-s4'],
+    externalStudentId: 'seed-1004',
     groupId: ids['grp-2'],
     recordBookNumber: 'ПІ-2024-002',
     year: 2,
+    studyForm: 'денна',
+    institute: 'Інститут комп’ютерно-інформаційних технологій',
+    specialty: 'Інженерія програмного забезпечення',
   },
 ];
 
 export const teacherProfiles: TeacherProfile[] = [
-  { userId: ids['user-t1'], departmentId: ids['dep-1'], position: 'Доцент' },
+  {
+    userId: ids['user-t1'],
+    departmentId: ids['dep-1'],
+    position: 'Доцент',
+    externalTeacherId: 'seed-t1',
+  },
   {
     userId: ids['user-t2'],
     departmentId: ids['dep-1'],
     position: 'Старший викладач',
+    externalTeacherId: 'seed-t2',
   },
-  { userId: ids['user-t3'], departmentId: ids['dep-2'], position: 'Професор' },
+  {
+    userId: ids['user-t3'],
+    departmentId: ids['dep-2'],
+    position: 'Професор',
+    externalTeacherId: 'seed-t3',
+  },
   {
     userId: ids['user-head-1'],
     departmentId: ids['dep-1'],
     position: 'Завідувач кафедри',
+    externalTeacherId: 'seed-t4',
   },
   {
     userId: ids['user-head-2'],
     departmentId: ids['dep-2'],
     position: 'Завідувач кафедри',
+    externalTeacherId: 'seed-t5',
   },
 ];
 
@@ -390,40 +416,67 @@ export const courses: Course[] = [
     name: 'Основи програмування',
     code: 'CS101',
     departmentId: ids['dep-1'],
-    semester: 1,
     credits: 5,
+    description:
+      'Вступ до програмування на Python: змінні, умови, цикли, функції.',
+    externalSubjectId: '1001',
+    moodleUrl: 'https://dist.maup.com.ua/course/view.php?id=101',
+    status: 'active',
+    createdBy: ids['user-admin'],
   },
   {
     id: ids['crs-2'],
     name: 'Бази даних',
     code: 'CS201',
     departmentId: ids['dep-1'],
-    semester: 2,
     credits: 4,
+    description: 'Реляційна модель, SQL, нормалізація, індекси.',
+    externalSubjectId: '1002',
+    status: 'active',
+    createdBy: ids['user-admin'],
   },
   {
     id: ids['crs-3'],
     name: 'Веб-технології',
     code: 'SE301',
     departmentId: ids['dep-2'],
-    semester: 1,
     credits: 4,
+    externalSubjectId: '1003',
+    status: 'active',
+    createdBy: ids['user-admin'],
   },
   {
     id: ids['crs-4'],
     name: 'Алгоритми та структури даних',
     code: 'CS102',
     departmentId: ids['dep-1'],
-    semester: 1,
     credits: 5,
+    status: 'active',
+    createdBy: ids['user-admin'],
   },
   {
     id: ids['crs-5'],
     name: 'Операційні системи',
     code: 'CS202',
     departmentId: ids['dep-2'],
-    semester: 2,
     credits: 3,
+    status: 'active',
+    createdBy: ids['user-admin'],
+  },
+];
+
+// ============ ACADEMIC TERMS ============
+
+export const academicTerms: AcademicTermSeed[] = [
+  {
+    id: ids['term-1'],
+    academicYear: '2026/2027',
+    termNumber: 1,
+    startsAt: '2026-09-01',
+    endsAt: '2027-01-31',
+    status: 'current',
+    maupAcademicYear: 2026,
+    maupSemester: 1,
   },
 ];
 
@@ -435,40 +488,35 @@ export const courseAssignments: CourseAssignment[] = [
     courseId: ids['crs-1'],
     groupId: ids['grp-1'],
     teacherId: ids['user-t1'],
-    academicYear: '2024-2025',
-    semester: 1,
+    termId: ids['term-1'],
   },
   {
     id: ids['ca-2'],
     courseId: ids['crs-4'],
     groupId: ids['grp-1'],
     teacherId: ids['user-t2'],
-    academicYear: '2024-2025',
-    semester: 1,
+    termId: ids['term-1'],
   },
   {
     id: ids['ca-3'],
     courseId: ids['crs-2'],
     groupId: ids['grp-2'],
     teacherId: ids['user-t1'],
-    academicYear: '2024-2025',
-    semester: 2,
+    termId: ids['term-1'],
   },
   {
     id: ids['ca-4'],
     courseId: ids['crs-3'],
     groupId: ids['grp-2'],
     teacherId: ids['user-t3'],
-    academicYear: '2024-2025',
-    semester: 1,
+    termId: ids['term-1'],
   },
   {
     id: ids['ca-5'],
     courseId: ids['crs-5'],
     groupId: ids['grp-1'],
     teacherId: ids['user-t3'],
-    academicYear: '2024-2025',
-    semester: 2,
+    termId: ids['term-1'],
   },
 ];
 
@@ -512,241 +560,9 @@ export const classrooms: Classroom[] = [
   },
 ];
 
-// ============ SCHEDULE ============
-
-export const scheduleEntries: ScheduleEntry[] = [
-  {
-    id: ids['sch-1'],
-    courseAssignmentId: ids['ca-1'],
-    classroomId: ids['room-1'],
-    date: '2025-02-17',
-    startTime: '08:30',
-    endTime: '10:05',
-    type: 'lecture',
-    status: 'scheduled',
-  },
-  {
-    id: ids['sch-2'],
-    courseAssignmentId: ids['ca-2'],
-    classroomId: ids['room-2'],
-    date: '2025-02-17',
-    startTime: '10:15',
-    endTime: '11:50',
-    type: 'lab',
-    status: 'scheduled',
-  },
-  {
-    id: ids['sch-3'],
-    courseAssignmentId: ids['ca-1'],
-    classroomId: ids['room-4'],
-    date: '2025-02-18',
-    startTime: '08:30',
-    endTime: '10:05',
-    type: 'seminar',
-    status: 'scheduled',
-  },
-  {
-    id: ids['sch-4'],
-    courseAssignmentId: ids['ca-4'],
-    classroomId: ids['room-3'],
-    date: '2025-02-17',
-    startTime: '12:00',
-    endTime: '13:35',
-    type: 'lecture',
-    status: 'scheduled',
-  },
-  {
-    id: ids['sch-5'],
-    courseAssignmentId: ids['ca-4'],
-    classroomId: ids['room-5'],
-    date: '2025-02-19',
-    startTime: '10:15',
-    endTime: '11:50',
-    type: 'seminar',
-    status: 'scheduled',
-  },
-  {
-    id: ids['sch-6'],
-    courseAssignmentId: ids['ca-2'],
-    classroomId: ids['room-1'],
-    date: '2025-02-19',
-    startTime: '08:30',
-    endTime: '10:05',
-    type: 'lecture',
-    status: 'scheduled',
-  },
-  {
-    id: ids['sch-7'],
-    courseAssignmentId: ids['ca-1'],
-    classroomId: ids['room-2'],
-    date: '2025-02-20',
-    startTime: '10:15',
-    endTime: '11:50',
-    type: 'lab',
-    status: 'cancelled',
-  },
-];
-
-// ============ MATERIALS ============
-
-export const materials: Material[] = [
-  {
-    id: ids['mat-1'],
-    courseAssignmentId: ids['ca-1'],
-    title: 'Вступ до програмування',
-    description: 'Лекція 1: Основні поняття',
-    fileLink: '/files/lecture1.pdf',
-    publishDate: '2025-02-10',
-  },
-  {
-    id: ids['mat-2'],
-    courseAssignmentId: ids['ca-1'],
-    title: 'Змінні та типи даних',
-    description: 'Лекція 2: Типи даних у JavaScript',
-    fileLink: '/files/lecture2.pdf',
-    publishDate: '2025-02-12',
-  },
-  {
-    id: ids['mat-3'],
-    courseAssignmentId: ids['ca-4'],
-    title: 'HTML та CSS основи',
-    description: 'Базові елементи веб-розробки',
-    fileLink: '/files/web-basics.pdf',
-    publishDate: '2025-02-11',
-  },
-];
-
-// ============ ASSIGNMENTS ============
-
-export const assignments: Assignment[] = [
-  {
-    id: ids['asgn-1'],
-    courseAssignmentId: ids['ca-1'],
-    title: 'Лабораторна робота №1',
-    description: 'Написати програму калькулятор на JavaScript',
-    dueDate: '2025-02-24',
-    maxScore: 10,
-  },
-  {
-    id: ids['asgn-2'],
-    courseAssignmentId: ids['ca-1'],
-    title: 'Лабораторна робота №2',
-    description: 'Реалізувати масиви та цикли',
-    dueDate: '2025-03-03',
-    maxScore: 10,
-  },
-  {
-    id: ids['asgn-3'],
-    courseAssignmentId: ids['ca-4'],
-    title: 'Практична робота №1',
-    description: 'Створити адаптивну HTML-сторінку',
-    dueDate: '2025-02-28',
-    maxScore: 15,
-  },
-];
-
-// ============ SUBMISSIONS ============
-
-export const submissions: Submission[] = [
-  {
-    id: ids['sub-1'],
-    assignmentId: ids['asgn-1'],
-    studentId: ids['user-s1'],
-    submittedAt: '2025-02-20T14:30:00Z',
-    fileLink: '/uploads/sub1.zip',
-    score: 9,
-    comment: 'Відмінна робота!',
-    status: 'graded',
-  },
-  {
-    id: ids['sub-2'],
-    assignmentId: ids['asgn-1'],
-    studentId: ids['user-s2'],
-    submittedAt: '2025-02-21T10:00:00Z',
-    fileLink: '/uploads/sub2.zip',
-    status: 'submitted',
-  },
-  {
-    id: ids['sub-3'],
-    assignmentId: ids['asgn-3'],
-    studentId: ids['user-s3'],
-    submittedAt: '2025-02-25T09:15:00Z',
-    fileLink: '/uploads/sub3.zip',
-    score: 13,
-    comment: 'Добре, але потрібно покращити адаптивність',
-    status: 'graded',
-  },
-];
-
-// ============ GRADES ============
-
-export const grades: Grade[] = [
-  {
-    id: ids['grd-1'],
-    studentId: ids['user-s1'],
-    courseAssignmentId: ids['ca-1'],
-    date: '2025-02-17',
-    type: 'current',
-    value: 9,
-    comment: 'Активна робота на занятті',
-  },
-  {
-    id: ids['grd-2'],
-    studentId: ids['user-s2'],
-    courseAssignmentId: ids['ca-1'],
-    date: '2025-02-17',
-    type: 'current',
-    value: 7,
-  },
-  {
-    id: ids['grd-3'],
-    studentId: ids['user-s1'],
-    courseAssignmentId: ids['ca-2'],
-    date: '2025-02-17',
-    type: 'current',
-    value: 8,
-  },
-  {
-    id: ids['grd-4'],
-    studentId: ids['user-s3'],
-    courseAssignmentId: ids['ca-4'],
-    date: '2025-02-18',
-    type: 'current',
-    value: 12,
-  },
-  {
-    id: ids['grd-5'],
-    studentId: ids['user-s4'],
-    courseAssignmentId: ids['ca-4'],
-    date: '2025-02-18',
-    type: 'current',
-    value: 14,
-    comment: 'Чудова робота',
-  },
-];
-
 // ============ NOTIFICATIONS ============
 
 export const notifications: Notification[] = [
-  {
-    id: ids['ntf-1'],
-    userId: ids['user-s1'],
-    type: 'new_assignment',
-    title: 'Нове завдання',
-    message:
-      'Опубліковано "Лабораторна робота №1" з дисципліни "Основи програмування"',
-    createdAt: '2025-02-15T08:00:00Z',
-    readFlag: false,
-  },
-  {
-    id: ids['ntf-2'],
-    userId: ids['user-s1'],
-    type: 'grade',
-    title: 'Нова оцінка',
-    message: 'Ви отримали оцінку 9 з дисципліни "Основи програмування"',
-    createdAt: '2025-02-17T12:00:00Z',
-    readFlag: true,
-  },
   {
     id: ids['ntf-3'],
     userId: ids['user-s1'],

@@ -1,81 +1,48 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ConfigModule } from '@nestjs/config';
 import { CoursesController } from './courses/courses.controller';
 import { CoursesService } from './courses/courses.service';
-import { MaterialsController } from './materials/materials.controller';
-import { MaterialsService } from './materials/materials.service';
-import { AssignmentsController } from './assignments/assignments.controller';
-import { AssignmentsService } from './assignments/assignments.service';
-import { SubmissionsController } from './submissions/submissions.controller';
-import { SubmissionsService } from './submissions/submissions.service';
-import { GradesController } from './grades/grades.controller';
-import { GradesService } from './grades/grades.service';
-import { LessonJournalController } from './journal/lesson-journal.controller';
-import { LessonJournalService } from './journal/lesson-journal.service';
-import { FilesModule } from '../files/files.module';
+import { CoursesAccessService } from './courses-access.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { AcademicAccessModule } from '../common/access/academic-access.module';
-import { ScheduleEntry, ScheduleEntrySchema } from '../schedule/schemas';
+import { AcademicTermsModule } from '../academic-terms/academic-terms.module';
+import { UsersModule } from '../users/users.module';
+import { ScheduleModule } from '../schedule/schedule.module';
 import { User, UserSchema } from '../users/schemas';
+import {
+  Department,
+  DepartmentSchema,
+  Faculty,
+  FacultySchema,
+} from '../references/schemas';
 import {
   Course,
   CourseSchema,
   CourseAssignment,
   CourseAssignmentSchema,
-  Material,
-  MaterialSchema,
-  Assignment,
-  AssignmentSchema,
-  Submission,
-  SubmissionSchema,
-  Grade,
-  GradeSchema,
-  LessonJournalEntry,
-  LessonJournalEntrySchema,
 } from './schemas';
 
 @Module({
   imports: [
-    FilesModule,
+    ConfigModule,
     NotificationsModule,
     AuditLogModule,
     AcademicAccessModule,
+    AcademicTermsModule,
+    UsersModule,
+    ScheduleModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Course.name, schema: CourseSchema },
       { name: CourseAssignment.name, schema: CourseAssignmentSchema },
-      { name: Material.name, schema: MaterialSchema },
-      { name: Assignment.name, schema: AssignmentSchema },
-      { name: Submission.name, schema: SubmissionSchema },
-      { name: Grade.name, schema: GradeSchema },
-      { name: LessonJournalEntry.name, schema: LessonJournalEntrySchema },
-      { name: ScheduleEntry.name, schema: ScheduleEntrySchema },
+      { name: Department.name, schema: DepartmentSchema },
+      { name: Faculty.name, schema: FacultySchema },
     ]),
   ],
-  controllers: [
-    CoursesController,
-    MaterialsController,
-    AssignmentsController,
-    SubmissionsController,
-    GradesController,
-    LessonJournalController,
-  ],
-  providers: [
-    CoursesService,
-    MaterialsService,
-    AssignmentsService,
-    SubmissionsService,
-    GradesService,
-    LessonJournalService,
-  ],
-  exports: [
-    CoursesService,
-    MaterialsService,
-    AssignmentsService,
-    SubmissionsService,
-    GradesService,
-    LessonJournalService,
-  ],
+  controllers: [CoursesController],
+  providers: [CoursesService, CoursesAccessService],
+  exports: [CoursesService, CoursesAccessService],
 })
 export class CoursesModule {}

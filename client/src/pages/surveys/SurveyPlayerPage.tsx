@@ -105,6 +105,10 @@ export default function SurveyPlayerPage() {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
   const [answers, setAnswers] = useState<AnswersState>({});
+  const [started, setStarted] = useState(false);
+  const [pendingAnswers, setPendingAnswers] = useState<SurveyAnswer[] | null>(
+    null,
+  );
   const [formError, setFormError] = useAutoDismissState("");
   const [successMessage, setSuccessMessage] = useAutoDismissState("");
   const myResponseQueryKey = ["surveys", id, "my-response"] as const;
@@ -261,14 +265,17 @@ export default function SurveyPlayerPage() {
       return acc;
     }, []);
 
-    if (!window.confirm(t("surveys.player.confirmSubmit"))) {
-      return;
-    }
+    setPendingAnswers(payload);
+  };
+
+  const handleConfirmSubmit = () => {
+    if (!id || !pendingAnswers) return;
 
     submitMutation.mutate({
       surveyId: id,
-      answers: payload,
+      answers: pendingAnswers,
     });
+    setPendingAnswers(null);
   };
 
   if (surveyQuery.isLoading || responseQuery.isLoading) {
@@ -420,6 +427,52 @@ export default function SurveyPlayerPage() {
             </div>
           </div>
         </section>
+      ) : !started ? (
+        <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+              <ClipboardCheck className="h-5 w-5" aria-hidden="true" />
+            </div>
+            <div className="space-y-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  {survey.title}
+                </h2>
+                {survey.description && (
+                  <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">
+                    {survey.description}
+                  </p>
+                )}
+              </div>
+
+              {survey.estimatedMinutes && (
+                <p className="text-sm text-slate-600">
+                  {t("surveys.estimatedMinutes", {
+                    n: survey.estimatedMinutes,
+                  })}
+                </p>
+              )}
+
+              <p
+                className={`text-sm leading-6 ${
+                  survey.anonymous ? "text-slate-600" : "text-amber-800"
+                }`}
+              >
+                {survey.anonymous
+                  ? t("surveys.intro.anonymousWarning")
+                  : t("surveys.intro.identifiedWarning")}
+              </p>
+
+              <button
+                type="button"
+                onClick={() => setStarted(true)}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                {t("surveys.intro.start")}
+              </button>
+            </div>
+          </div>
+        </section>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           {sortedQuestions.map((question, index) => (
@@ -552,6 +605,37 @@ export default function SurveyPlayerPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {pendingAnswers && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+          >
+            <p className="text-sm leading-6 text-slate-700">
+              {t("surveys.player.confirmSend")}
+            </p>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingAnswers(null)}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                disabled={submitMutation.isPending}
+                onClick={handleConfirmSubmit}
+                className="inline-flex min-h-10 items-center justify-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+              >
+                {t("surveys.player.confirmSend")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

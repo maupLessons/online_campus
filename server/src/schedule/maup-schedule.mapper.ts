@@ -4,153 +4,122 @@ import {
   MaupWireObject,
   MaupWireValue,
 } from '../integrations/maup-student-api/maup-student-api.types';
-import { ScheduleEntryDto, ScheduleQueryDto } from './dto';
-import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
+import { ScheduleSnapshotEntry } from './schemas/schedule-snapshot.schema';
+import { ScheduleControlType, ScheduleEntryType } from './schedule.enums';
+import { buildEntryKey, normalizeSubjectKey } from './schedule-keys';
 
 type DateRange = {
   start?: Date;
   end?: Date;
 };
 
-const DEFAULT_RECURRING_LOOKAHEAD_DAYS = 31;
+export type MappedSnapshot = {
+  groupCode: string;
+  periodFrom?: string;
+  periodTo?: string;
+  entries: ScheduleSnapshotEntry[];
+};
 
-export function mapMaupScheduleResponse(
+export function mapMaupScheduleToSnapshot(
   response: MaupWireArray,
-  query: ScheduleQueryDto = {},
-): ScheduleEntryDto[] {
-  const entries: ScheduleEntryDto[] = [];
+  options: { isExamSession: boolean },
+): MappedSnapshot {
+  let groupCode = '';
+  let periodFrom: string | undefined;
+  let periodTo: string | undefined;
+  const entries: ScheduleSnapshotEntry[] = [];
 
   for (const period of response) {
-    if (!isWireObject(period)) {
-      continue;
-    }
-
-    const periodRange = {
-      start: parseIsoDate(asString(period.from_date)),
-      end: parseIsoDate(asString(period.to_date)),
-    };
-    const requestedRange = resolveRequestedRange(query, periodRange);
-    const scheduleItems = Array.isArray(period.schedule) ? period.schedule : [];
-
-    for (const item of scheduleItems) {
-      if (!isWireObject(item)) {
-        continue;
-      }
-
+    if (!isWireObject(period)) continue;
+    groupCode = groupCode || (asString(period.group) ?? '');
+    const start = parseIsoDate(asString(period.from_date));
+    const end = parseIsoDate(asString(period.to_date));
+    periodFrom = periodFrom ?? (start ? formatDate(start) : undefined);
+    periodTo = periodTo ?? (end ? formatDate(end) : undefined);
+    if (!start || !end) continue;
+    const items = Array.isArray(period.schedule) ? period.schedule : [];
+    for (const item of items) {
+      if (!isWireObject(item)) continue;
       entries.push(
-        ...mapMaupScheduleItem(
-          item,
-          period,
-          requestedRange,
-          periodRange.start ?? requestedRange.start,
-          query,
-        ),
+        ...mapItem(item, groupCode, { start, end }, options.isExamSession),
       );
     }
   }
 
-  return entries
-    .filter((entry) => matchesStatusFilter(entry, query))
-    .sort((first, second) =>
-      `${first.date} ${first.startTime}`.localeCompare(
-        `${second.date} ${second.startTime}`,
-      ),
-    );
+  entries.sort((a, b) =>
+    `${a.date} ${a.startTime}`.localeCompare(`${b.date} ${b.startTime}`),
+  );
+  return { groupCode, periodFrom, periodTo, entries };
 }
 
-function mapMaupScheduleItem(
+function mapItem(
   item: MaupWireObject,
-  period: MaupWireObject,
-  range: Required<DateRange>,
-  periodStart: Date,
-  query: ScheduleQueryDto,
-): ScheduleEntryDto[] {
+  groupCode: string,
+  range: { start: Date; end: Date },
+  isExamSession: boolean,
+): ScheduleSnapshotEntry[] {
   const startTime = normalizeTime(asString(item.from_time));
   const endTime = normalizeTime(asString(item.to_time));
-  if (!startTime || !endTime) {
-    return [];
-  }
+  if (!startTime || !endTime) return [];
 
   const exactDate = parseIsoDate(asString(item.day_date));
   const dates = exactDate
-    ? isWithinRange(exactDate, range)
+    ? exactDate >= range.start && exactDate <= range.end
       ? [exactDate]
       : []
-    : expandRecurringDates(item, range, periodStart);
+    : expandRecurringDates(item, range, range.start);
 
-  return dates
-    .filter((date) => matchesDateQuery(date, query))
-    .map((date) => buildScheduleEntry(item, period, date, startTime, endTime));
-}
-
-function buildScheduleEntry(
-  item: MaupWireObject,
-  period: MaupWireObject,
-  date: Date,
-  startTime: string,
-  endTime: string,
-): ScheduleEntryDto {
-  const dateString = formatDate(date);
   const subjectId = asString(item.subject_id);
-  const courseName = valueOrFallback(asString(item.pair_subject), 'Дисципліна');
-  const courseAssignmentId = `maup:${subjectId || stableHash(courseName)}`;
-  const identity = stableHash([
-    asString(period.student_id),
-    subjectId,
-    dateString,
-    startTime,
-    endTime,
-    asString(item.pair_idx),
-    courseName,
-  ]);
+  const courseTitle = clip(asString(item.pair_subject) ?? 'Дисципліна');
+  const subjectKey = normalizeSubjectKey(subjectId, courseTitle);
+  const pairKind = asString(item.pair_kind);
+  const pairIdx = toSafeInteger(item.pair_idx);
+  const classroom = asString(item.pair_auditorium);
 
-  return {
-    id: `maup:${identity}`,
-    courseAssignmentId,
-    classroomId: asString(item.auditorium_id)
-      ? `maup:${asString(item.auditorium_id)}`
-      : undefined,
-    date: dateString,
-    startTime,
-    endTime,
-    type: mapPairKindToEntryType(asString(item.pair_kind)),
-    status: ScheduleEntryStatus.SCHEDULED,
-    courseName,
-    courseCode: subjectId ? `MAUP-${subjectId}` : undefined,
-    groupCode: asString(period.group) ?? undefined,
-    teacherId: asString(item.prepod_id)
-      ? `maup:${asString(item.prepod_id)}`
-      : undefined,
-    teacherName: asString(item.pair_prepod) ?? undefined,
-    classroom: asString(item.pair_auditorium) ?? 'Онлайн',
-  };
+  return dates.map((d) => {
+    const date = formatDate(d);
+    return {
+      key: buildEntryKey({ groupCode, date, startTime, subjectKey, pairIdx }),
+      date,
+      startTime,
+      endTime,
+      courseTitle,
+      subjectKey,
+      subjectId: clip(subjectId, 64),
+      type: isExamSession
+        ? ScheduleEntryType.EXAM
+        : mapPairKindToEntryType(pairKind),
+      controlType: isExamSession ? mapControlType(pairKind) : undefined,
+      teacherName: clip(asString(item.pair_prepod)),
+      teacherExternalId: clip(asString(item.prepod_id), 64),
+      classroom: classroom ? clip(classroom) : undefined,
+      classroomExternalId: clip(asString(item.auditorium_id), 64),
+      pairIdx,
+    };
+  });
 }
 
-function resolveRequestedRange(
-  query: ScheduleQueryDto,
-  periodRange: DateRange,
-): Required<DateRange> {
-  if (query.date) {
-    const date = parseIsoDate(query.date);
-    if (date) {
-      return { start: date, end: date };
-    }
-  }
+export function mapControlType(
+  pairKind: string | undefined,
+): ScheduleControlType {
+  const v = pairKind?.toLowerCase() ?? '';
+  if (v.includes('екз') || v.includes('ісп')) return ScheduleControlType.EXAM;
+  if (v.includes('зал')) return ScheduleControlType.CREDIT;
+  if (v.includes('курс')) return ScheduleControlType.COURSEWORK;
+  return ScheduleControlType.OTHER;
+}
 
-  const requestedStart = parseIsoDate(query.startDate);
-  const requestedEnd = parseIsoDate(query.endDate);
-  const fallbackStart = periodRange.start ?? startOfUtcDay(new Date());
-  const fallbackEnd =
-    periodRange.end ?? addDays(fallbackStart, DEFAULT_RECURRING_LOOKAHEAD_DAYS);
+export function hashWireResponse(response: MaupWireArray): string {
+  return createHash('sha256').update(JSON.stringify(response)).digest('hex');
+}
 
-  const start =
-    requestedStart && requestedStart > fallbackStart
-      ? requestedStart
-      : fallbackStart;
-  const end =
-    requestedEnd && requestedEnd < fallbackEnd ? requestedEnd : fallbackEnd;
-
-  return start <= end ? { start, end } : { start: end, end };
+function clip(value: string, maxLength?: number): string;
+function clip(
+  value: string | undefined,
+  maxLength?: number,
+): string | undefined;
+function clip(value: string | undefined, maxLength = 300) {
+  return value === undefined ? undefined : value.slice(0, maxLength);
 }
 
 function expandRecurringDates(
@@ -206,27 +175,6 @@ function matchesPairWeeks(
   return explicitWeeks.length === 0 || explicitWeeks.includes(weekIndex);
 }
 
-function matchesDateQuery(date: Date, query: ScheduleQueryDto): boolean {
-  const dateString = formatDate(date);
-  if (query.date) {
-    return dateString === query.date;
-  }
-  if (query.startDate && dateString < query.startDate) {
-    return false;
-  }
-  if (query.endDate && dateString > query.endDate) {
-    return false;
-  }
-  return true;
-}
-
-function matchesStatusFilter(
-  entry: ScheduleEntryDto,
-  query: ScheduleQueryDto,
-): boolean {
-  return !query.status || query.status === entry.status;
-}
-
 function mapPairKindToEntryType(value: string | undefined): ScheduleEntryType {
   const normalized = value?.toLowerCase() ?? '';
   if (normalized.includes('лаб')) return ScheduleEntryType.LAB;
@@ -271,10 +219,6 @@ function parseIsoDate(value: string | undefined): Date | undefined {
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-function isWithinRange(date: Date, range: Required<DateRange>): boolean {
-  return date >= range.start && date <= range.end;
-}
-
 function addDays(date: Date, days: number): Date {
   const next = startOfUtcDay(date);
   next.setUTCDate(next.getUTCDate() + days);
@@ -315,15 +259,4 @@ function toSafeInteger(value: MaupWireValue | undefined): number | undefined {
 
 function isWireObject(value: MaupWireValue): value is MaupWireObject {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function valueOrFallback(value: string | undefined, fallback: string): string {
-  return value && value.length <= 300 ? value : fallback;
-}
-
-function stableHash(value: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(value))
-    .digest('hex')
-    .slice(0, 24);
 }

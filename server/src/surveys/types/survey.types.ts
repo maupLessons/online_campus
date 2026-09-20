@@ -24,4 +24,5 @@ export type SurveyDraftSnapshot = {
   targetIds: string[];
   startDate?: Date;
   endDate?: Date;
+  estimatedMinutes?: number;
 };

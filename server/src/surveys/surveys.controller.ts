@@ -56,7 +56,7 @@ export class SurveysController {
   ) {}
 
   @Post()
-  @Roles(Role.ADMIN, Role.DEAN)
+  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'Create a survey draft' })
   @ApiCreatedResponse({ type: SurveyDto })
   create(@Body() dto: CreateSurveyDto, @Request() req: AuthenticatedRequest) {
@@ -78,8 +78,21 @@ export class SurveysController {
   @Roles(Role.STUDENT, Role.TEACHER)
   @ApiOperation({ summary: 'List active surveys available to current user' })
   @ApiOkResponse({ type: SurveyDto, isArray: true })
-  findActive(@Request() req: AuthenticatedRequest) {
-    return this.surveysService.findActiveForUser(req.user);
+  findActive(
+    @Query('completed') completed: string | undefined,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.surveysService.findActiveForUser(req.user, {
+      ...(completed === undefined ? {} : { completed: completed === 'true' }),
+    });
+  }
+
+  @Get('completed')
+  @Roles(Role.STUDENT, Role.TEACHER)
+  @ApiOperation({ summary: 'List surveys completed by current user' })
+  @ApiOkResponse({ type: SurveyDto, isArray: true })
+  findCompleted(@Request() req: AuthenticatedRequest) {
+    return this.surveysService.findCompletedForUser(req.user);
   }
 
   @Get(':id')
@@ -90,7 +103,7 @@ export class SurveysController {
   }
 
   @Put(':id')
-  @Roles(Role.ADMIN, Role.DEAN)
+  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @ApiOperation({ summary: 'Update a draft survey' })
   @ApiOkResponse({ type: SurveyDto })
   update(
@@ -102,7 +115,7 @@ export class SurveysController {
   }
 
   @Patch(':id/publish')
-  @Roles(Role.ADMIN, Role.DEAN)
+  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @AuditEvent(AUDIT_ACTIONS.SURVEY_PUBLISH, 'survey')
   @ApiOperation({ summary: 'Publish a survey' })
   @ApiOkResponse({ type: SurveyDto })
@@ -114,8 +127,21 @@ export class SurveysController {
     );
   }
 
+  @Patch(':id/unpublish')
+  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
+  @AuditEvent(AUDIT_ACTIONS.SURVEY_UNPUBLISH, 'survey')
+  @ApiOperation({ summary: 'Return a scheduled survey to draft' })
+  @ApiOkResponse({ type: SurveyDto })
+  unpublish(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
+    return this.surveysService.unpublish(
+      id,
+      req.user,
+      createAuditContext(req, this.auditLogService),
+    );
+  }
+
   @Patch(':id/close')
-  @Roles(Role.ADMIN, Role.DEAN)
+  @Roles(Role.ADMIN, Role.DEAN, Role.RECTOR)
   @AuditEvent(AUDIT_ACTIONS.SURVEY_CLOSE, 'survey')
   @ApiOperation({ summary: 'Close a survey' })
   @ApiOkResponse({ type: SurveyDto })

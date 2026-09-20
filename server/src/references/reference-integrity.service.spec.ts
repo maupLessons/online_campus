@@ -6,10 +6,6 @@ type CountModelMock = {
   countDocuments: jest.Mock;
 };
 
-type ScheduleServiceMock = {
-  isClassroomUsed: jest.Mock;
-};
-
 function countQuery(count: number) {
   return {
     exec: jest.fn().mockResolvedValue(count),
@@ -29,13 +25,11 @@ function createService(
     userCounts?: number[];
     courseCount?: number;
     courseAssignmentCount?: number;
-    assignmentCount?: number;
     surveyCount?: number;
     electiveDisciplineCount?: number;
     electivePeriodCount?: number;
     electiveSelectionCount?: number;
     notificationCount?: number;
-    classroomUsed?: boolean;
   } = {},
 ) {
   const userCounts = overrides.userCounts ?? [0, 0];
@@ -45,11 +39,6 @@ function createService(
       .mockReturnValueOnce(countQuery(userCounts[0] ?? 0))
       .mockReturnValueOnce(countQuery(userCounts[1] ?? 0)),
   };
-  const scheduleService: ScheduleServiceMock = {
-    isClassroomUsed: jest
-      .fn()
-      .mockResolvedValue(overrides.classroomUsed ?? false),
-  };
 
   const service = new ReferenceIntegrityService(
     modelWithCount(overrides.departmentCount) as never,
@@ -57,16 +46,14 @@ function createService(
     userModel as never,
     modelWithCount(overrides.courseCount) as never,
     modelWithCount(overrides.courseAssignmentCount) as never,
-    modelWithCount(overrides.assignmentCount) as never,
     modelWithCount(overrides.surveyCount) as never,
     modelWithCount(overrides.electiveDisciplineCount) as never,
     modelWithCount(overrides.electivePeriodCount) as never,
     modelWithCount(overrides.electiveSelectionCount) as never,
     modelWithCount(overrides.notificationCount) as never,
-    scheduleService as never,
   );
 
-  return { service, userModel, scheduleService };
+  return { service, userModel };
 }
 
 describe('ReferenceIntegrityService', () => {
@@ -111,7 +98,6 @@ describe('ReferenceIntegrityService', () => {
     const { service } = createService({
       userCounts: [4, 0],
       courseAssignmentCount: 2,
-      assignmentCount: 1,
       surveyCount: 1,
       electivePeriodCount: 1,
       electiveSelectionCount: 1,
@@ -123,14 +109,13 @@ describe('ReferenceIntegrityService', () => {
     );
   });
 
-  it('blocks deleting classrooms used by active schedule entries', async () => {
-    const { service, scheduleService } = createService({ classroomUsed: true });
+  // The schedule is read from MAUP API snapshots and stores the classroom as a string (spec 02 §4.1),
+  // so the classrooms reference book is no longer blocked by anything — the check became a no-op.
+  it('allows deleting a classroom (schedule no longer references the classroom reference)', async () => {
+    const { service } = createService();
 
-    await expect(service.assertClassroomCanBeDeleted(id)).rejects.toThrow(
-      ConflictException,
-    );
-    expect(scheduleService.isClassroomUsed).toHaveBeenCalledWith(
-      id.toHexString(),
-    );
+    await expect(
+      service.assertClassroomCanBeDeleted(id),
+    ).resolves.toBeUndefined();
   });
 });

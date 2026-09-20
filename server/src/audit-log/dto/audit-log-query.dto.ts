@@ -17,6 +17,7 @@ export enum AuditLogResult {
 
 export enum AuditLogDomain {
   IDENTITY = 'identity',
+  ACADEMIC = 'academic',
   SCHEDULE = 'schedule',
   LEARNING = 'learning',
   SURVEYS = 'surveys',

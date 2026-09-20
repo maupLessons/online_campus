@@ -11,6 +11,14 @@ export class ReportOptionDto {
   label: string;
 }
 
+export class ReportTermOptionDto extends ReportOptionDto {
+  @ApiProperty()
+  academicYear: string;
+
+  @ApiProperty()
+  termNumber: number;
+}
+
 export class ReportCourseOptionDto extends ReportOptionDto {
   @ApiProperty()
   courseName: string;
@@ -18,11 +26,11 @@ export class ReportCourseOptionDto extends ReportOptionDto {
   @ApiProperty()
   groupCode: string;
 
-  @ApiProperty()
-  academicYear: string;
+  @ApiPropertyOptional({ nullable: true })
+  termId: string | null;
 
   @ApiProperty()
-  semester: number;
+  termLabel: string;
 
   @ApiProperty()
   departmentId: string;
@@ -33,10 +41,7 @@ export class ReportCourseOptionDto extends ReportOptionDto {
 
 export class ReportSelectedFiltersDto {
   @ApiPropertyOptional({ nullable: true })
-  academicYear: string | null;
-
-  @ApiPropertyOptional({ nullable: true })
-  semester: number | null;
+  termId: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   departmentId: string | null;
@@ -55,11 +60,8 @@ export class ReportSelectedFiltersDto {
 }
 
 export class ReportFiltersDto {
-  @ApiProperty({ type: [String] })
-  academicYears: string[];
-
-  @ApiProperty({ type: [Number] })
-  semesters: number[];
+  @ApiProperty({ type: [ReportTermOptionDto] })
+  terms: ReportTermOptionDto[];
 
   @ApiProperty({ type: [ReportOptionDto] })
   departments: ReportOptionDto[];
@@ -167,11 +169,11 @@ export class ReportCourseRowDto {
   @ApiProperty()
   facultyName: string;
 
-  @ApiProperty()
-  academicYear: string;
+  @ApiPropertyOptional({ nullable: true })
+  termId: string | null;
 
   @ApiProperty()
-  semester: number;
+  termLabel: string;
 
   @ApiPropertyOptional({ nullable: true })
   averageGrade: number | null;

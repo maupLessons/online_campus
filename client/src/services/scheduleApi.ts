@@ -1,201 +1,47 @@
-import api from "./api";
+import api from './api';
 import type {
-  CourseAssignment,
-  PaginatedResponse,
-  ScheduleBulkResult,
-  ScheduleEntry,
-  ScheduleEntryInput,
-  ScheduleEntryStatus,
-  ScheduleEntryType,
-  ScheduleTemplate,
-  ScheduleTemplateInput,
-} from "../types";
-import {
-  downloadBlob,
-  type SpreadsheetExportFormat,
-  type SpreadsheetExportLocale,
-} from "../utils/spreadsheetExport";
-import { fetchSpreadsheetExport } from "./spreadsheetExportApi";
+  OnlineLessonLink,
+  OnlineLessonLinkInput,
+  ScheduleGroupResponse,
+  ScheduleRefreshSummary,
+  ScheduleResponse,
+  ScheduleTodayResponse,
+} from '../types';
+import { downloadBlob, type SpreadsheetExportFormat, type SpreadsheetExportLocale } from '../utils/spreadsheetExport';
+import { fetchSpreadsheetExport } from './spreadsheetExportApi';
 
-export type ScheduleQuery = {
-  date?: string;
-  startDate?: string;
-  endDate?: string;
-  groupId?: string;
-  teacherId?: string;
-  status?: ScheduleEntryStatus | "";
-};
+export type ScheduleRange = { from: string; to: string };
 
-export type ScheduleWorkflowReason = {
-  reason: string;
-};
-
-export type ScheduleRescheduleInput = ScheduleWorkflowReason & {
-  date: string;
-  startTime: string;
-  endTime: string;
-  classroomId?: string;
-  onlineUrl?: string;
-};
-
-export type ScheduleSubstitutionInput = ScheduleWorkflowReason & {
-  courseAssignmentId?: string;
-  classroomId?: string;
-  date?: string;
-  startTime?: string;
-  endTime?: string;
-  type?: ScheduleEntryType;
-  onlineUrl?: string;
-};
-
-export type ScheduleTemplateApplyInput = {
-  startDate: string;
-  endDate: string;
-  dryRun?: boolean;
-  skipConflicts?: boolean;
+export const scheduleQueryKeys = {
+  my: (range: ScheduleRange) => ['schedule', 'my', range] as const,
+  session: (range: ScheduleRange) => ['schedule', 'session', range] as const,
+  // Exactly ['schedule','today'] — plan 03 Task 10 uses this same key (Global Constraints).
+  today: () => ['schedule', 'today'] as const,
+  myLinks: () => ['schedule', 'online-links', 'my'] as const,
+  group: (code: string, range: ScheduleRange, session: boolean) => ['schedule', 'group', code, range, session] as const,
 };
 
 export const scheduleApi = {
-  async list(params: ScheduleQuery = {}) {
-    const { data } = await api.get<ScheduleEntry[]>("/schedule", {
-      params: cleanParams(params),
-    });
-    return data;
+  async my(range: ScheduleRange) { return (await api.get<ScheduleResponse>('/schedule/my', { params: range })).data; },
+  async session(range: ScheduleRange) { return (await api.get<ScheduleResponse>('/schedule/session/my', { params: range })).data; },
+  // §5.3a: no parameters, the response is {date, lessons, session, meta}.
+  async today() { return (await api.get<ScheduleTodayResponse>('/schedule/today')).data; },
+  async myLinks() { return (await api.get<OnlineLessonLink[]>('/schedule/online-links/my')).data; },
+  async upsertLink(body: OnlineLessonLinkInput) { return (await api.put<OnlineLessonLink>('/schedule/online-links', body)).data; },
+  async deleteLink(id: string) { await api.delete(`/schedule/online-links/${id}`); },
+  async group(code: string, range: ScheduleRange, session: boolean) {
+    return (await api.get<ScheduleGroupResponse>(`/schedule/groups/${encodeURIComponent(code)}`, { params: { ...range, session } })).data;
   },
-
-  async listMy(params: ScheduleQuery = {}) {
-    const { data } = await api.get<ScheduleEntry[]>("/schedule/my", {
-      params: cleanParams(params),
-    });
-    return data;
+  async refreshGroup(code: string, session?: boolean) {
+    return (await api.post<ScheduleGroupResponse>(
+      `/schedule/groups/${encodeURIComponent(code)}/refresh`,
+      undefined,
+      { params: session === undefined ? {} : { session } },
+    )).data;
   },
-
-  async create(payload: ScheduleEntryInput) {
-    const { data } = await api.post<ScheduleEntry>("/schedule", payload);
-    return data;
-  },
-
-  async update(id: string, payload: Partial<ScheduleEntryInput>) {
-    const { data } = await api.put<ScheduleEntry>(`/schedule/${id}`, payload);
-    return data;
-  },
-
-  async remove(id: string) {
-    await api.delete(`/schedule/${id}`);
-  },
-
-  async cancel(id: string, payload: ScheduleWorkflowReason) {
-    const { data } = await api.post<ScheduleEntry>(
-      `/schedule/${id}/cancel`,
-      payload,
-    );
-    return data;
-  },
-
-  async reschedule(id: string, payload: ScheduleRescheduleInput) {
-    const { data } = await api.post<ScheduleEntry>(
-      `/schedule/${id}/reschedule`,
-      payload,
-    );
-    return data;
-  },
-
-  async substitute(id: string, payload: ScheduleSubstitutionInput) {
-    const { data } = await api.post<ScheduleEntry>(
-      `/schedule/${id}/substitution`,
-      payload,
-    );
-    return data;
-  },
-
-  async bulkCreate(payload: {
-    entries: ScheduleEntryInput[];
-    dryRun?: boolean;
-    skipConflicts?: boolean;
-  }) {
-    const { data } = await api.post<ScheduleBulkResult>(
-      "/schedule/bulk",
-      payload,
-    );
-    return data;
-  },
-
-  async bulkCancel(ids: string[], reason: string) {
-    const { data } = await api.post<ScheduleBulkResult>(
-      "/schedule/bulk/cancel",
-      { ids, reason },
-    );
-    return data;
-  },
-
-  async listTemplates() {
-    const { data } = await api.get<ScheduleTemplate[]>("/schedule/templates");
-    return data;
-  },
-
-  async createTemplate(payload: ScheduleTemplateInput) {
-    const { data } = await api.post<ScheduleTemplate>(
-      "/schedule/templates",
-      payload,
-    );
-    return data;
-  },
-
-  async updateTemplate(id: string, payload: Partial<ScheduleTemplateInput>) {
-    const { data } = await api.put<ScheduleTemplate>(
-      `/schedule/templates/${id}`,
-      payload,
-    );
-    return data;
-  },
-
-  async archiveTemplate(id: string) {
-    await api.delete(`/schedule/templates/${id}`);
-  },
-
-  async applyTemplate(id: string, payload: ScheduleTemplateApplyInput) {
-    const { data } = await api.post<ScheduleBulkResult>(
-      `/schedule/templates/${id}/apply`,
-      payload,
-    );
-    return data;
-  },
-
-  async listCourseAssignments() {
-    const assignments: CourseAssignment[] = [];
-    let page = 1;
-    let hasNextPage = true;
-
-    while (hasNextPage) {
-      const { data } = await api.get<PaginatedResponse<CourseAssignment>>(
-        "/courses/course-assignments",
-        {
-          params: { page, limit: 100 },
-        },
-      );
-
-      assignments.push(...(data.docs ?? []));
-      hasNextPage = Boolean(data.hasNextPage);
-      page += 1;
-    }
-
-    return assignments;
-  },
-
-  async export(
-    params: ScheduleQuery,
-    format: SpreadsheetExportFormat,
-    locale: SpreadsheetExportLocale,
-  ) {
-    const blob = await fetchSpreadsheetExport("/schedule/export", {
-      params: cleanParams({ ...params, format, locale }),
-    });
-    downloadBlob(blob, `schedule.${format}`);
+  async refreshAll() { return (await api.post<ScheduleRefreshSummary>('/schedule/refresh')).data; },
+  async export(range: ScheduleRange, format: SpreadsheetExportFormat, locale: SpreadsheetExportLocale, session = false) {
+    const blob = await fetchSpreadsheetExport('/schedule/export', { params: { ...range, format, locale, session } });
+    downloadBlob(blob, `${session ? 'session' : 'schedule'}.${format}`);
   },
 };
-
-function cleanParams<T extends Record<string, unknown>>(params: T): T {
-  return Object.fromEntries(
-    Object.entries(params).filter(([, value]) => value !== "" && value != null),
-  ) as T;
-}

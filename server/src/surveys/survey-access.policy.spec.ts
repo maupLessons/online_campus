@@ -26,7 +26,9 @@ describe('SurveyAccessPolicy', () => {
     expect(policy.canViewResults(survey, actor)).toBe(true);
   });
 
-  it.each([Role.RECTOR, Role.PRESIDENT])(
+  // Role.RECTOR moved out of this table: canCreate() now returns true for
+  // rector (broad-audience authoring, §4.2), unlike the other reviewer roles.
+  it.each([Role.PRESIDENT])(
     'keeps %s read-only while allowing global result review',
     (role) => {
       const actor = user(role);

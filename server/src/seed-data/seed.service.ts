@@ -10,12 +10,11 @@ import {
   GroupSeeder,
   SpecialtySeeder,
   ClassroomSeeder,
+  AcademicTermSeeder,
   CourseSeeder,
   CourseAssignmentSeeder,
-  ScheduleEntrySeeder,
-  GradeSeeder,
-  AssignmentSeeder,
-  MaterialSeeder,
+  ScheduleSnapshotSeeder,
+  ElectiveSurveyDemoSeeder,
 } from './seeders';
 
 @Injectable()
@@ -31,12 +30,13 @@ export class SeedService implements OnModuleInit {
     private readonly specialtySeeder: SpecialtySeeder,
     private readonly classroomSeeder: ClassroomSeeder,
     private readonly groupSeeder: GroupSeeder,
+    private readonly academicTermSeeder: AcademicTermSeeder,
     private readonly courseSeeder: CourseSeeder,
     private readonly courseAssignmentSeeder: CourseAssignmentSeeder,
-    private readonly scheduleEntrySeeder: ScheduleEntrySeeder,
-    private readonly gradeSeeder: GradeSeeder,
-    private readonly assignmentSeeder: AssignmentSeeder,
-    private readonly materialSeeder: MaterialSeeder,
+    private readonly scheduleSnapshotSeeder: ScheduleSnapshotSeeder,
+    // Optional: seed.service.spec.ts constructs SeedService directly without this
+    // argument (undefined), so the call below is guarded with `?.`.
+    private readonly electiveSurveyDemoSeeder?: ElectiveSurveyDemoSeeder,
   ) {}
 
   async onModuleInit() {
@@ -69,12 +69,11 @@ export class SeedService implements OnModuleInit {
       await this.specialtySeeder.seed();
       await this.classroomSeeder.seed();
       await this.groupSeeder.seed();
+      await this.academicTermSeeder.seed();
       await this.courseSeeder.seed();
       await this.courseAssignmentSeeder.seed();
-      await this.scheduleEntrySeeder.seed();
-      await this.gradeSeeder.seed();
-      await this.assignmentSeeder.seed();
-      await this.materialSeeder.seed();
+      await this.scheduleSnapshotSeeder.seed();
+      await this.electiveSurveyDemoSeeder?.seed();
 
       this.logger.log('Seeding process completed.');
     } catch (error) {

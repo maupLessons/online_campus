@@ -13,7 +13,7 @@ describe('App (e2e)', () => {
   let container: StartedTestContainer;
 
   beforeAll(async () => {
-    container = await new GenericContainer('mongo')
+    container = await new GenericContainer('mongo:7.0')
       .withExposedPorts(27017)
       .start();
 

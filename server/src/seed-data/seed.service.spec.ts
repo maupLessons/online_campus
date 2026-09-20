@@ -41,12 +41,10 @@ function createService(
     specialtySeeder: createSeeder(),
     classroomSeeder: createSeeder(),
     groupSeeder: createSeeder(),
+    academicTermSeeder: createSeeder(),
     courseSeeder: createSeeder(),
     courseAssignmentSeeder: createSeeder(),
     scheduleEntrySeeder: createSeeder(),
-    gradeSeeder: createSeeder(),
-    assignmentSeeder: createSeeder(),
-    materialSeeder: createSeeder(),
   };
   const userModel = createUserModel(userCount);
 
@@ -59,12 +57,10 @@ function createService(
     seeders.specialtySeeder as never,
     seeders.classroomSeeder as never,
     seeders.groupSeeder as never,
+    seeders.academicTermSeeder as never,
     seeders.courseSeeder as never,
     seeders.courseAssignmentSeeder as never,
     seeders.scheduleEntrySeeder as never,
-    seeders.gradeSeeder as never,
-    seeders.assignmentSeeder as never,
-    seeders.materialSeeder as never,
   );
 
   return { service, seeders, userModel };
@@ -95,7 +91,7 @@ describe('SeedService', () => {
     await service.onModuleInit();
 
     expect(seeders.userSeeder.seed).not.toHaveBeenCalled();
-    expect(seeders.materialSeeder.seed).not.toHaveBeenCalled();
+    expect(seeders.scheduleEntrySeeder.seed).not.toHaveBeenCalled();
     expect(userModel.estimatedDocumentCount).toHaveBeenCalledTimes(1);
   });
 
@@ -127,7 +123,7 @@ describe('SeedService', () => {
 
     expect(seeders.userSeeder.seed).toHaveBeenCalledTimes(1);
     expect(seeders.facultySeeder.seed).toHaveBeenCalledTimes(1);
-    expect(seeders.materialSeeder.seed).toHaveBeenCalledTimes(1);
+    expect(seeders.scheduleEntrySeeder.seed).toHaveBeenCalledTimes(1);
   });
 
   it('blocks demo seeding in production by default', async () => {
@@ -139,7 +135,7 @@ describe('SeedService', () => {
     await service.onModuleInit();
 
     expect(seeders.userSeeder.seed).not.toHaveBeenCalled();
-    expect(seeders.materialSeeder.seed).not.toHaveBeenCalled();
+    expect(seeders.scheduleEntrySeeder.seed).not.toHaveBeenCalled();
   });
 
   it('allows production demo seeding only for explicitly disposable environments', async () => {
@@ -152,6 +148,6 @@ describe('SeedService', () => {
     await service.onModuleInit();
 
     expect(seeders.userSeeder.seed).toHaveBeenCalledTimes(1);
-    expect(seeders.materialSeeder.seed).toHaveBeenCalledTimes(1);
+    expect(seeders.scheduleEntrySeeder.seed).toHaveBeenCalledTimes(1);
   });
 });

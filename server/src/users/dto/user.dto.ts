@@ -55,25 +55,71 @@ function referenceToString(value: unknown): string | null {
   return null;
 }
 
-class StudentProfileDto {
+export class StudentProfileGroupDto {
   @ApiProperty()
   @Expose()
-  @Transform(({ obj }: { obj?: { group?: unknown } }) =>
-    referenceToString(obj?.group),
+  id: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  code?: string;
+}
+
+export class StudentProfileDto {
+  @ApiProperty()
+  @Expose()
+  @Transform(
+    ({ obj }: { obj?: { _id?: unknown } }) => referenceToString(obj?._id) ?? '',
   )
-  group: string | null;
+  id: string;
+
+  @ApiProperty({ type: () => StudentProfileGroupDto, nullable: true })
+  @Expose()
+  @Transform(({ obj }: { obj?: { group?: unknown } }) => {
+    const g = obj?.group;
+    if (!g) return null;
+    if (typeof g === 'object' && 'code' in g) {
+      const doc = g as { _id: unknown; code: string };
+      return { id: referenceToString(doc._id), code: doc.code };
+    }
+    return { id: referenceToString(g) };
+  })
+  group: StudentProfileGroupDto | null;
 
   @ApiProperty()
   @Expose()
   recordBookNumber: string;
 
-  @ApiProperty({ required: false })
-  @Expose()
-  externalStudentId?: string;
-
   @ApiProperty()
   @Expose()
   year: number;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  studyForm?: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  institute?: string;
+
+  @ApiProperty({ required: false })
+  @Expose()
+  specialty?: string;
+
+  @ApiProperty({ enum: ['active', 'inactive'] })
+  @Expose()
+  status: 'active' | 'inactive';
+
+  @ApiProperty()
+  @Expose()
+  @Transform(({ value }: { value?: Date | string }) =>
+    value instanceof Date ? value.toISOString() : value,
+  )
+  syncedAt: string;
+
+  @ApiProperty({ required: false, description: 'Лише для admin' })
+  @Expose({ groups: ['admin'] })
+  externalStudentId?: string;
 }
 
 class TeacherProfileDto {
@@ -87,6 +133,10 @@ class TeacherProfileDto {
   @ApiProperty()
   @Expose()
   position: string;
+
+  @ApiProperty({ required: false })
+  @Expose({ groups: ['admin'] })
+  externalTeacherId?: string;
 }
 
 export class UserDto {
@@ -131,10 +181,19 @@ export class UserDto {
   @Expose()
   status: string;
 
-  @ApiProperty({ type: () => StudentProfileDto, required: false })
+  @ApiProperty({ type: () => [StudentProfileDto] })
   @Expose()
   @Type(() => StudentProfileDto)
-  studentProfile?: StudentProfileDto;
+  studentProfiles: StudentProfileDto[];
+
+  @ApiProperty({ nullable: true })
+  @Expose()
+  // `obj`, not `value`: class-transformer clones the raw ObjectId in the `value` field
+  // through a new instance (generating a different id), so we read directly from the source.
+  @Transform(({ obj }: { obj?: { activeStudentProfileId?: unknown } }) =>
+    referenceToString(obj?.activeStudentProfileId),
+  )
+  activeStudentProfileId: string | null;
 
   @ApiProperty({ type: () => TeacherProfileDto, required: false })
   @Expose()
@@ -181,4 +240,14 @@ export class UserMinimalDto {
   @ApiProperty({ enum: Role })
   @Expose()
   role: Role;
+}
+
+export function pickActiveStudentProfile(
+  user: Pick<UserDto, 'studentProfiles' | 'activeStudentProfileId'>,
+): StudentProfileDto | null {
+  const profiles = user.studentProfiles ?? [];
+  const active = profiles.find(
+    (p) => p.id === user.activeStudentProfileId && p.status === 'active',
+  );
+  return active ?? profiles.find((p) => p.status === 'active') ?? null;
 }

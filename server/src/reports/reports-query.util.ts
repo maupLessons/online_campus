@@ -1,9 +1,9 @@
 import { BadRequestException } from '@nestjs/common';
 import { ReportTrendUnit } from './dto';
 import {
-  AttendanceCounts,
   DateRange,
   MAX_REPORT_RANGE_DAYS,
+  ReportTermRef,
 } from './reports.types';
 
 export function parseReportDateRange(
@@ -39,10 +39,8 @@ export function parseReportDateRange(
   return { from: fromDate, toExclusive, days };
 }
 
-export function normalizeReportAcademicYear(value: string): string {
-  const normalized = value.trim();
-  const match = /^(\d{4})[/-](\d{4})$/.exec(normalized);
-  return match ? `${match[1]}/${match[2]}` : normalized;
+export function formatTermLabel(term: ReportTermRef | null): string {
+  return term ? `${term.academicYear} · ${term.termNumber}` : '—';
 }
 
 export function resolveReportTrendUnit(
@@ -65,52 +63,6 @@ export function reportDateFilter(
         },
       }
     : {};
-}
-
-export function reportDateBucket(
-  field: string,
-  unit: ReportTrendUnit,
-): Record<string, unknown> {
-  return {
-    $dateTrunc: {
-      date: field,
-      unit,
-      timezone: 'UTC',
-      ...(unit === 'week' ? { startOfWeek: 'monday' } : {}),
-    },
-  };
-}
-
-export function attendanceGroupFields(): Record<string, unknown> {
-  const countStatus = (status: string) => ({
-    $sum: {
-      $cond: [{ $eq: ['$attendance.status', status] }, 1, 0],
-    },
-  });
-
-  return {
-    present: countStatus('present'),
-    late: countStatus('late'),
-    absent: countStatus('absent'),
-    excused: countStatus('excused'),
-  };
-}
-
-export function emptyAttendance(): AttendanceCounts {
-  return {
-    present: 0,
-    late: 0,
-    absent: 0,
-    excused: 0,
-    attendanceRecords: 0,
-  };
-}
-
-export function attendanceRate(counts: AttendanceCounts): number | null {
-  const denominator = counts.present + counts.late + counts.absent;
-  return denominator === 0
-    ? null
-    : round(((counts.present + counts.late) / denominator) * 100, 1);
 }
 
 export function round(value: number, precision = 2): number {

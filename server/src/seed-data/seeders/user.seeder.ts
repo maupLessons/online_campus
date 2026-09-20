@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { User } from '../../users/schemas';
 import {
   users,
@@ -24,23 +24,32 @@ export class UserSeeder {
     }
 
     const data = users.map((user) => {
-      const studentProfile = studentProfiles.find((p) => p.userId === user.id);
+      const profiles = studentProfiles.filter((p) => p.userId === user.id);
       const teacherProfile = teacherProfiles.find((p) => p.userId === user.id);
+
+      const built = profiles.map((p) => ({
+        _id: new Types.ObjectId(),
+        externalStudentId: p.externalStudentId,
+        group: p.groupId,
+        recordBookNumber: p.recordBookNumber,
+        year: p.year,
+        studyForm: p.studyForm,
+        institute: p.institute,
+        specialty: p.specialty,
+        status: 'active',
+        syncedAt: new Date(),
+      }));
 
       return {
         ...user,
         _id: user.id,
-        studentProfile: studentProfile
-          ? {
-              group: studentProfile.groupId,
-              recordBookNumber: studentProfile.recordBookNumber,
-              year: studentProfile.year,
-            }
-          : undefined,
+        studentProfiles: built,
+        activeStudentProfileId: built[0]?._id ?? null,
         teacherProfile: teacherProfile
           ? {
               department: teacherProfile.departmentId,
               position: teacherProfile.position,
+              externalTeacherId: teacherProfile.externalTeacherId,
             }
           : undefined,
       };

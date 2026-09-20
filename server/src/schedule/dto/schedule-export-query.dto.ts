@@ -4,9 +4,9 @@ import {
   SpreadsheetExportFormat,
   SpreadsheetExportLocale,
 } from '../../common/export';
-import { ScheduleQueryDto } from './schedule-query.dto';
+import { ScheduleRangeQueryDto } from './schedule-range-query.dto';
 
-export class ScheduleExportQueryDto extends ScheduleQueryDto {
+export class ScheduleExportQueryDto extends ScheduleRangeQueryDto {
   @ApiPropertyOptional({
     enum: SpreadsheetExportFormat,
     default: SpreadsheetExportFormat.CSV,

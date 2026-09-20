@@ -10,8 +10,7 @@ export type ReportTrendUnit = "day" | "week" | "month";
 export type ReportExportFormat = SpreadsheetExportFormat;
 
 export interface ReportQuery {
-  academicYear?: string;
-  semester?: number;
+  termId?: string;
   departmentId?: string;
   groupId?: string;
   courseAssignmentId?: string;
@@ -26,18 +25,22 @@ export interface ReportOption {
   label: string;
 }
 
+export interface ReportTermOption extends ReportOption {
+  academicYear: string;
+  termNumber: number;
+}
+
 export interface ReportCourseOption extends ReportOption {
   courseName: string;
   groupCode: string;
-  academicYear: string;
-  semester: number;
+  termId: string | null;
+  termLabel: string;
   departmentId: string;
   groupId: string;
 }
 
 export interface ReportSelectedFilters {
-  academicYear: string | null;
-  semester: number | null;
+  termId: string | null;
   departmentId: string | null;
   groupId: string | null;
   courseAssignmentId: string | null;
@@ -52,8 +55,8 @@ export interface ReportCourseRow {
   groupCode: string;
   departmentName: string;
   facultyName: string;
-  academicYear: string;
-  semester: number;
+  termId: string | null;
+  termLabel: string;
   averageGrade: number | null;
   gradeCount: number;
   attendanceRate: number | null;
@@ -81,8 +84,7 @@ export interface ReportOverview {
     studentCount: number;
   };
   filters: {
-    academicYears: string[];
-    semesters: number[];
+    terms: ReportTermOption[];
     departments: ReportOption[];
     groups: ReportOption[];
     courseAssignments: ReportCourseOption[];

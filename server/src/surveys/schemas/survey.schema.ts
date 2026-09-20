@@ -53,6 +53,18 @@ export class Survey {
   @Prop({ type: Number, min: 0 })
   expectedRecipients?: number;
 
+  @Prop({ type: Number, min: 1, max: 120 })
+  estimatedMinutes?: number;
+
+  @Prop({ type: Date, default: null })
+  activatedAt?: Date | null; // moment of the actual transition to active (can be later than startDate — §7.1)
+
+  @Prop({ type: String, enum: ['manual', 'deadline'], default: null })
+  closedReason?: 'manual' | 'deadline' | null;
+
+  @Prop({ type: Date, default: null })
+  reminderSentAt?: Date | null;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -60,4 +72,5 @@ export class Survey {
 export const SurveySchema = SchemaFactory.createForClass(Survey);
 
 SurveySchema.index({ status: 1, startDate: 1, endDate: 1 });
+SurveySchema.index({ status: 1, startDate: 1 });
 SurveySchema.index({ targetType: 1, targetIds: 1 });

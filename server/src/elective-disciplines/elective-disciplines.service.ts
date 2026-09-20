@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { Model, Types } from 'mongoose';
 import {
@@ -22,12 +23,16 @@ import {
   CourseAssignmentDocument,
   CourseAssignmentSource,
   CourseDocument,
+  CourseStatus,
 } from '../courses/schemas';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AcademicTermsService } from '../academic-terms/academic-terms.service';
 import { Department, Group } from '../references/schemas';
 import { User, UserDocument } from '../users/schemas';
 import { UsersService } from '../users/users.service';
+import { pickActiveStudentProfile } from '../users/dto/user.dto';
+import { activeStudentsInGroups } from '../users/student-profile.filters';
 import {
   CreateElectiveDisciplineDto,
   CreateElectivePeriodDto,
@@ -42,26 +47,33 @@ import {
 import {
   buildElectiveResultsCsv,
   buildElectiveResultsXlsx,
+  ElectiveExportResults,
 } from './elective-results-exporter';
 import {
+  ACTIVE_SELECTION_STATUSES,
   ElectiveDiscipline,
   ElectiveDisciplineDocument,
   ElectiveDisciplineStatus,
   ElectiveSelection,
+  ElectiveSelectionCancelReason,
   ElectiveSelectionDocument,
   ElectiveSelectionPeriod,
   ElectiveSelectionPeriodDocument,
   ElectiveSelectionPeriodStatus,
+  ElectiveSelectionStatus,
 } from './schemas';
 import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { computeElectivePhase, ElectivePhase } from './elective-phase';
 
 type ReferenceView = {
   id: string;
   name?: string;
   code?: string;
 };
+
+type TermView = { id: string; academicYear?: string; termNumber?: 1 | 2 };
 
 export type ElectiveDisciplineView = {
   id: string;
@@ -70,7 +82,7 @@ export type ElectiveDisciplineView = {
   description?: string;
   department: ReferenceView;
   teacher?: ReferenceView | null;
-  semester: number;
+  term: TermView;
   credits: number;
   capacity: number;
   enrolledCount: number;
@@ -79,13 +91,14 @@ export type ElectiveDisciplineView = {
   createdBy: string;
   createdAt?: string;
   updatedAt?: string;
+  cancelReason?: string;
+  cancelledAt?: string;
 };
 
 export type ElectivePeriodView = {
   id: string;
   title: string;
-  academicYear: string;
-  semester: number;
+  term: TermView;
   startsAt: string;
   endsAt: string;
   status: ElectiveSelectionPeriodStatus;
@@ -106,12 +119,16 @@ export type ElectiveSelectionView = {
   student: ReferenceView;
   group: ReferenceView;
   selectedAt: string;
+  status: ElectiveSelectionStatus;
+  cancelReason?: ElectiveSelectionCancelReason;
+  cancelledAt?: string;
   courseAssignmentId?: string;
   finalizedAt?: string;
 };
 
 export type ActiveElectivePeriodView = {
   period: ElectivePeriodView;
+  phase: ElectivePhase;
   disciplines: ElectiveDisciplineView[];
   selections: ElectiveSelectionView[];
   selectedCount: number;
@@ -136,6 +153,10 @@ export type ElectivePeriodResultsView = {
       group: ReferenceView;
       selectedAt: string;
     }>;
+  }>;
+  cancelledByDiscipline: Array<{
+    discipline: ElectiveDisciplineView;
+    cancelledCount: number;
   }>;
 };
 
@@ -196,8 +217,18 @@ export class ElectiveDisciplinesService {
     private readonly userModel: Model<UserDocument>,
     private readonly usersService: UsersService,
     private readonly notificationsService: NotificationsService,
+    private readonly academicTerms: AcademicTermsService,
+    private readonly configService: ConfigService,
     private readonly auditLogService?: AuditLogService,
   ) {}
+
+  private async resolveTermId(termId?: string): Promise<Types.ObjectId> {
+    if (termId) {
+      const term = await this.academicTerms.findById(termId);
+      return term._id;
+    }
+    return (await this.academicTerms.requireCurrent())._id;
+  }
 
   async createDiscipline(
     dto: CreateElectiveDisciplineDto,
@@ -219,7 +250,7 @@ export class ElectiveDisciplinesService {
       description: this.trimOptional(dto.description),
       department: departmentId,
       teacher: teacherId,
-      semester: dto.semester,
+      term: await this.resolveTermId(dto.termId),
       credits: dto.credits,
       capacity: dto.capacity,
       enrolledCount: 0,
@@ -238,7 +269,7 @@ export class ElectiveDisciplinesService {
 
     const filter: Record<string, unknown> = {};
     if (query.status) filter.status = query.status;
-    if (query.semester) filter.semester = query.semester;
+    if (query.termId) filter.term = this.toObjectId(query.termId);
 
     if (query.departmentId) {
       const departmentId = this.toObjectId(query.departmentId);
@@ -252,7 +283,8 @@ export class ElectiveDisciplinesService {
       .find(filter)
       .populate('department')
       .populate('teacher')
-      .sort({ semester: 1, title: 1 })
+      .populate('term')
+      .sort({ title: 1 })
       .exec();
 
     return disciplines.map((discipline) => this.formatDiscipline(discipline));
@@ -300,7 +332,9 @@ export class ElectiveDisciplinesService {
     if (dto.description !== undefined) {
       discipline.description = this.trimOptional(dto.description);
     }
-    if (dto.semester !== undefined) discipline.semester = dto.semester;
+    if (dto.termId !== undefined) {
+      discipline.term = await this.resolveTermId(dto.termId);
+    }
     if (dto.credits !== undefined) discipline.credits = dto.credits;
     if (dto.capacity !== undefined) {
       if (dto.capacity < discipline.enrolledCount) {
@@ -319,18 +353,231 @@ export class ElectiveDisciplinesService {
     id: string,
     dto: SetElectiveDisciplineStatusDto,
     user: AuthenticatedUser,
+    audit?: DomainAuditContext,
   ): Promise<ElectiveDisciplineView> {
-    this.ensureDisciplineManager(user);
+    if (dto.status === ElectiveDisciplineStatus.CANCELLED) {
+      return this.cancelDiscipline(id, dto.reason ?? '', user, audit);
+    }
 
+    this.ensureDisciplineManager(user);
     const discipline = await this.getDisciplineOrThrow(id);
+    if (discipline.status === ElectiveDisciplineStatus.CANCELLED) {
+      throw new BadRequestException('Скасовану дисципліну не можна змінити');
+    }
     await this.ensureCanManageDepartment(
       user,
       this.toObjectId(this.idToString(discipline.department)),
     );
 
+    const previousStatus = discipline.status;
     discipline.status = dto.status;
     await discipline.save();
+    await audit?.record({
+      action: AUDIT_ACTIONS.ELECTIVE_DISCIPLINE_STATUS_CHANGE,
+      targetEntity: 'elective_discipline',
+      targetId: this.idToString(discipline._id),
+      details: {
+        code: discipline.code,
+        before: { status: previousStatus },
+        after: { status: dto.status },
+      },
+    });
     return this.findDisciplineView(discipline._id);
+  }
+
+  async cancelDiscipline(
+    id: string,
+    reason: string,
+    user: AuthenticatedUser,
+    audit?: DomainAuditContext,
+  ): Promise<ElectiveDisciplineView> {
+    this.ensureDisciplineManager(user);
+    const trimmedReason = this.trimRequired(
+      reason,
+      'Вкажіть причину скасування',
+    );
+    const discipline = await this.getDisciplineOrThrow(id);
+    const departmentId = this.toObjectId(
+      this.idToString(discipline.department),
+    );
+    await this.ensureCanManageDepartment(user, departmentId);
+
+    if (discipline.status !== ElectiveDisciplineStatus.ACTIVE) {
+      throw new BadRequestException('Скасувати можна лише активну дисципліну');
+    }
+
+    // Spec §5.1 / criterion #2: 409 if the discipline's period is already finalized.
+    // There's no direct discipline → period reference in the model (§4.1), so the link
+    // is derived via this discipline's selections. Checking for the presence of ENROLLED selections
+    // is NOT equivalent: the period can be finalized while all selections of this discipline
+    // are cancelled as incomplete_set.
+    const periodIds = (await this.selectionModel
+      .distinct('period', { discipline: discipline._id })
+      .exec()) as Types.ObjectId[];
+    if (periodIds.length > 0) {
+      const finalizedFilter: Record<string, unknown> = {
+        _id: { $in: periodIds },
+        status: ElectiveSelectionPeriodStatus.FINALIZED,
+      };
+      const finalized = await this.periodModel.exists(finalizedFilter).exec();
+      if (finalized) {
+        throw new ConflictException(
+          'Період вибору вже фіналізовано — дисципліну не можна скасувати',
+        );
+      }
+    }
+
+    const now = new Date();
+
+    // Step 1 (point of no return): atomic conditional transition ACTIVE →
+    // CANCELLED — BEFORE the selections cascade. With no transactions in this codebase this
+    // minimizes the failure window: if the process crashes right here, the discipline either
+    // stays ACTIVE (and a retry safely repeats everything from the start),
+    // or is already CANCELLED (and a retry falls on the condition below instead of
+    // silently counting affectedSelections as 0 and skipping the notification —
+    // as used to happen when the cascade ran first and the flip ran last).
+    const cancelledDiscipline = await this.disciplineModel
+      .findOneAndUpdate(
+        { _id: discipline._id, status: ElectiveDisciplineStatus.ACTIVE },
+        {
+          $set: {
+            status: ElectiveDisciplineStatus.CANCELLED,
+            cancelledAt: now,
+            cancelledBy: this.toObjectId(user.sub),
+            cancelReason: trimmedReason,
+            enrolledCount: 0,
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!cancelledDiscipline) {
+      throw new ConflictException('Дисципліну вже скасовано');
+    }
+
+    // Step 2: cascade. affectedSelections is counted from the updateMany result
+    // (not from a read before the mutation) — otherwise a retry after a crash between
+    // step 1 and step 2 would report 0 affected selections.
+    const cascadeResult = await this.selectionModel
+      .updateMany(
+        {
+          discipline: discipline._id,
+          status: ElectiveSelectionStatus.SELECTED,
+        },
+        {
+          $set: {
+            status: ElectiveSelectionStatus.CANCELLED,
+            cancelReason: 'discipline_cancelled',
+            cancelledAt: now,
+          },
+        },
+      )
+      .exec();
+    const affectedSelections = cascadeResult.modifiedCount;
+
+    const affected = await this.selectionModel
+      .find({
+        discipline: discipline._id,
+        cancelReason: 'discipline_cancelled',
+        cancelledAt: now,
+      })
+      .select('_id student period')
+      .lean<
+        Array<{
+          _id: Types.ObjectId;
+          student: Types.ObjectId;
+          period: Types.ObjectId;
+        }>
+      >()
+      .exec();
+
+    await this.notifyDisciplineCancelled(
+      discipline,
+      trimmedReason,
+      affected,
+      departmentId,
+    );
+    await audit?.record({
+      action: AUDIT_ACTIONS.ELECTIVE_DISCIPLINE_STATUS_CHANGE,
+      targetEntity: 'elective_discipline',
+      targetId: this.idToString(discipline._id),
+      // AUD-003: only a count of affected selections, no student list
+      details: {
+        code: discipline.code,
+        reason: trimmedReason,
+        affectedSelections,
+        before: { status: ElectiveDisciplineStatus.ACTIVE },
+        after: { status: ElectiveDisciplineStatus.CANCELLED },
+      },
+    });
+    return this.findDisciplineView(discipline._id);
+  }
+
+  private async notifyDisciplineCancelled(
+    discipline: ElectiveDisciplineDocument,
+    reason: string,
+    affected: Array<{ student: Types.ObjectId }>,
+    departmentId: Types.ObjectId,
+  ): Promise<void> {
+    try {
+      const studentIds = [
+        ...new Set(affected.map((item) => this.idToString(item.student))),
+      ];
+      const department = await this.departmentModel
+        .findById(departmentId)
+        .select('faculty')
+        .lean<{ faculty?: Types.ObjectId }>()
+        .exec();
+      const facultyDepartmentIds = department?.faculty
+        ? (
+            await this.departmentModel
+              .find({ faculty: department.faculty })
+              .select('_id')
+              .lean<Array<{ _id: Types.ObjectId }>>()
+              .exec()
+          ).map((d) => d._id)
+        : [departmentId];
+      const deansFilter: Record<string, unknown> = {
+        role: Role.DEAN,
+        status: 'active',
+        'teacherProfile.department': { $in: facultyDepartmentIds },
+      };
+      const deans = await this.userModel
+        .find(deansFilter)
+        .select('_id')
+        .lean<Array<{ _id: Types.ObjectId }>>()
+        .exec();
+
+      const disciplineId = this.idToString(discipline._id);
+      await this.notificationsService.createMany([
+        ...studentIds.map((userId) => ({
+          title: 'Вибіркову дисципліну скасовано',
+          message: `«${discipline.title}» скасовано: ${reason}. Оберіть іншу дисципліну, якщо період ще відкритий.`,
+          type: NotificationType.ELECTIVE,
+          targetType: 'all' as const,
+          userId,
+          actionUrl: '/electives',
+          entityType: 'elective',
+          entityId: disciplineId,
+          important: true,
+        })),
+        ...deans.map((dean) => ({
+          title: 'Скасовано вибіркову дисципліну',
+          message: `«${discipline.title}» (${discipline.code}) скасовано. Заторкнуто студентів: ${studentIds.length}.`,
+          type: NotificationType.ELECTIVE,
+          targetType: 'all' as const,
+          userId: this.idToString(dean._id),
+          actionUrl: '/electives/admin',
+          entityType: 'elective',
+          entityId: disciplineId,
+          important: false,
+        })),
+      ]);
+    } catch (error) {
+      this.logger.warn(
+        `Elective cancellation notification skipped: ${error instanceof Error ? error.message : 'unknown error'}`,
+      );
+    }
   }
 
   async createPeriod(
@@ -345,8 +592,7 @@ export class ElectiveDisciplinesService {
 
     const period = await this.periodModel.create({
       title: this.trimRequired(dto.title, 'Назва періоду обовʼязкова'),
-      academicYear: dto.academicYear.trim(),
-      semester: dto.semester,
+      term: await this.resolveTermId(dto.termId),
       startsAt: dates.startsAt,
       endsAt: dates.endsAt,
       status: ElectiveSelectionPeriodStatus.DRAFT,
@@ -364,14 +610,19 @@ export class ElectiveDisciplinesService {
   ): Promise<ElectivePeriodView[]> {
     this.ensurePeriodManager(user);
     await this.closeExpiredPeriods();
+    await this.remindDuePeriods(
+      new Date(),
+      Number(this.configService.get<string>('ELECTIVE_REMINDER_DAYS') ?? 3),
+    );
 
     const filter: Record<string, unknown> = {};
     if (query.status) filter.status = query.status;
-    if (query.semester) filter.semester = query.semester;
+    if (query.termId) filter.term = this.toObjectId(query.termId);
 
     const periods = await this.periodModel
       .find(filter)
       .populate('targetGroups')
+      .populate('term')
       .sort({ startsAt: -1, createdAt: -1 })
       .exec();
 
@@ -391,10 +642,9 @@ export class ElectiveDisciplinesService {
     if (dto.title !== undefined) {
       period.title = this.trimRequired(dto.title, 'Назва періоду обовʼязкова');
     }
-    if (dto.academicYear !== undefined) {
-      period.academicYear = dto.academicYear.trim();
+    if (dto.termId !== undefined) {
+      period.term = await this.resolveTermId(dto.termId);
     }
-    if (dto.semester !== undefined) period.semester = dto.semester;
     if (dto.startsAt !== undefined || dto.endsAt !== undefined) {
       const dates = this.normalizePeriodDates(
         dto.startsAt ?? period.startsAt.toISOString(),
@@ -478,8 +728,8 @@ export class ElectiveDisciplinesService {
         targetId: view.id,
         details: {
           title: view.title,
-          academicYear: view.academicYear,
-          semester: view.semester,
+          academicYear: view.term.academicYear,
+          termNumber: view.term.termNumber,
           targetGroupCount: view.targetGroups.length,
           before: { status: ElectiveSelectionPeriodStatus.DRAFT },
           after: { status: view.status },
@@ -523,8 +773,8 @@ export class ElectiveDisciplinesService {
         targetId: view.id,
         details: {
           title: view.title,
-          academicYear: view.academicYear,
-          semester: view.semester,
+          academicYear: view.term.academicYear,
+          termNumber: view.term.termNumber,
           before: { status: ElectiveSelectionPeriodStatus.ACTIVE },
           after: { status: view.status },
         },
@@ -605,17 +855,74 @@ export class ElectiveDisciplinesService {
 
     try {
       const selections = await this.selectionModel
-        .find({ period: period._id })
+        .find({ period: period._id, status: ElectiveSelectionStatus.SELECTED })
         .populate({
           path: 'discipline',
-          populate: [{ path: 'department' }, { path: 'teacher' }],
+          populate: [
+            { path: 'department' },
+            { path: 'teacher' },
+            { path: 'term' },
+          ],
         })
         .populate('student')
         .populate('group')
         .exec();
 
-      const buckets = this.groupSelectionsForFinalization(selections);
-      await this.validateFinalizationBuckets(buckets);
+      const countByStudent = new Map<string, number>();
+      for (const s of selections) {
+        const key = this.idToString(s.student);
+        countByStudent.set(key, (countByStudent.get(key) ?? 0) + 1);
+      }
+      const incompleteStudentIds = [...countByStudent.entries()]
+        .filter(([, count]) => count < period.requiredChoices)
+        .map(([id]) => this.toObjectId(id));
+      if (incompleteStudentIds.length > 0) {
+        await this.selectionModel
+          .updateMany(
+            {
+              period: period._id,
+              student: { $in: incompleteStudentIds },
+              status: ElectiveSelectionStatus.SELECTED,
+            },
+            {
+              $set: {
+                status: ElectiveSelectionStatus.CANCELLED,
+                cancelReason: 'incomplete_set',
+                cancelledAt: finalizedAt,
+              },
+            },
+          )
+          .exec();
+
+        const incompleteSelections = selections.filter((s) =>
+          incompleteStudentIds.some((id) =>
+            id.equals(this.toObjectId(this.idToString(s.student))),
+          ),
+        );
+        for (const s of incompleteSelections) {
+          const disciplineId = this.toObjectId(
+            this.idToString((s.discipline as ElectiveDisciplineDocument)._id),
+          );
+          await this.disciplineModel
+            .updateOne(
+              { _id: disciplineId, enrolledCount: { $gt: 0 } },
+              { $inc: { enrolledCount: -1 } },
+            )
+            .exec();
+        }
+      }
+      const completeSelections = selections.filter(
+        (s) =>
+          !incompleteStudentIds.some((id) =>
+            id.equals(this.toObjectId(this.idToString(s.student))),
+          ),
+      );
+
+      const buckets = this.groupSelectionsForFinalization(completeSelections);
+      await this.validateFinalizationBuckets(
+        buckets,
+        this.toObjectId(this.idToString(period.term)),
+      );
 
       const courseAssignments: ElectivePeriodFinalizationView['courseAssignments'] =
         [];
@@ -634,8 +941,9 @@ export class ElectiveDisciplinesService {
                 name: discipline.title,
                 code: discipline.code,
                 department: departmentId,
-                semester: discipline.semester,
                 credits: discipline.credits,
+                status: CourseStatus.ACTIVE,
+                createdBy: finalizedBy,
               },
             },
             {
@@ -649,6 +957,14 @@ export class ElectiveDisciplinesService {
 
         if (!course) {
           throw new NotFoundException('Не вдалося створити курс дисципліни');
+        }
+        if (course.status === CourseStatus.ARCHIVED) {
+          // §7.4: no new assignment; the administrator does a restore and retries finalization
+          throw new ConflictException({
+            code: 'course_archived',
+            courseCode: course.code,
+            message: `Дисципліна ${course.code} архівована — відновіть її перед фіналізацією`,
+          });
         }
 
         this.ensureCourseMatchesDiscipline(course, discipline);
@@ -668,6 +984,7 @@ export class ElectiveDisciplinesService {
             { _id: { $in: bucket.selectionIds } },
             {
               $set: {
+                status: ElectiveSelectionStatus.ENROLLED,
                 courseAssignment: assignment._id,
                 finalizedAt,
                 finalizedBy,
@@ -715,11 +1032,15 @@ export class ElectiveDisciplinesService {
         );
       }
 
-      await this.notifyPeriodFinalized(finalizedPeriod, selections);
+      await this.notifyPeriodFinalized(
+        finalizedPeriod,
+        completeSelections,
+        incompleteStudentIds,
+      );
 
       const result = {
         period: await this.findPeriodView(finalizedPeriod._id),
-        totalSelections: selections.length,
+        totalSelections: completeSelections.length,
         courseAssignments,
       };
       await audit?.record({
@@ -728,8 +1049,8 @@ export class ElectiveDisciplinesService {
         targetId: result.period.id,
         details: {
           title: result.period.title,
-          academicYear: result.period.academicYear,
-          semester: result.period.semester,
+          academicYear: result.period.term.academicYear,
+          termNumber: result.period.term.termNumber,
           before: { status: ElectiveSelectionPeriodStatus.CLOSED },
           after: { status: result.period.status },
           totalSelections: result.totalSelections,
@@ -750,41 +1071,60 @@ export class ElectiveDisciplinesService {
       throw new ForbiddenException('Вибір дисциплін доступний лише студентам');
     }
 
-    await this.closeExpiredPeriods();
-
-    const profile = await this.usersService.findOne(user.sub);
-    const groupId = profile.studentProfile?.group;
-    if (!groupId) {
+    const term = await this.academicTerms.getCurrent();
+    if (!term) {
       return [];
     }
 
-    const groupObjectId = this.toObjectId(groupId);
+    await this.closeExpiredPeriods();
+    await this.remindDuePeriods(
+      new Date(),
+      Number(this.configService.get<string>('ELECTIVE_REMINDER_DAYS') ?? 3),
+    );
+
+    const profile = await this.usersService.getActiveStudentProfile(user.sub);
+    if (!profile) {
+      return [];
+    }
+
+    const groupObjectId = this.toObjectId(this.idToString(profile.group._id));
     const now = new Date();
     const periods = await this.periodModel
       .find({
-        status: ElectiveSelectionPeriodStatus.ACTIVE,
-        startsAt: { $lte: now },
-        endsAt: { $gte: now },
+        term: term._id,
+        status: {
+          $in: [
+            ElectiveSelectionPeriodStatus.ACTIVE,
+            ElectiveSelectionPeriodStatus.CLOSED,
+            ElectiveSelectionPeriodStatus.FINALIZED,
+          ],
+        },
         targetGroups: groupObjectId,
       })
       .populate('targetGroups')
-      .sort({ endsAt: 1 })
+      .populate('term')
+      .sort({ startsAt: 1 })
       .exec();
 
     if (periods.length === 0) {
       return [];
     }
 
-    const semesters = [...new Set(periods.map((period) => period.semester))];
     const [disciplines, selections] = await Promise.all([
       this.disciplineModel
         .find({
-          status: ElectiveDisciplineStatus.ACTIVE,
-          semester: { $in: semesters },
+          status: {
+            $in: [
+              ElectiveDisciplineStatus.ACTIVE,
+              ElectiveDisciplineStatus.CANCELLED,
+            ],
+          },
+          term: term._id,
         })
         .populate('department')
         .populate('teacher')
-        .sort({ semester: 1, title: 1 })
+        .populate('term')
+        .sort({ title: 1 })
         .exec(),
       this.selectionModel
         .find({
@@ -793,23 +1133,20 @@ export class ElectiveDisciplinesService {
         })
         .populate({
           path: 'discipline',
-          populate: [{ path: 'department' }, { path: 'teacher' }],
+          populate: [
+            { path: 'department' },
+            { path: 'teacher' },
+            { path: 'term' },
+          ],
         })
         .populate('group')
         .sort({ selectedAt: 1 })
         .exec(),
     ]);
 
-    const disciplinesBySemester = new Map<
-      number,
-      ElectiveDisciplineDocument[]
-    >();
-    for (const discipline of disciplines) {
-      disciplinesBySemester.set(discipline.semester, [
-        ...(disciplinesBySemester.get(discipline.semester) ?? []),
-        discipline,
-      ]);
-    }
+    const disciplineViews = disciplines.map((discipline) =>
+      this.formatDiscipline(discipline),
+    );
 
     const selectionsByPeriod = new Map<string, ElectiveSelectionDocument[]>();
     for (const selection of selections) {
@@ -823,13 +1160,16 @@ export class ElectiveDisciplinesService {
     return periods.map((period) => {
       const periodSelections =
         selectionsByPeriod.get(this.idToString(period._id)) ?? [];
-      const selectedCount = periodSelections.length;
+      const selectedCount = periodSelections.filter((selection) =>
+        (
+          ACTIVE_SELECTION_STATUSES as readonly ElectiveSelectionStatus[]
+        ).includes(selection.status),
+      ).length;
 
       return {
         period: this.formatPeriod(period),
-        disciplines: (disciplinesBySemester.get(period.semester) ?? []).map(
-          (discipline) => this.formatDiscipline(discipline),
-        ),
+        phase: computeElectivePhase(period, now),
+        disciplines: disciplineViews,
         selections: periodSelections.map((selection) =>
           this.formatSelection(selection),
         ),
@@ -850,7 +1190,11 @@ export class ElectiveDisciplinesService {
       .find({ student: this.toObjectId(user.sub) })
       .populate({
         path: 'discipline',
-        populate: [{ path: 'department' }, { path: 'teacher' }],
+        populate: [
+          { path: 'department' },
+          { path: 'teacher' },
+          { path: 'term' },
+        ],
       })
       .populate('group')
       .sort({ selectedAt: -1 })
@@ -877,7 +1221,7 @@ export class ElectiveDisciplinesService {
     ]);
     this.ensurePeriodIsOpen(period);
 
-    const groupId = profile.studentProfile?.group;
+    const groupId = pickActiveStudentProfile(profile)?.group?.id;
     if (!groupId) {
       throw new BadRequestException('У профілі студента не вказана група');
     }
@@ -894,6 +1238,7 @@ export class ElectiveDisciplinesService {
         .find({
           period: period._id,
           student: studentId,
+          status: { $in: ACTIVE_SELECTION_STATUSES },
         })
         .select('discipline choiceSlot')
         .lean<ExistingSelectionQuota[]>()
@@ -907,9 +1252,9 @@ export class ElectiveDisciplinesService {
     if (discipline.status !== ElectiveDisciplineStatus.ACTIVE) {
       throw new BadRequestException('Дисципліна недоступна для вибору');
     }
-    if (discipline.semester !== period.semester) {
+    if (this.idToString(discipline.term) !== this.idToString(period.term)) {
       throw new BadRequestException(
-        'Дисципліна не належить до семестру цього періоду вибору',
+        'Дисципліна не належить до навчального періоду цього періоду вибору',
       );
     }
     if (
@@ -931,7 +1276,7 @@ export class ElectiveDisciplinesService {
         {
           _id: disciplineId,
           status: ElectiveDisciplineStatus.ACTIVE,
-          semester: period.semester,
+          term: period.term,
           $expr: { $lt: ['$enrolledCount', '$capacity'] },
         },
         { $inc: { enrolledCount: 1 } },
@@ -967,7 +1312,11 @@ export class ElectiveDisciplinesService {
       .findById(selection._id)
       .populate({
         path: 'discipline',
-        populate: [{ path: 'department' }, { path: 'teacher' }],
+        populate: [
+          { path: 'department' },
+          { path: 'teacher' },
+          { path: 'term' },
+        ],
       })
       .populate('group')
       .exec();
@@ -1008,11 +1357,22 @@ export class ElectiveDisciplinesService {
     this.ensurePeriodIsOpen(period);
 
     const selection = await this.selectionModel
-      .findOneAndDelete({
-        _id: this.toObjectId(selectionId),
-        period: period._id,
-        student: this.toObjectId(user.sub),
-      })
+      .findOneAndUpdate(
+        {
+          _id: this.toObjectId(selectionId),
+          period: period._id,
+          student: this.toObjectId(user.sub),
+          status: ElectiveSelectionStatus.SELECTED,
+        },
+        {
+          $set: {
+            status: ElectiveSelectionStatus.CANCELLED,
+            cancelReason: 'student',
+            cancelledAt: new Date(),
+          },
+        },
+        { returnDocument: 'after' },
+      )
       .exec();
 
     if (!selection) {
@@ -1056,7 +1416,11 @@ export class ElectiveDisciplinesService {
       .find({ period: period._id })
       .populate({
         path: 'discipline',
-        populate: [{ path: 'department' }, { path: 'teacher' }],
+        populate: [
+          { path: 'department' },
+          { path: 'teacher' },
+          { path: 'term' },
+        ],
       })
       .populate('student')
       .populate('group')
@@ -1077,11 +1441,28 @@ export class ElectiveDisciplinesService {
       }>;
     };
     const grouped = new Map<string, ResultBucket>();
+    const cancelledByDiscipline = new Map<
+      string,
+      { discipline: ElectiveDisciplineView; cancelledCount: number }
+    >();
+    const activeSelections: ElectiveSelectionDocument[] = [];
 
     for (const selection of selections) {
       const discipline = this.formatDiscipline(
         selection.discipline as ElectiveDisciplineDocument,
       );
+
+      if (selection.status === ElectiveSelectionStatus.CANCELLED) {
+        const cancelledBucket = cancelledByDiscipline.get(discipline.id) ?? {
+          discipline,
+          cancelledCount: 0,
+        };
+        cancelledBucket.cancelledCount += 1;
+        cancelledByDiscipline.set(discipline.id, cancelledBucket);
+        continue;
+      }
+
+      activeSelections.push(selection);
       let disciplineBucket = grouped.get(discipline.id);
       if (!disciplineBucket) {
         disciplineBucket = {
@@ -1110,30 +1491,30 @@ export class ElectiveDisciplinesService {
     }
 
     const uniqueStudentIds = new Set(
-      selections.map((selection) => this.idToString(selection.student)),
+      activeSelections.map((selection) => this.idToString(selection.student)),
     );
     const targetStudentCount = await this.userModel
       .countDocuments({
         role: Role.STUDENT,
         status: 'active',
-        'studentProfile.group': {
-          $in: period.targetGroups.map((group) =>
+        ...activeStudentsInGroups(
+          period.targetGroups.map((group) =>
             this.toObjectId(this.idToString(group)),
-          ) as unknown as Group[],
-        },
+          ),
+        ),
       })
       .exec();
     const expectedSelections = targetStudentCount * period.requiredChoices;
 
     return {
       period: await this.findPeriodView(period._id),
-      totalSelections: selections.length,
+      totalSelections: activeSelections.length,
       totalStudents: uniqueStudentIds.size,
       expectedSelections,
       completionRate:
         expectedSelections === 0
           ? 0
-          : Math.min(100, (selections.length / expectedSelections) * 100),
+          : Math.min(100, (activeSelections.length / expectedSelections) * 100),
       disciplines: [...grouped.values()].map((item) => ({
         discipline: item.discipline,
         selectedCount: item.selectedCount,
@@ -1141,6 +1522,7 @@ export class ElectiveDisciplinesService {
         groups: [...item.groups.values()],
         students: item.students,
       })),
+      cancelledByDiscipline: [...cancelledByDiscipline.values()],
     };
   }
 
@@ -1150,11 +1532,24 @@ export class ElectiveDisciplinesService {
     format: SpreadsheetExportFormat,
   ): Promise<SpreadsheetExportArtifact> {
     const results = await this.getPeriodResults(periodId, user);
+    const exportResults: ElectiveExportResults = {
+      ...results,
+      period: {
+        title: results.period.title,
+        academicYear: results.period.term.academicYear ?? '',
+        termNumber: results.period.term.termNumber ?? 0,
+        startsAt: results.period.startsAt,
+        endsAt: results.period.endsAt,
+        status: results.period.status,
+        requiredChoices: results.period.requiredChoices,
+        targetGroups: results.period.targetGroups,
+      },
+    };
     return buildSpreadsheetExportArtifact({
       filename: `elective-period-${periodId}-results`,
       format,
-      buildCsv: () => buildElectiveResultsCsv(results),
-      buildXlsx: () => buildElectiveResultsXlsx(results),
+      buildCsv: () => buildElectiveResultsCsv(exportResults),
+      buildXlsx: () => buildElectiveResultsXlsx(exportResults),
     });
   }
 
@@ -1200,6 +1595,7 @@ export class ElectiveDisciplinesService {
         period: params.period._id,
         student: params.studentId,
         discipline: params.disciplineId,
+        status: { $in: ACTIVE_SELECTION_STATUSES },
       })
       .select('_id')
       .lean()
@@ -1361,6 +1757,7 @@ export class ElectiveDisciplinesService {
       .findById(id)
       .populate('department')
       .populate('teacher')
+      .populate('term')
       .exec();
 
     if (!discipline) {
@@ -1376,6 +1773,7 @@ export class ElectiveDisciplinesService {
     const period = await this.periodModel
       .findById(id)
       .populate('targetGroups')
+      .populate('term')
       .exec();
 
     if (!period) {
@@ -1462,6 +1860,97 @@ export class ElectiveDisciplinesService {
     }
   }
 
+  /**
+   * Lazy reminder about the approaching discipline-selection deadline (spec
+   * §7.1/§9.1). There's no scheduler (Р8) — the method runs at the start of
+   * period list reads (findActiveForStudent, listPeriods).
+   * Idempotency — a conditional findOneAndUpdate on a single document.
+   */
+  async remindDuePeriods(now = new Date(), days: number): Promise<number> {
+    const deadline = new Date(now.getTime() + days * 24 * 3_600_000);
+    let reminded = 0;
+    for (;;) {
+      const period = await this.periodModel
+        .findOneAndUpdate(
+          {
+            status: ElectiveSelectionPeriodStatus.ACTIVE,
+            startsAt: { $lte: now },
+            endsAt: { $gt: now, $lte: deadline },
+            $or: [
+              { reminderSentAt: null },
+              { reminderSentAt: { $exists: false } },
+            ],
+          },
+          { $set: { reminderSentAt: now } },
+          { returnDocument: 'after' },
+        )
+        .exec();
+      if (!period) {
+        return reminded;
+      }
+      reminded += 1;
+
+      const groupIds = period.targetGroups.map((group) =>
+        this.toObjectId(this.idToString(group)),
+      );
+      const students = await this.userModel
+        // contract of plan 01 (`users/student-profile.filters.ts`)
+        .find({
+          role: Role.STUDENT,
+          status: 'active',
+          ...activeStudentsInGroups(groupIds),
+        })
+        .select('_id')
+        .lean<Array<{ _id: Types.ObjectId }>>()
+        .exec();
+      const counts = await this.selectionModel
+        .aggregate<{ _id: Types.ObjectId; count: number }>([
+          {
+            $match: {
+              period: period._id,
+              status: { $in: [...ACTIVE_SELECTION_STATUSES] },
+            },
+          },
+          { $group: { _id: '$student', count: { $sum: 1 } } },
+        ])
+        .exec();
+      const countByStudent = new Map(
+        counts.map((count) => [this.idToString(count._id), count.count]),
+      );
+      const pending = students.filter(
+        (student) =>
+          (countByStudent.get(this.idToString(student._id)) ?? 0) <
+          period.requiredChoices,
+      );
+      if (pending.length === 0) {
+        continue;
+      }
+      // A reminder notification must not break the read: log and
+      // continue (as in notifyPeriodPublished/notifyPeriodFinalized).
+      try {
+        await this.notificationsService.createMany(
+          pending.map((student) => ({
+            title: 'Завершується вибір дисциплін',
+            message: `Період «${period.title}» триває до ${period.endsAt.toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' })}. Оберіть ${period.requiredChoices} дисципліни.`,
+            type: NotificationType.ELECTIVE,
+            targetType: 'all' as const,
+            userId: this.idToString(student._id),
+            actionUrl: '/electives',
+            entityType: 'elective',
+            entityId: this.idToString(period._id),
+            important: true,
+          })),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'unknown error';
+        this.logger.warn(
+          `Elective reminder was not sent for period ${this.idToString(period._id)}: ${message}`,
+        );
+      }
+    }
+  }
+
   private async notifyPeriodPublished(
     period: ElectiveSelectionPeriodDocument,
   ): Promise<void> {
@@ -1471,7 +1960,7 @@ export class ElectiveDisciplinesService {
         period.targetGroups.map((group) => ({
           title: 'Відкрито вибір дисциплін',
           message: period.title,
-          type: NotificationType.ANNOUNCEMENT,
+          type: NotificationType.ELECTIVE,
           targetType: 'group',
           groupId: this.idToString(group),
           actionUrl: '/electives',
@@ -1527,9 +2016,25 @@ export class ElectiveDisciplinesService {
 
   private async validateFinalizationBuckets(
     buckets: Map<string, FinalizationBucket>,
+    periodTermId: Types.ObjectId,
   ): Promise<void> {
     if (buckets.size === 0) {
       return;
+    }
+
+    // Defensive re-check: selectDiscipline() already rejects a discipline
+    // whose term differs from the period's term, so this should never
+    // trigger in practice. Kept here in case a discipline's term changes
+    // (or data drifts) between selection and finalization.
+    for (const bucket of buckets.values()) {
+      if (
+        this.idToString(bucket.discipline.term) !==
+        this.idToString(periodTermId)
+      ) {
+        throw new BadRequestException(
+          `Дисципліна ${bucket.discipline.code} не належить до навчального періоду цього періоду вибору`,
+        );
+      }
     }
 
     const teacherIds = [
@@ -1584,10 +2089,15 @@ export class ElectiveDisciplinesService {
     course: CourseDocument,
     discipline: ElectiveDisciplineDocument,
   ): void {
+    // Course no longer carries a semester/term of its own (Task 6) — a Course
+    // is a catalog entry shared across terms; the term now lives on
+    // CourseAssignment (and, for electives, on ElectiveDiscipline/Period).
+    // That term-level match is validated separately in
+    // validateFinalizationBuckets(); this check only guards against reusing
+    // an elective's code for an unrelated existing course.
     const matches =
       this.idToString(course.department) ===
         this.idToString(discipline.department) &&
-      course.semester === discipline.semester &&
       course.credits === discipline.credits;
 
     if (!matches) {
@@ -1628,11 +2138,11 @@ export class ElectiveDisciplinesService {
     teacherId: Types.ObjectId;
     finalizedAt: Date;
   }): Promise<CourseAssignmentDocument> {
+    const termId = this.toObjectId(this.idToString(params.period.term));
     const filter = {
       course: params.courseId,
       group: params.groupId,
-      academicYear: params.period.academicYear,
-      semester: params.period.semester,
+      term: termId,
     };
     const periodId = this.idToString(params.period._id);
     const disciplineId = this.idToString(params.discipline._id);
@@ -1651,7 +2161,7 @@ export class ElectiveDisciplinesService {
         existingDisciplineId !== disciplineId
       ) {
         throw new ConflictException(
-          `Курс ${params.discipline.code} вже призначений цій групі на цей семестр`,
+          `Курс ${params.discipline.code} вже призначений цій групі на цей навчальний період`,
         );
       }
     }
@@ -1667,8 +2177,7 @@ export class ElectiveDisciplinesService {
       $setOnInsert: {
         course: params.courseId,
         group: params.groupId,
-        academicYear: params.period.academicYear,
-        semester: params.period.semester,
+        term: termId,
       },
       $addToSet: {
         enrolledStudents: { $each: params.studentIds },
@@ -1695,7 +2204,12 @@ export class ElectiveDisciplinesService {
     period: ElectiveSelectionPeriodDocument,
   ): Promise<ElectivePeriodFinalizationView> {
     const [totalSelections, assignments] = await Promise.all([
-      this.selectionModel.countDocuments({ period: period._id }).exec(),
+      this.selectionModel
+        .countDocuments({
+          period: period._id,
+          status: { $in: ACTIVE_SELECTION_STATUSES },
+        })
+        .exec(),
       this.courseAssignmentModel
         .find({
           source: CourseAssignmentSource.ELECTIVE,
@@ -1723,6 +2237,7 @@ export class ElectiveDisciplinesService {
   private async notifyPeriodFinalized(
     period: ElectiveSelectionPeriodDocument,
     selections: ElectiveSelectionDocument[],
+    incompleteStudentIds: Types.ObjectId[] = [],
   ): Promise<void> {
     try {
       const periodId = this.idToString(period._id);
@@ -1733,20 +2248,34 @@ export class ElectiveDisciplinesService {
             .filter((id) => Types.ObjectId.isValid(id)),
         ),
       ];
+      const incompleteIds = [
+        ...new Set(incompleteStudentIds.map((id) => this.idToString(id))),
+      ];
 
-      await this.notificationsService.createMany(
-        studentIds.map((studentId) => ({
+      await this.notificationsService.createMany([
+        ...studentIds.map((studentId) => ({
           title: 'Вибір дисциплін зафіксовано',
           message: `Ваш вибір у періоді "${period.title}" зафіксовано. Дисципліни додано до розділу "Мої дисципліни".`,
-          type: NotificationType.ANNOUNCEMENT,
-          targetType: 'all',
+          type: NotificationType.ELECTIVE,
+          targetType: 'all' as const,
           userId: studentId,
           actionUrl: '/courses',
           entityType: 'elective',
           entityId: periodId,
           important: true,
         })),
-      );
+        ...incompleteIds.map((studentId) => ({
+          title: 'Вибір не зараховано',
+          message: `У періоді "${period.title}" обрано менше дисциплін, ніж потрібно. Зверніться до деканату.`,
+          type: NotificationType.ELECTIVE,
+          targetType: 'all' as const,
+          userId: studentId,
+          actionUrl: '/electives',
+          entityType: 'elective',
+          entityId: periodId,
+          important: true,
+        })),
+      ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown error';
       this.logger.warn(
@@ -1852,6 +2381,22 @@ export class ElectiveDisciplinesService {
     return view;
   }
 
+  private termView(value: unknown): TermView {
+    if (value && typeof value === 'object' && 'academicYear' in value) {
+      const t = value as {
+        _id: unknown;
+        academicYear: string;
+        termNumber: 1 | 2;
+      };
+      return {
+        id: this.idToString(t._id),
+        academicYear: t.academicYear,
+        termNumber: t.termNumber,
+      };
+    }
+    return { id: this.idToString(value) };
+  }
+
   private teacherView(value: unknown): ReferenceView | null {
     if (!value) return null;
     const id = this.idToString(value);
@@ -1916,7 +2461,7 @@ export class ElectiveDisciplinesService {
       ...(description ? { description } : {}),
       department: this.referenceView(discipline.department, 'name'),
       teacher: this.teacherView(discipline.teacher),
-      semester: discipline.semester,
+      term: this.termView(discipline.term),
       credits: discipline.credits,
       capacity: discipline.capacity,
       enrolledCount: discipline.enrolledCount,
@@ -1929,6 +2474,12 @@ export class ElectiveDisciplinesService {
       ...(discipline.updatedAt
         ? { updatedAt: discipline.updatedAt.toISOString() }
         : {}),
+      ...(discipline.cancelReason
+        ? { cancelReason: discipline.cancelReason }
+        : {}),
+      ...(discipline.cancelledAt
+        ? { cancelledAt: discipline.cancelledAt.toISOString() }
+        : {}),
     };
   }
 
@@ -1938,8 +2489,7 @@ export class ElectiveDisciplinesService {
     return {
       id: this.idToString(period._id),
       title: period.title,
-      academicYear: period.academicYear,
-      semester: period.semester,
+      term: this.termView(period.term),
       startsAt: period.startsAt.toISOString(),
       endsAt: period.endsAt.toISOString(),
       status: period.status,
@@ -1976,6 +2526,13 @@ export class ElectiveDisciplinesService {
       student: this.studentView(selection.student),
       group: this.referenceView(selection.group, 'code'),
       selectedAt: selection.selectedAt.toISOString(),
+      status: selection.status ?? ElectiveSelectionStatus.SELECTED,
+      ...(selection.cancelReason
+        ? { cancelReason: selection.cancelReason }
+        : {}),
+      ...(selection.cancelledAt
+        ? { cancelledAt: selection.cancelledAt.toISOString() }
+        : {}),
       ...(selection.courseAssignment
         ? { courseAssignmentId: this.idToString(selection.courseAssignment) }
         : {}),

@@ -13,6 +13,7 @@ import { ExistsInDatabaseConstraint } from './common/validators/exists-in-databa
 import { SeedModule } from './seed-data/seed.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { AcademicTermsModule } from './academic-terms/academic-terms.module';
 import { ScheduleModule } from './schedule/schedule.module';
 import { CoursesModule } from './courses/courses.module';
 import { ReferencesModule } from './references/references.module';
@@ -103,6 +104,7 @@ function buildMongoUri(config: ConfigService): string {
     DatabaseMigrationsModule,
     AuthModule,
     UsersModule,
+    AcademicTermsModule,
     ScheduleModule,
     CoursesModule,
     ReferencesModule,

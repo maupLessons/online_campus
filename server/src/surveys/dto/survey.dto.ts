@@ -66,6 +66,12 @@ export class SurveyDto {
   @ApiPropertyOptional()
   expectedRecipients?: number;
 
+  @ApiPropertyOptional()
+  estimatedMinutes?: number;
+
+  @ApiPropertyOptional({ enum: ['manual', 'deadline'] })
+  closedReason?: 'manual' | 'deadline';
+
   @ApiPropertyOptional({ format: 'date-time' })
   createdAt?: string;
 

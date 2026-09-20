@@ -20,7 +20,10 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '../common/types/roles.enum';
-import { CreateNotificationDto } from './dto/create-notification.dto';
+import {
+  assertAdminCreatableType,
+  CreateNotificationDto,
+} from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
 import { NotificationsRealtimeService } from './notifications-realtime.service';
 import { NotificationQueryDto } from './dto/notification-query.dto';
@@ -53,9 +56,8 @@ export class NotificationsController {
   }
 
   @Get('unread-count')
-  async getUnreadCount(@Request() req: AuthenticatedRequest) {
-    const count = await this.notificationsService.getUnreadCount(req.user.sub);
-    return { count };
+  getUnreadCount(@Request() req: AuthenticatedRequest) {
+    return this.notificationsService.getUnreadCount(req.user.sub);
   }
 
   @Get('admin')
@@ -71,14 +73,16 @@ export class NotificationsController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  create(@Body() body: CreateNotificationDto) {
+  async create(@Body() body: CreateNotificationDto) {
+    assertAdminCreatableType(body.type);
     return this.notificationsService.create(body);
   }
 
   @Post('broadcast')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  broadcast(@Body() body: CreateNotificationDto) {
+  async broadcast(@Body() body: CreateNotificationDto) {
+    assertAdminCreatableType(body.type);
     return this.notificationsService.create(body);
   }
 
@@ -95,11 +99,14 @@ export class NotificationsController {
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles(Role.ADMIN)
-  update(
+  async update(
     @Param('id') id: string,
     @Body() body: UpdateNotificationDto,
     @Request() req: AuthenticatedRequest,
   ) {
+    if (body.type !== undefined) {
+      assertAdminCreatableType(body.type);
+    }
     return this.notificationsService.update(id, body, req.user.sub);
   }
 

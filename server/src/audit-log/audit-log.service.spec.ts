@@ -228,4 +228,28 @@ describe('AuditLogService', () => {
       ],
     });
   });
+
+  it('maps the academic domain to academic_term.* and student_profile.* actions', async () => {
+    const findQuery = {
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue([]),
+    };
+    auditModel.find.mockReturnValue(findQuery);
+    auditModel.countDocuments.mockReturnValue({
+      exec: jest.fn().mockResolvedValue(0),
+    });
+
+    await service.findAll({ domain: AuditLogDomain.ACADEMIC });
+
+    expect(auditModel.find).toHaveBeenCalledWith({
+      $or: [
+        { action: { $regex: '^academic_term\\.', $options: 'i' } },
+        { action: { $regex: '^student_profile\\.', $options: 'i' } },
+        { targetEntity: 'academic_term' },
+      ],
+    });
+  });
 });

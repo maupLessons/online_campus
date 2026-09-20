@@ -13,6 +13,11 @@ import {
 } from '../../courses/schemas';
 import { Department, Faculty } from '../../references/schemas';
 import { User, UserDocument } from '../../users/schemas';
+import {
+  activeStudentsInGroup,
+  activeStudentsInGroups,
+  pickActiveLeanStudentProfile,
+} from '../../users/student-profile.filters';
 
 type MongoFilter = Record<string, unknown>;
 
@@ -53,14 +58,9 @@ export class AcademicAccessService {
     const userId = this.toObjectId(user.sub);
 
     if (user.role === Role.STUDENT) {
-      const student = await this.userModel
-        .findById(userId)
-        .select('studentProfile.group')
-        .lean<{ studentProfile?: { group?: unknown } }>()
-        .exec();
-      const groupId = toId(student?.studentProfile?.group);
+      const groupId = await this.resolveActiveStudentGroupId(userId);
 
-      if (!Types.ObjectId.isValid(groupId)) {
+      if (!groupId || !Types.ObjectId.isValid(groupId)) {
         return this.emptyFilter();
       }
 
@@ -166,9 +166,7 @@ export class AcademicAccessService {
       });
     }
     if (groupIds.length > 0) {
-      visibleBranches.push({
-        'studentProfile.group': { $in: groupIds },
-      });
+      visibleBranches.push(activeStudentsInGroups(groupIds));
     }
 
     return { $or: visibleBranches };
@@ -279,9 +277,7 @@ export class AcademicAccessService {
     const rosterFilters: MongoFilter[] = [];
 
     if (standardGroupIds.length > 0) {
-      rosterFilters.push({
-        'studentProfile.group': { $in: standardGroupIds },
-      });
+      rosterFilters.push(activeStudentsInGroups(standardGroupIds));
     }
 
     for (const assignment of assignments) {
@@ -299,7 +295,7 @@ export class AcademicAccessService {
 
       rosterFilters.push({
         _id: { $in: enrolledStudents },
-        'studentProfile.group': new Types.ObjectId(groupId),
+        ...activeStudentsInGroup(new Types.ObjectId(groupId)),
       });
     }
 
@@ -387,6 +383,33 @@ export class AcademicAccessService {
           .filter((id) => Types.ObjectId.isValid(id)),
       ),
     ].map((id) => new Types.ObjectId(id));
+  }
+
+  // Duplicates the active-profile selection from `UsersService.getActiveStudentProfile`
+  // directly via `userModel`, to avoid introducing a circular module dependency
+  // (`UsersModule` already imports `AcademicAccessModule`).
+  private async resolveActiveStudentGroupId(
+    userId: Types.ObjectId,
+  ): Promise<string | null> {
+    const student = await this.userModel
+      .findById(userId)
+      .select('studentProfiles activeStudentProfileId')
+      .lean<{
+        studentProfiles?: Array<{
+          _id: Types.ObjectId;
+          group?: unknown;
+          status?: string;
+        }>;
+        activeStudentProfileId?: Types.ObjectId | null;
+      }>()
+      .exec();
+
+    const active = pickActiveLeanStudentProfile(
+      student?.studentProfiles,
+      student?.activeStudentProfileId,
+    );
+
+    return active ? toId(active.group) : null;
   }
 
   private toObjectId(value: string): Types.ObjectId {

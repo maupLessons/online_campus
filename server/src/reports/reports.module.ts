@@ -1,17 +1,10 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { AcademicTermsModule } from '../academic-terms/academic-terms.module';
 import { AuditLogModule } from '../audit-log/audit-log.module';
 import { AcademicAccessModule } from '../common/access/academic-access.module';
-import {
-  CourseAssignment,
-  CourseAssignmentSchema,
-  Grade,
-  GradeSchema,
-  LessonJournalEntry,
-  LessonJournalEntrySchema,
-} from '../courses/schemas';
+import { CourseAssignment, CourseAssignmentSchema } from '../courses/schemas';
 import { User, UserSchema } from '../users/schemas';
-import { ReportsAnalyticsService } from './reports-analytics.service';
 import { ReportsController } from './reports.controller';
 import { ReportsExportService } from './reports-export.service';
 import { ReportsScopeService } from './reports-scope.service';
@@ -21,20 +14,14 @@ import { ReportsService } from './reports.service';
   imports: [
     AuditLogModule,
     AcademicAccessModule,
+    AcademicTermsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: CourseAssignment.name, schema: CourseAssignmentSchema },
-      { name: Grade.name, schema: GradeSchema },
-      { name: LessonJournalEntry.name, schema: LessonJournalEntrySchema },
     ]),
   ],
   controllers: [ReportsController],
-  providers: [
-    ReportsService,
-    ReportsScopeService,
-    ReportsAnalyticsService,
-    ReportsExportService,
-  ],
+  providers: [ReportsService, ReportsScopeService, ReportsExportService],
   exports: [ReportsService],
 })
 export class ReportsModule {}

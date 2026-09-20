@@ -7,7 +7,6 @@ import {
 import { Role } from '../common/types/roles.enum';
 import { CourseAssignmentSource } from '../courses/schemas';
 import { ReportExportDataDto } from './dto';
-import { ReportsAnalyticsService } from './reports-analytics.service';
 import { ReportsScopeService } from './reports-scope.service';
 import { ReportsService } from './reports.service';
 import {
@@ -27,10 +26,6 @@ describe('ReportsService', () => {
     resolve: jest.fn(),
     countStudents: jest.fn(),
     describe: jest.fn(),
-  };
-  const analyticsService = {
-    getOverview: jest.fn(),
-    getCourseRows: jest.fn(),
   };
   let capturedExportReport: ReportExportDataDto | undefined;
   const exportService = {
@@ -62,44 +57,8 @@ describe('ReportsService', () => {
       assignmentCount: assignments.length,
       studentCount: 60,
     });
-    analyticsService.getOverview.mockResolvedValue({
-      summary: {
-        averageGrade: 84.13,
-        gradeCount: 30,
-        attendanceRate: 90,
-        attendanceRecords: 120,
-        lessonsRecorded: 12,
-        present: 90,
-        late: 9,
-        absent: 11,
-        excused: 10,
-      },
-      gradeTrend: [],
-      attendanceTrend: [],
-    });
-    analyticsService.getCourseRows.mockImplementation(
-      (items: AssignmentMetadata[]) =>
-        Promise.resolve(
-          items.map((item) => ({
-            courseAssignmentId: item.id,
-            courseName: item.courseName,
-            courseCode: item.courseCode,
-            groupCode: item.groupCode,
-            departmentName: item.departmentName,
-            facultyName: item.facultyName,
-            academicYear: item.academicYear,
-            semester: item.semester,
-            averageGrade: 84,
-            gradeCount: 10,
-            attendanceRate: 90,
-            attendanceRecords: 40,
-            lessonsRecorded: 4,
-          })),
-        ),
-    );
     service = new ReportsService(
       scopeService as unknown as ReportsScopeService,
-      analyticsService as unknown as ReportsAnalyticsService,
       exportService,
     );
   });
@@ -107,12 +66,9 @@ describe('ReportsService', () => {
   it('builds aggregate overview without course-row aggregation', async () => {
     const report = await service.getOverview({}, user);
 
-    expect(report.summary.averageGrade).toBe(84.13);
+    expect(report.summary.averageGrade).toBeNull();
+    expect(report.summary.gradeCount).toBe(0);
     expect(report.scope.studentCount).toBe(60);
-    expect(analyticsService.getOverview).toHaveBeenCalledWith(
-      expect.objectContaining({ assignments }),
-    );
-    expect(analyticsService.getCourseRows).not.toHaveBeenCalled();
   });
 
   it('aggregates only assignments from the requested course page', async () => {
@@ -121,10 +77,6 @@ describe('ReportsService', () => {
       user,
     );
 
-    expect(analyticsService.getCourseRows).toHaveBeenCalledWith(
-      [assignments[2]],
-      null,
-    );
     expect(result).toMatchObject({
       totalDocs: 3,
       page: 2,
@@ -134,7 +86,6 @@ describe('ReportsService', () => {
       hasNextPage: false,
     });
     expect(result.docs[0].courseName).toBe('Software Architecture');
-    expect(analyticsService.getOverview).not.toHaveBeenCalled();
     expect(scopeService.countStudents).not.toHaveBeenCalled();
   });
 
@@ -159,10 +110,6 @@ describe('ReportsService', () => {
       user,
     );
 
-    expect(analyticsService.getCourseRows).toHaveBeenCalledWith(
-      assignments,
-      null,
-    );
     expect(capturedExportReport?.courseBreakdown.totalDocs).toBe(
       assignments.length,
     );
@@ -172,7 +119,7 @@ describe('ReportsService', () => {
       SpreadsheetExportLocale.EN,
     );
     expect(exported.artifact.filename).toBe('academic-report.csv');
-    expect(exported.filters.academicYear).toBe('2025-2026');
+    expect(exported.filters.termId).toBe('term-1');
   });
 
   it('fails closed when a synchronous export is too large', async () => {
@@ -193,7 +140,6 @@ describe('ReportsService', () => {
         user,
       ),
     ).rejects.toBeInstanceOf(PayloadTooLargeException);
-    expect(analyticsService.getOverview).not.toHaveBeenCalled();
     expect(exportService.build).not.toHaveBeenCalled();
   });
 });
@@ -201,8 +147,7 @@ describe('ReportsService', () => {
 function assignment(courseName: string, groupCode: string): AssignmentMetadata {
   return {
     id: new Types.ObjectId().toHexString(),
-    academicYear: '2025-2026',
-    semester: 1,
+    term: { id: 'term-1', academicYear: '2025/2026', termNumber: 1 },
     source: CourseAssignmentSource.STANDARD,
     enrolledStudentIds: [],
     courseName,
@@ -223,14 +168,19 @@ function resolvedScope(
     allAssignments: selectedAssignments,
     selectedAssignments,
     filters: {
-      academicYears: ['2025-2026'],
-      semesters: [1],
+      terms: [
+        {
+          id: 'term-1',
+          label: '2025/2026 · 1',
+          academicYear: '2025/2026',
+          termNumber: 1,
+        },
+      ],
       departments: [],
       groups: [],
       courseAssignments: [],
       selected: {
-        academicYear: '2025-2026',
-        semester: null,
+        termId: 'term-1',
         departmentId: null,
         groupId: null,
         courseAssignmentId: null,

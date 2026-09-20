@@ -5,6 +5,7 @@
 - Базова ціль: RPO не більше 24 годин, RTO не більше 4 годин.
 - Для production з високою активністю рекомендовано managed MongoDB із PITR; цей runbook описує portable dump/restore для поточного Docker deployment.
 - Backup вважається успішним лише після пробного відновлення та перевірки `/api/health/ready`.
+- `/api/health/ready` повертає `degraded` (HTTP 200, `checks.academicTerm: 'missing'`), якщо не налаштовано поточний навчальний період; у production це блокує реліз. Це не non-2xx, тому alert на HTTP-код його не ловить — перед релізом перевіряти саме `status`/`checks.academicTerm` у тілі відповіді.
 
 ## Що резервувати
 

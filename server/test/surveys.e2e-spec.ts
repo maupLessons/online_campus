@@ -37,6 +37,29 @@ type Actor = {
   token: string;
 };
 
+function studentProfileFields(input: {
+  group: Types.ObjectId;
+  recordBookNumber: string;
+  year: number;
+  externalStudentId?: string;
+}) {
+  const _id = new Types.ObjectId();
+  return {
+    studentProfiles: [
+      {
+        _id,
+        externalStudentId: input.externalStudentId ?? input.recordBookNumber,
+        group: input.group,
+        recordBookNumber: input.recordBookNumber,
+        year: input.year,
+        status: 'active',
+        syncedAt: new Date(),
+      },
+    ],
+    activeStudentProfileId: _id,
+  };
+}
+
 type Fixture = {
   admin: Actor;
   deanA: Actor;
@@ -171,25 +194,25 @@ describe('Surveys (e2e)', () => {
     const deanB = await createActor(Role.DEAN, 'dean-b');
     const teacher = await createActor(Role.TEACHER, 'teacher');
     const studentA = await createActor(Role.STUDENT, 'student-a', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupAId,
         recordBookNumber: 'SURVEY-A-1',
         year: 1,
-      },
+      }),
     });
     const studentB = await createActor(Role.STUDENT, 'student-b', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupAId,
         recordBookNumber: 'SURVEY-A-2',
         year: 1,
-      },
+      }),
     });
     const outsider = await createActor(Role.STUDENT, 'outsider', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupBId,
         recordBookNumber: 'SURVEY-B-1',
         year: 1,
-      },
+      }),
     });
 
     return {
@@ -329,7 +352,9 @@ describe('Surveys (e2e)', () => {
       .expect(400);
 
     const published = await publishSurvey(fixture.deanA, draft.id);
-    expect(published.status).toBe(SurveyStatus.ACTIVE);
+    // startDate is in the future: publish schedules it instead of activating
+    // it immediately (spec §7.1 — replaces the old "always active" behavior).
+    expect(published.status).toBe(SurveyStatus.SCHEDULED);
     expect(published.startDate).toBe(futureStart);
 
     const activeList = await request(app.getHttpServer())
@@ -338,10 +363,11 @@ describe('Surveys (e2e)', () => {
       .expect(200);
     expect(activeList.body).toEqual([]);
 
+    // Scheduled surveys are hidden from respondents until lazily activated.
     await request(app.getHttpServer())
       .get(`/api/surveys/${draft.id}`)
       .set('Authorization', `Bearer ${fixture.studentA.token}`)
-      .expect(200);
+      .expect(404);
 
     await request(app.getHttpServer())
       .post(`/api/surveys/${draft.id}/respond`)
@@ -475,7 +501,7 @@ describe('Surveys (e2e)', () => {
 
     await collection('User').updateOne(
       { _id: fixture.outsider.id },
-      { $set: { 'studentProfile.group': fixture.groupAId } },
+      { $set: { 'studentProfiles.0.group': fixture.groupAId } },
     );
 
     const results = await request(app.getHttpServer())

@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import {
-  Assignment,
-  AssignmentSchema,
   Course,
   CourseAssignment,
   CourseAssignmentSchema,
@@ -21,8 +19,6 @@ import {
   NotificationSchema,
 } from '../notifications/schemas/notification.schema';
 import { AcademicAccessModule } from '../common/access/academic-access.module';
-import { ScheduleModule } from '../schedule/schedule.module';
-import { ScheduleEntry, ScheduleEntrySchema } from '../schedule/schemas';
 import { Survey, SurveySchema } from '../surveys/schemas';
 import { User, UserSchema } from '../users/schemas';
 import { ReferencesController } from './references.controller';
@@ -61,7 +57,6 @@ import { ReferencesAccessService } from './references-access.service';
       { name: User.name, schema: UserSchema },
       { name: Course.name, schema: CourseSchema },
       { name: CourseAssignment.name, schema: CourseAssignmentSchema },
-      { name: Assignment.name, schema: AssignmentSchema },
       { name: Survey.name, schema: SurveySchema },
       { name: ElectiveDiscipline.name, schema: ElectiveDisciplineSchema },
       {
@@ -70,9 +65,7 @@ import { ReferencesAccessService } from './references-access.service';
       },
       { name: ElectiveSelection.name, schema: ElectiveSelectionSchema },
       { name: Notification.name, schema: NotificationSchema },
-      { name: ScheduleEntry.name, schema: ScheduleEntrySchema },
     ]),
-    ScheduleModule,
     AcademicAccessModule,
   ],
   controllers: [ReferencesController],

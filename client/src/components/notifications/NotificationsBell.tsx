@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { Bell } from 'lucide-react';
 
 import {
@@ -16,6 +17,7 @@ function getUserId(user: User | null) {
 }
 
 export default function NotificationsBell() {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -27,7 +29,7 @@ export default function NotificationsBell() {
     userId ?? 'anonymous',
   );
 
-  const { data: count = 0 } = useQuery({
+  const { data: unread } = useQuery({
     queryKey: unreadCountQueryKey,
     queryFn: notificationsApi.getUnreadCount,
     enabled: isAuthChecked && Boolean(userId) && !isNotificationsPage,
@@ -40,6 +42,8 @@ export default function NotificationsBell() {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
     staleTime: 30_000,
   });
+  const count = unread?.count ?? 0;
+  const importantCount = unread?.importantCount ?? 0;
 
   useEffect(() => {
     if (!userId) {
@@ -75,13 +79,23 @@ export default function NotificationsBell() {
   return (
     <button
       onClick={handleOpenNotifications}
-      aria-label="Notifications"
+      aria-label={
+        importantCount > 0
+          ? t('notifications.bellImportantAria', { count, importantCount })
+          : t('notifications.bellAria', { count })
+      }
       className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
     >
       <Bell className="h-5 w-5 text-gray-600" aria-hidden="true" />
 
       {count > 0 && (
-        <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-medium text-white">
+        <span
+          className={`absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] font-medium text-white ${
+            importantCount > 0
+              ? 'bg-amber-500 ring-2 ring-amber-200'
+              : 'bg-red-500'
+          }`}
+        >
           {count > 99 ? '99+' : count}
         </span>
       )}

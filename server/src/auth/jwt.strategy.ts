@@ -17,6 +17,7 @@ interface JwtPayload {
   sub: string;
   login: string;
   role: string;
+  activeStudentProfileId?: string;
 }
 
 function isJwtPayload(payload: unknown): payload is JwtPayload {
@@ -73,6 +74,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new ForbiddenException('Обліковий запис заблоковано');
     }
 
-    return { sub: user.id, login: user.login, role: user.role };
+    return {
+      sub: user.id,
+      login: user.login,
+      role: user.role,
+      activeStudentProfileId:
+        typeof payload.activeStudentProfileId === 'string'
+          ? payload.activeStudentProfileId
+          : (user.activeStudentProfileId ?? undefined),
+    };
   }
 }

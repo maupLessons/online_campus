@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Plus, RotateCcw, Search } from 'lucide-react';
-import { Role, type Notification, type User } from '../../types';
+import { NOTIFICATION_TYPES, Role, type Notification, type User } from '../../types';
 import { useAuthStore } from '../../store/authStore';
 import CreateNotificationModal from '../../components/notifications/CreateNotificationModal';
 import NotificationItem from '../../components/notifications/NotificationItem';
@@ -13,16 +13,7 @@ import {
   type NotificationListFilters,
 } from '../../services/notificationsApi';
 
-const notificationTypes = [
-  'schedule_change',
-  'new_assignment',
-  'assignment_submitted',
-  'assignment_returned',
-  'new_survey',
-  'grade',
-  'announcement',
-  'system',
-] as const;
+const notificationTypes = NOTIFICATION_TYPES;
 
 const notificationTargets = [
   'all',
@@ -188,9 +179,18 @@ export default function NotificationsPage() {
   });
   const displayedNotifications = useMemo(
     () =>
-      notifications.filter((notification) =>
-        matchesNotificationFilters(notification, effectiveFilters),
-      ),
+      notifications
+        .filter((notification) =>
+          matchesNotificationFilters(notification, effectiveFilters),
+        )
+        .sort((a, b) => {
+          const aPriority = a.important && !a.readFlag ? 1 : 0;
+          const bPriority = b.important && !b.readFlag ? 1 : 0;
+          if (aPriority !== bPriority) return bPriority - aPriority;
+          return (
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        }),
     [effectiveFilters, notifications],
   );
 

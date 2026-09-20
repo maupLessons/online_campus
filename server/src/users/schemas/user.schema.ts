@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import mongoose, { Document, Types } from 'mongoose';
 import * as paginate from 'mongoose-paginate-v2';
 import { Role } from '../../common/types/roles.enum';
 import { StudentProfile, StudentProfileSchema } from './student-profile.schema';
@@ -53,8 +53,11 @@ export class User extends Document {
   })
   status: string;
 
-  @Prop({ type: StudentProfileSchema, required: false })
-  studentProfile?: StudentProfile;
+  @Prop({ type: [StudentProfileSchema], default: [] })
+  studentProfiles: StudentProfile[];
+
+  @Prop({ type: mongoose.Schema.Types.ObjectId, default: null })
+  activeStudentProfileId?: Types.ObjectId | null;
 
   @Prop({ type: TeacherProfileSchema, required: false })
   teacherProfile?: TeacherProfile;
@@ -68,8 +71,21 @@ export const UserSchema = SchemaFactory.createForClass(User);
 UserSchema.plugin(paginate);
 UserSchema.index({ passwordResetTokenHash: 1 }, { unique: true, sparse: true });
 UserSchema.index({ passwordResetTokenExpiresAt: 1 }, { sparse: true });
-UserSchema.index({ role: 1, status: 1, 'studentProfile.group': 1 });
+UserSchema.index({ role: 1, status: 1, 'studentProfiles.group': 1 });
 UserSchema.index(
-  { 'studentProfile.externalStudentId': 1 },
+  { 'studentProfiles.externalStudentId': 1 },
+  { unique: true, sparse: true },
+);
+UserSchema.index(
+  { 'studentProfiles.recordBookNumber': 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      'studentProfiles.recordBookNumber': { $exists: true },
+    },
+  },
+);
+UserSchema.index(
+  { 'teacherProfile.externalTeacherId': 1 },
   { unique: true, sparse: true },
 );

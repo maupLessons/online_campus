@@ -1,18 +1,21 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEmail,
   IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsNumber,
   MinLength,
   Matches,
   IsIn,
   MaxLength,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Role } from '../../common/types/roles.enum';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { StudentProfileInputDto } from './student-profile-input.dto';
 
 export class CreateUserDto {
   @ApiProperty({ example: 'student1' })
@@ -74,35 +77,27 @@ export class CreateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  groupId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  recordBookNumber?: string;
-
-  @ApiPropertyOptional({
-    description:
-      'External immutable MAUP student_id used for backend API integrations.',
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(128)
-  externalStudentId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  year?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   departmentId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   position?: string;
+
+  @ApiPropertyOptional({
+    type: [StudentProfileInputDto],
+    description: 'Обовʼязково для role=student (мінімум 1)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => StudentProfileInputDto)
+  studentProfiles?: StudentProfileInputDto[];
+
+  @ApiPropertyOptional({ description: 'MAUP prepod_id' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  externalTeacherId?: string;
 }

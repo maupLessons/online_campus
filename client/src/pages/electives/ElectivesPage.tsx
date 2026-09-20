@@ -17,8 +17,10 @@ import type {
   ElectiveSelection,
   ReferenceView,
 } from '../../types';
-import { ElectivePeriodStatus } from '../../types';
+import { ElectiveDisciplineStatus, ElectiveSelectionStatus } from '../../types';
 import { getLocalizedApiErrorMessage } from '../../utils/apiErrorMessage';
+import { formatTerm } from '../../utils/formatTerm';
+import { getElectivePhaseView } from './electivePhase';
 
 type EntityWithId = {
   id?: string;
@@ -45,7 +47,9 @@ function selectionForDiscipline(
 ) {
   const disciplineId = getEntityId(discipline);
   return selections.find(
-    (selection) => getEntityId(selection.discipline) === disciplineId,
+    (selection) =>
+      selection.status !== ElectiveSelectionStatus.CANCELLED &&
+      getEntityId(selection.discipline) === disciplineId,
   );
 }
 
@@ -53,52 +57,40 @@ function referenceLabel(reference: ReferenceView) {
   return reference.name ?? reference.code ?? getEntityId(reference);
 }
 
-function isPeriodSelectionOpen(item: ActiveElectivePeriod, now: number) {
-  const startsAt = Date.parse(item.period.startsAt);
-  const endsAt = Date.parse(item.period.endsAt);
-
-  return (
-    item.period.status === ElectivePeriodStatus.ACTIVE &&
-    Number.isFinite(startsAt) &&
-    Number.isFinite(endsAt) &&
-    startsAt <= now &&
-    now <= endsAt
-  );
-}
-
 function ActivePeriodCard({
   item,
   locale,
-  now,
   onSelect,
   onCancel,
   workingKey,
 }: {
   item: ActiveElectivePeriod;
   locale: string;
-  now: number;
   onSelect: (periodId: string, disciplineId: string) => void;
   onCancel: (periodId: string, selectionId: string) => void;
   workingKey: string;
 }) {
   const { t } = useTranslation();
   const periodId = getEntityId(item.period);
-  const isPeriodOpen = isPeriodSelectionOpen(item, now);
-  const periodStatusLabel =
-    item.period.status === ElectivePeriodStatus.FINALIZED
-      ? t('electives.statuses.finalized')
-      : isPeriodOpen
-        ? t('electives.periodActive')
-        : t('electives.statuses.closed');
+  const phaseView = getElectivePhaseView(item.phase);
+  const isPeriodOpen = phaseView.canSelect;
   const selectedDisciplineIds = useMemo(
     () =>
       new Set(
         item.selections
+          .filter(
+            (selection) => selection.status !== ElectiveSelectionStatus.CANCELLED,
+          )
           .map((selection) => getEntityId(selection.discipline))
           .filter(Boolean),
       ),
     [item.selections],
   );
+  const hasIncompleteSetNotice =
+    item.phase === 'finalized' &&
+    item.selections.some(
+      (selection) => selection.cancelReason === 'incomplete_set',
+    );
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
@@ -106,17 +98,12 @@ function ActivePeriodCard({
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span
-              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold ${
-                isPeriodOpen
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-slate-100 text-slate-600'
-              }`}>
+              className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold ${phaseView.tone}`}>
               <CalendarClock className="h-3.5 w-3.5" aria-hidden="true" />
-              {periodStatusLabel}
+              {t(phaseView.labelKey)}
             </span>
             <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-              {item.period.academicYear}, {item.period.semester}{' '}
-              {t('electives.semesterShort')}
+              {formatTerm(item.period.term, t)}
             </span>
           </div>
 
@@ -129,31 +116,52 @@ function ActivePeriodCard({
               end: formatDate(item.period.endsAt, locale),
             })}
           </p>
+          {item.phase === 'upcoming' && (
+            <p className="mt-2 text-sm font-medium text-amber-800">
+              {t('electives.phase.opensAt', {
+                date: formatDate(item.period.startsAt, locale),
+              })}
+            </p>
+          )}
+          {item.phase === 'closed' && (
+            <p className="mt-2 text-sm text-slate-600">
+              {t('electives.phase.awaitingFinalization')}
+            </p>
+          )}
+          {hasIncompleteSetNotice && (
+            <p className="mt-2 text-sm font-medium text-red-700">
+              {t('electives.incompleteSetNotice')}
+            </p>
+          )}
         </div>
 
-        <div className="grid shrink-0 grid-cols-2 gap-2 sm:min-w-64">
-          <div className="rounded-lg bg-slate-50 px-3 py-2">
-            <p className="text-xs text-slate-500">
-              {t('electives.requiredChoices')}
-            </p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              {item.selectedCount} / {item.period.requiredChoices}
-            </p>
+        {item.phase !== 'upcoming' && (
+          <div className="grid shrink-0 grid-cols-2 gap-2 sm:min-w-64">
+            <div className="rounded-lg bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">
+                {t('electives.requiredChoices')}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {item.selectedCount} / {item.period.requiredChoices}
+              </p>
+            </div>
+            <div className="rounded-lg bg-slate-50 px-3 py-2">
+              <p className="text-xs text-slate-500">
+                {t('electives.remainingChoices')}
+              </p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {item.remainingChoices}
+              </p>
+            </div>
           </div>
-          <div className="rounded-lg bg-slate-50 px-3 py-2">
-            <p className="text-xs text-slate-500">
-              {t('electives.remainingChoices')}
-            </p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              {item.remainingChoices}
-            </p>
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         {item.disciplines.map((discipline) => {
           const disciplineId = getEntityId(discipline);
+          const isCancelled =
+            discipline.status === ElectiveDisciplineStatus.CANCELLED;
           const selection = selectionForDiscipline(item.selections, discipline);
           const selectionId = getEntityId(selection);
           const isSelected = selectedDisciplineIds.has(disciplineId);
@@ -173,11 +181,13 @@ function ActivePeriodCard({
               (Boolean(cancelKey) && workingKey === cancelKey));
           const hasSelectableIds = Boolean(periodId && disciplineId);
           const showCancel =
+            !isCancelled &&
             isPeriodOpen &&
             !selection?.finalizedAt &&
             Boolean(periodId && selectionId);
           const canCancel = showCancel && !isWorking;
           const canSelect =
+            !isCancelled &&
             isPeriodOpen &&
             hasSelectableIds &&
             !isWorking &&
@@ -217,6 +227,11 @@ function ActivePeriodCard({
                         {t('electives.selected')}
                       </span>
                     )}
+                    {isCancelled && (
+                      <span className="inline-flex items-center rounded-md bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-700">
+                        {t('electives.cancelledBadge')}
+                      </span>
+                    )}
                   </div>
 
                   <h3 className="text-base font-semibold text-slate-900">
@@ -227,9 +242,14 @@ function ActivePeriodCard({
                       {discipline.description}
                     </p>
                   )}
+                  {isCancelled && discipline.cancelReason && (
+                    <p className="mt-2 text-xs text-red-700">
+                      {discipline.cancelReason}
+                    </p>
+                  )}
                 </div>
 
-                {isSelected && selection && showCancel ? (
+                {!isCancelled && isSelected && selection && showCancel ? (
                   <button
                     type="button"
                     disabled={!canCancel}
@@ -241,7 +261,7 @@ function ActivePeriodCard({
                       ? t('electives.processing')
                       : t('electives.cancel')}
                   </button>
-                ) : !isSelected && isPeriodOpen ? (
+                ) : !isCancelled && !isSelected && isPeriodOpen ? (
                   <button
                     type="button"
                     disabled={!canSelect}
@@ -433,7 +453,6 @@ export default function ElectivesPage() {
               key={item.period.id}
               item={item}
               locale={locale}
-              now={now}
               workingKey={workingKey}
               onSelect={(periodId, disciplineId) => {
                 setPendingActionKey(`${periodId}:${disciplineId}`);

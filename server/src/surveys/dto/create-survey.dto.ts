@@ -10,6 +10,7 @@ import {
   IsMongoId,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -97,4 +98,12 @@ export class CreateSurveyDto {
   @ValidateNested({ each: true })
   @Type(() => CreateSurveyQuestionDto)
   questions: CreateSurveyQuestionDto[];
+
+  @ApiPropertyOptional({ minimum: 1, maximum: 120 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(120)
+  estimatedMinutes?: number;
 }

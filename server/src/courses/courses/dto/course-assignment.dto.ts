@@ -3,6 +3,7 @@ import { Expose, Transform, Type } from 'class-transformer';
 import { UserMinimalDto } from '../../../users/dto/user.dto';
 import { CourseAssignment, CourseAssignmentSource } from '../../schemas';
 import { toId } from '../../../common/utils/to-id.util';
+import { AcademicTermRefDto, termRef } from './academic-term-ref.dto';
 
 export class CourseAssignmentDto {
   @ApiProperty()
@@ -55,13 +56,14 @@ export class CourseAssignmentDto {
   @Transform(({ obj }: { obj: CourseAssignment }) => obj.group?.specialty?.name)
   groupSpecialty?: string;
 
-  @ApiProperty()
+  @ApiProperty({ type: () => AcademicTermRefDto })
   @Expose()
-  academicYear: string;
+  @Transform(({ obj }: { obj: CourseAssignment }) => termRef(obj.term))
+  term: AcademicTermRefDto | null;
 
-  @ApiProperty()
+  @ApiProperty({ required: false, nullable: true })
   @Expose()
-  semester: number;
+  curriculumSemester?: number | null;
 
   @ApiProperty({ enum: CourseAssignmentSource, required: false })
   @Expose()

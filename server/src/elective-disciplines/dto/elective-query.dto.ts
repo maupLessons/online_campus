@@ -1,12 +1,4 @@
-import { Type } from 'class-transformer';
-import {
-  IsEnum,
-  IsInt,
-  IsMongoId,
-  IsOptional,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsEnum, IsMongoId, IsOptional } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ElectiveDisciplineStatus,
@@ -24,13 +16,10 @@ export class ElectiveDisciplineQueryDto {
   @IsMongoId()
   departmentId?: string;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 12 })
+  @ApiPropertyOptional({ description: 'Id навчального періоду' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(12)
-  semester?: number;
+  @IsMongoId()
+  termId?: string;
 }
 
 export class ElectivePeriodQueryDto {
@@ -39,11 +28,8 @@ export class ElectivePeriodQueryDto {
   @IsEnum(ElectiveSelectionPeriodStatus)
   status?: ElectiveSelectionPeriodStatus;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 12 })
+  @ApiPropertyOptional({ description: 'Id навчального періоду' })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(12)
-  semester?: number;
+  @IsMongoId()
+  termId?: string;
 }

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +11,7 @@ import { createHash } from 'crypto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { Role } from '../common/types/roles.enum';
 import { UsersService } from '../users/users.service';
+import { StudentProfileSyncService } from '../users/student-profile-sync.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthService } from './auth.service';
 import { PasswordResetEmailService } from './password-reset-email.service';
@@ -75,6 +77,9 @@ describe('AuthService', () => {
   let passwordResetEmailService: jest.Mocked<
     Pick<PasswordResetEmailService, 'sendPasswordReset' | 'isEnabled'>
   >;
+  let studentProfileSync: jest.Mocked<
+    Pick<StudentProfileSyncService, 'shouldSyncOnLogin' | 'syncUser'>
+  >;
 
   beforeEach(() => {
     jwtService = {
@@ -101,6 +106,10 @@ describe('AuthService', () => {
       sendPasswordReset: jest.fn(),
       isEnabled: jest.fn().mockReturnValue(false),
     };
+    studentProfileSync = {
+      shouldSyncOnLogin: jest.fn().mockReturnValue(false),
+      syncUser: jest.fn().mockResolvedValue({ active: 0, inactive: 0 }),
+    };
 
     const configService = {
       get: jest.fn((key: string) => {
@@ -119,6 +128,7 @@ describe('AuthService', () => {
       usersService as unknown as UsersService,
       auditLogService as unknown as AuditLogService,
       passwordResetEmailService as unknown as PasswordResetEmailService,
+      studentProfileSync as unknown as StudentProfileSyncService,
       configService,
     );
   });
@@ -171,6 +181,219 @@ describe('AuthService', () => {
     );
     expect(result.user).not.toHaveProperty('passwordHash');
     expect(result.user).not.toHaveProperty('refreshTokenHashes');
+  });
+
+  it('hides externalStudentId from a student logging into their own account', async () => {
+    const profileId = '6622b2a00f3a22d5b625d999';
+    const user = createUser({
+      id: '6622b2a00f3a22d5b625d998',
+      login: 'student1',
+      role: 'student',
+    });
+    user.toObject = () => ({
+      _id: user.id,
+      id: user.id,
+      login: user.login,
+      email: 'student1@maup.com.ua',
+      role: user.role,
+      firstName: 'Іван',
+      lastName: 'Петренко',
+      status: user.status,
+      passwordHash: user.passwordHash,
+      refreshTokenHashes: user.refreshTokenHashes,
+      studentProfiles: [
+        {
+          _id: profileId,
+          externalStudentId: 'EXT-STUDENT-1',
+          group: '6622b2a00f3a22d5b625d174',
+          recordBookNumber: 'RB-1',
+          year: 1,
+          status: 'active',
+          syncedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+      activeStudentProfileId: profileId,
+    });
+    usersService.findByLogin.mockResolvedValue(user as never);
+    jwtService.sign
+      .mockReturnValueOnce('access-token')
+      .mockReturnValueOnce('refresh-token');
+
+    const result = await service.login(
+      'student1',
+      'password123',
+      '127.0.0.1',
+      'jest',
+      'req-student',
+    );
+
+    const dto = result.user as {
+      studentProfiles: Array<{ externalStudentId?: string }>;
+    };
+    expect(dto.studentProfiles[0].externalStudentId).toBeUndefined();
+  });
+
+  it('keeps externalStudentId for an admin logging into their own account', async () => {
+    const profileId = '6622b2a00f3a22d5b625d997';
+    const user = createUser();
+    user.toObject = () => ({
+      _id: user.id,
+      id: user.id,
+      login: user.login,
+      email: 'admin@maup.com.ua',
+      role: user.role,
+      firstName: 'Адмін',
+      lastName: 'Системний',
+      status: user.status,
+      passwordHash: user.passwordHash,
+      refreshTokenHashes: user.refreshTokenHashes,
+      studentProfiles: [
+        {
+          _id: profileId,
+          externalStudentId: 'EXT-ADMIN-1',
+          group: '6622b2a00f3a22d5b625d174',
+          recordBookNumber: 'RB-2',
+          year: 1,
+          status: 'active',
+          syncedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+      ],
+      activeStudentProfileId: profileId,
+    });
+    usersService.findByLogin.mockResolvedValue(user as never);
+    jwtService.sign
+      .mockReturnValueOnce('access-token')
+      .mockReturnValueOnce('refresh-token');
+
+    const result = await service.login(
+      'admin',
+      'password123',
+      '127.0.0.1',
+      'jest',
+      'req-admin',
+    );
+
+    const dto = result.user as {
+      studentProfiles: Array<{ externalStudentId?: string }>;
+    };
+    expect(dto.studentProfiles[0].externalStudentId).toBe('EXT-ADMIN-1');
+  });
+
+  it('triggers a fire-and-forget profile sync after a student logs in when due', async () => {
+    const user = createUser({
+      id: '6622b2a00f3a22d5b625d996',
+      login: 'student2',
+      role: 'student',
+    });
+    usersService.findByLogin.mockResolvedValue(user as never);
+    jwtService.sign
+      .mockReturnValueOnce('access-token')
+      .mockReturnValueOnce('refresh-token');
+    studentProfileSync.shouldSyncOnLogin.mockReturnValue(true);
+
+    const result = await service.login(
+      'student2',
+      'password123',
+      '127.0.0.1',
+      'jest',
+      'req-sync-due',
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      }),
+    );
+    expect(studentProfileSync.shouldSyncOnLogin).toHaveBeenCalledWith(user);
+    expect(studentProfileSync.syncUser).toHaveBeenCalledWith(user.id, 'login');
+    // Tokens/audit are already issued before the trigger fires.
+    expect(auditLogService.logAction.mock.invocationCallOrder[0]).toBeLessThan(
+      studentProfileSync.syncUser.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('does not let a rejected login-time sync propagate or block login', async () => {
+    const user = createUser({
+      id: '6622b2a00f3a22d5b625d994',
+      login: 'student4',
+      role: 'student',
+    });
+    usersService.findByLogin.mockResolvedValue(user as never);
+    jwtService.sign
+      .mockReturnValueOnce('access-token')
+      .mockReturnValueOnce('refresh-token');
+    studentProfileSync.shouldSyncOnLogin.mockReturnValue(true);
+    studentProfileSync.syncUser.mockRejectedValue(new Error('boom'));
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+
+    await expect(
+      service.login(
+        'student4',
+        'password123',
+        '127.0.0.1',
+        'jest',
+        'req-sync-fail',
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      }),
+    );
+
+    // Flush the microtask queue so the fire-and-forget `.catch()` has run.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Login-time profile sync failed'),
+    );
+
+    warn.mockRestore();
+  });
+
+  it('does not trigger a profile sync for non-student roles', async () => {
+    const user = createUser();
+    usersService.findByLogin.mockResolvedValue(user as never);
+    jwtService.sign
+      .mockReturnValueOnce('access-token')
+      .mockReturnValueOnce('refresh-token');
+
+    await service.login(
+      'admin',
+      'password123',
+      '127.0.0.1',
+      'jest',
+      'req-no-sync-role',
+    );
+
+    expect(studentProfileSync.syncUser).not.toHaveBeenCalled();
+  });
+
+  it('does not trigger a profile sync when shouldSyncOnLogin is false', async () => {
+    const user = createUser({
+      id: '6622b2a00f3a22d5b625d993',
+      login: 'student5',
+      role: 'student',
+    });
+    usersService.findByLogin.mockResolvedValue(user as never);
+    jwtService.sign
+      .mockReturnValueOnce('access-token')
+      .mockReturnValueOnce('refresh-token');
+    studentProfileSync.shouldSyncOnLogin.mockReturnValue(false);
+
+    await service.login(
+      'student5',
+      'password123',
+      '127.0.0.1',
+      'jest',
+      'req-no-sync-ttl',
+    );
+
+    expect(studentProfileSync.syncUser).not.toHaveBeenCalled();
   });
 
   it('rotates refresh tokens and rejects revoked tokens', async () => {

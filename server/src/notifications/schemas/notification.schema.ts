@@ -1,6 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { NotificationTargetTypes } from '../dto/create-notification.dto';
+import {
+  NotificationTargetTypes,
+  NotificationType,
+} from '../dto/create-notification.dto';
 
 export type NotificationDocument = Notification & Document;
 
@@ -17,16 +20,7 @@ export class Notification {
 
   @Prop({
     required: true,
-    enum: [
-      'schedule_change',
-      'new_assignment',
-      'assignment_submitted',
-      'assignment_returned',
-      'new_survey',
-      'grade',
-      'announcement',
-      'system',
-    ],
+    enum: Object.values(NotificationType),
   })
   type: string;
 
@@ -49,16 +43,7 @@ export class Notification {
 
   @Prop({
     type: String,
-    enum: [
-      'survey',
-      'elective',
-      'course',
-      'assignment',
-      'submission',
-      'grade',
-      'schedule',
-      'system',
-    ],
+    enum: ['survey', 'elective', 'course', 'schedule', 'system'],
     default: null,
   })
   entityType?: string | null;

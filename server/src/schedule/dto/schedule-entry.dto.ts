@@ -1,36 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  ScheduleChangeAction,
-  ScheduleEntryStatus,
-  ScheduleEntryType,
-} from '../schedule.enums';
-
-export class ScheduleChangeHistoryDto {
-  @ApiProperty({ enum: ScheduleChangeAction })
-  action: ScheduleChangeAction;
-
-  @ApiPropertyOptional()
-  reason?: string;
-
-  @ApiPropertyOptional()
-  actorId?: string | null;
-
-  @ApiPropertyOptional()
-  actorLogin?: string;
-
-  @ApiProperty()
-  changedAt: string;
-}
+import { ScheduleControlType, ScheduleEntryType } from '../schedule.enums';
 
 export class ScheduleEntryDto {
   @ApiProperty()
   id: string;
-
-  @ApiProperty()
-  courseAssignmentId: string;
-
-  @ApiPropertyOptional()
-  classroomId?: string;
 
   @ApiProperty()
   date: string;
@@ -41,23 +14,17 @@ export class ScheduleEntryDto {
   @ApiProperty()
   endTime: string;
 
+  @ApiProperty()
+  courseTitle: string;
+
+  @ApiProperty()
+  subjectKey: string;
+
   @ApiProperty({ enum: ScheduleEntryType })
   type: ScheduleEntryType;
 
-  @ApiProperty({ enum: ScheduleEntryStatus })
-  status: ScheduleEntryStatus;
-
-  @ApiPropertyOptional()
-  courseName?: string;
-
-  @ApiPropertyOptional()
-  courseCode?: string;
-
-  @ApiPropertyOptional()
-  groupCode?: string;
-
-  @ApiPropertyOptional()
-  teacherId?: string;
+  @ApiPropertyOptional({ enum: ScheduleControlType })
+  controlType?: ScheduleControlType;
 
   @ApiPropertyOptional()
   teacherName?: string;
@@ -65,27 +32,12 @@ export class ScheduleEntryDto {
   @ApiPropertyOptional()
   classroom?: string;
 
+  @ApiProperty()
+  onlineFormat: boolean;
+
   @ApiPropertyOptional()
   onlineUrl?: string;
 
-  @ApiPropertyOptional()
-  changeReason?: string;
-
-  @ApiPropertyOptional()
-  cancelledAt?: string;
-
-  @ApiPropertyOptional()
-  rescheduledAt?: string;
-
-  @ApiPropertyOptional()
-  substitutedAt?: string;
-
-  @ApiPropertyOptional({ type: () => [ScheduleChangeHistoryDto] })
-  changeHistory?: ScheduleChangeHistoryDto[];
-
-  @ApiPropertyOptional()
-  createdAt?: string;
-
-  @ApiPropertyOptional()
-  updatedAt?: string;
+  @ApiProperty()
+  groupCode: string;
 }

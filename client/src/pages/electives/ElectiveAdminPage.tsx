@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Archive,
+  Ban,
   CheckCircle2,
   Download,
   FileSpreadsheet,
@@ -36,8 +37,10 @@ import {
   AUTO_DISMISS_MESSAGE_MS,
   useAutoDismissState,
 } from "../../hooks/useAutoDismissState";
+import { useCurrentTerm } from "../../hooks/useCurrentTerm";
 import { downloadBlob } from "../../utils/spreadsheetExport";
 import { getLocalizedApiErrorMessage } from "../../utils/apiErrorMessage";
+import { formatTerm } from "../../utils/formatTerm";
 
 type DisciplineFormState = {
   code: string;
@@ -45,15 +48,12 @@ type DisciplineFormState = {
   description: string;
   departmentId: string;
   teacherId: string;
-  semester: string;
   credits: string;
   capacity: string;
 };
 
 type PeriodFormState = {
   title: string;
-  academicYear: string;
-  semester: string;
   startsAt: string;
   endsAt: string;
   targetGroupIds: string[];
@@ -67,7 +67,6 @@ function initialDisciplineForm(): DisciplineFormState {
     description: "",
     departmentId: "",
     teacherId: "",
-    semester: "1",
     credits: "3",
     capacity: "30",
   };
@@ -79,8 +78,6 @@ function initialPeriodForm(): PeriodFormState {
 
   return {
     title: "",
-    academicYear: `${now.getFullYear()}/${now.getFullYear() + 1}`,
-    semester: "1",
     startsAt: toDateTimeLocalValue(now.toISOString()),
     endsAt: toDateTimeLocalValue(end.toISOString()),
     targetGroupIds: [],
@@ -112,7 +109,6 @@ function buildDisciplinePayload(
     description: form.description.trim() || undefined,
     departmentId: form.departmentId,
     teacherId: form.teacherId || undefined,
-    semester: Number(form.semester),
     credits: Number(form.credits),
     capacity: Number(form.capacity),
   };
@@ -121,8 +117,6 @@ function buildDisciplinePayload(
 function buildPeriodPayload(form: PeriodFormState): CreateElectivePeriodInput {
   return {
     title: form.title.trim(),
-    academicYear: form.academicYear.trim(),
-    semester: Number(form.semester),
     startsAt: toIsoDateTime(form.startsAt),
     endsAt: toIsoDateTime(form.endsAt),
     targetGroupIds: form.targetGroupIds,
@@ -137,7 +131,6 @@ function disciplineToForm(discipline: ElectiveDiscipline): DisciplineFormState {
     description: discipline.description ?? "",
     departmentId: discipline.department.id,
     teacherId: discipline.teacher?.id ?? "",
-    semester: String(discipline.semester),
     credits: String(discipline.credits),
     capacity: String(discipline.capacity),
   };
@@ -146,8 +139,6 @@ function disciplineToForm(discipline: ElectiveDiscipline): DisciplineFormState {
 function periodToForm(period: ElectivePeriod): PeriodFormState {
   return {
     title: period.title,
-    academicYear: period.academicYear,
-    semester: String(period.semester),
     startsAt: toDateTimeLocalValue(period.startsAt),
     endsAt: toDateTimeLocalValue(period.endsAt),
     targetGroupIds: period.targetGroups.map((group) => group.id),
@@ -164,6 +155,10 @@ function statusBadgeClass(
 
   if (status === ElectiveDisciplineStatus.ACTIVE) {
     return "bg-green-100 text-green-700";
+  }
+
+  if (status === ElectiveDisciplineStatus.CANCELLED) {
+    return "bg-red-100 text-red-700";
   }
 
   if (
@@ -195,15 +190,18 @@ export default function ElectiveAdminPage() {
   const [disciplineFilters, setDisciplineFilters] =
     useState<ElectiveDisciplineFilters>({
       status: "",
-      semester: "",
       departmentId: "",
     });
   const [periodFilters, setPeriodFilters] = useState<ElectivePeriodFilters>({
     status: "",
-    semester: "",
   });
+  const [cancelTarget, setCancelTarget] = useState<{
+    id: string;
+    reason: string;
+  } | null>(null);
   const [formError, setFormError] = useAutoDismissState("");
   const [notice, setNotice] = useAutoDismissState("");
+  const { term: currentTerm } = useCurrentTerm();
 
   const disciplineQueryKey = useMemo(
     () => [
@@ -211,24 +209,13 @@ export default function ElectiveAdminPage() {
       "admin",
       "disciplines",
       disciplineFilters.status,
-      disciplineFilters.semester,
       disciplineFilters.departmentId,
     ],
-    [
-      disciplineFilters.departmentId,
-      disciplineFilters.semester,
-      disciplineFilters.status,
-    ],
+    [disciplineFilters.departmentId, disciplineFilters.status],
   );
   const periodQueryKey = useMemo(
-    () => [
-      "electives",
-      "admin",
-      "periods",
-      periodFilters.status,
-      periodFilters.semester,
-    ],
-    [periodFilters.semester, periodFilters.status],
+    () => ["electives", "admin", "periods", periodFilters.status],
+    [periodFilters.status],
   );
 
   const { data: departments = [] } = useQuery({
@@ -370,11 +357,16 @@ export default function ElectiveAdminPage() {
     mutationFn: ({
       id,
       status,
+      reason,
     }: {
       id: string;
       status: ElectiveDisciplineStatus;
-    }) => electivesApi.setDisciplineStatus(id, status),
-    onSuccess: invalidateElectives,
+      reason?: string;
+    }) => electivesApi.setDisciplineStatus(id, status, reason),
+    onSuccess: async () => {
+      setCancelTarget(null);
+      await invalidateElectives();
+    },
   });
   const setPeriodStatusMutation = useMutation({
     mutationFn: ({
@@ -552,41 +544,25 @@ export default function ElectiveAdminPage() {
               )}
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm text-slate-600">
-                <span>{t("electives.admin.fields.code")}</span>
-                <input
-                  value={disciplineForm.code}
-                  onChange={(event) => {
-                    const code = event.target.value;
-                    setDisciplineForm((current) => ({
-                      ...current,
-                      code,
-                    }));
-                  }}
-                  maxLength={24}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
-              </label>
+            <label className="space-y-1 text-sm text-slate-600">
+              <span>{t("electives.admin.fields.code")}</span>
+              <input
+                value={disciplineForm.code}
+                onChange={(event) => {
+                  const code = event.target.value;
+                  setDisciplineForm((current) => ({
+                    ...current,
+                    code,
+                  }));
+                }}
+                maxLength={24}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
 
-              <label className="space-y-1 text-sm text-slate-600">
-                <span>{t("electives.semester")}</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={disciplineForm.semester}
-                  onChange={(event) => {
-                    const semester = event.target.value;
-                    setDisciplineForm((current) => ({
-                      ...current,
-                      semester,
-                    }));
-                  }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                />
-              </label>
-            </div>
+            <p className="text-sm text-slate-500">
+              {t("electives.termHint", { term: formatTerm(currentTerm, t) })}
+            </p>
 
             <label className="space-y-1 text-sm text-slate-600">
               <span>{t("electives.admin.fields.title")}</span>
@@ -765,57 +741,27 @@ export default function ElectiveAdminPage() {
                 />
               </label>
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                <label className="space-y-1 text-sm text-slate-600">
-                  <span>{t("electives.academicYear")}</span>
-                  <input
-                    value={periodForm.academicYear}
-                    onChange={(event) => {
-                      const academicYear = event.target.value;
-                      setPeriodForm((current) => ({
-                        ...current,
-                        academicYear,
-                      }));
-                    }}
-                    maxLength={9}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </label>
-                <label className="space-y-1 text-sm text-slate-600">
-                  <span>{t("electives.semester")}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={12}
-                    value={periodForm.semester}
-                    onChange={(event) => {
-                      const semester = event.target.value;
-                      setPeriodForm((current) => ({
-                        ...current,
-                        semester,
-                      }));
-                    }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </label>
-                <label className="space-y-1 text-sm text-slate-600">
-                  <span>{t("electives.requiredChoices")}</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={5}
-                    value={periodForm.requiredChoices}
-                    onChange={(event) => {
-                      const requiredChoices = event.target.value;
-                      setPeriodForm((current) => ({
-                        ...current,
-                        requiredChoices,
-                      }));
-                    }}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                  />
-                </label>
-              </div>
+              <p className="text-sm text-slate-500">
+                {t("electives.termHint", { term: formatTerm(currentTerm, t) })}
+              </p>
+
+              <label className="space-y-1 text-sm text-slate-600">
+                <span>{t("electives.requiredChoices")}</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={periodForm.requiredChoices}
+                  onChange={(event) => {
+                    const requiredChoices = event.target.value;
+                    setPeriodForm((current) => ({
+                      ...current,
+                      requiredChoices,
+                    }));
+                  }}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                />
+              </label>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="space-y-1 text-sm text-slate-600">
@@ -895,7 +841,7 @@ export default function ElectiveAdminPage() {
               <Filter className="h-4 w-4" aria-hidden="true" />
               {t("surveys.admin.filters")}
             </div>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2">
               <select
                 value={disciplineFilters.status}
                 onChange={(event) => {
@@ -934,23 +880,6 @@ export default function ElectiveAdminPage() {
                   </option>
                 ))}
               </select>
-              <input
-                type="number"
-                min={1}
-                max={12}
-                placeholder={t("electives.semester")}
-                value={disciplineFilters.semester}
-                onChange={(event) => {
-                  const semester = event.target.value
-                    ? Number(event.target.value)
-                    : "";
-                  setDisciplineFilters((current) => ({
-                    ...current,
-                    semester,
-                  }));
-                }}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
             </div>
           </div>
 
@@ -1015,50 +944,124 @@ export default function ElectiveAdminPage() {
                           {t("surveys.admin.edit")}
                         </button>
                         {discipline.status !==
+                          ElectiveDisciplineStatus.ACTIVE &&
+                          discipline.status !==
+                            ElectiveDisciplineStatus.CANCELLED && (
+                            <button
+                              type="button"
+                              disabled={isWorking}
+                              onClick={() =>
+                                setDisciplineStatusMutation.mutate({
+                                  id: discipline.id,
+                                  status: ElectiveDisciplineStatus.ACTIVE,
+                                })
+                              }
+                              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+                            >
+                              <PlayCircle
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                              {t("electives.admin.activate")}
+                            </button>
+                          )}
+                        {discipline.status ===
                           ElectiveDisciplineStatus.ACTIVE && (
                           <button
                             type="button"
                             disabled={isWorking}
                             onClick={() =>
-                              setDisciplineStatusMutation.mutate({
-                                id: discipline.id,
-                                status: ElectiveDisciplineStatus.ACTIVE,
-                              })
+                              setCancelTarget({ id: discipline.id, reason: "" })
                             }
-                            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+                            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50"
                           >
-                            <PlayCircle
-                              className="h-4 w-4"
-                              aria-hidden="true"
-                            />
-                            {t("electives.admin.activate")}
+                            <Ban className="h-4 w-4" aria-hidden="true" />
+                            {t("electives.admin.cancel")}
                           </button>
                         )}
                         {discipline.status !==
-                          ElectiveDisciplineStatus.ARCHIVED && (
+                          ElectiveDisciplineStatus.ARCHIVED &&
+                          discipline.status !==
+                            ElectiveDisciplineStatus.CANCELLED && (
+                            <button
+                              type="button"
+                              disabled={isWorking}
+                              onClick={() =>
+                                setDisciplineStatusMutation.mutate({
+                                  id: discipline.id,
+                                  status: ElectiveDisciplineStatus.ARCHIVED,
+                                })
+                              }
+                              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                            >
+                              <Archive
+                                className="h-4 w-4"
+                                aria-hidden="true"
+                              />
+                              {t("electives.admin.archive")}
+                            </button>
+                          )}
+                      </div>
+                    </div>
+                    {discipline.status === ElectiveDisciplineStatus.CANCELLED &&
+                      discipline.cancelReason && (
+                        <p className="mt-2 text-xs text-red-700">
+                          {discipline.cancelReason}
+                        </p>
+                      )}
+                    {cancelTarget?.id === discipline.id && (
+                      <div className="mt-3 space-y-2 rounded-lg border border-red-200 bg-red-50 p-3">
+                        <label className="block space-y-1 text-xs text-red-800">
+                          <span>{t("electives.admin.cancelReason")}</span>
+                          <textarea
+                            value={cancelTarget.reason}
+                            onChange={(event) =>
+                              setCancelTarget({
+                                id: discipline.id,
+                                reason: event.target.value,
+                              })
+                            }
+                            minLength={10}
+                            maxLength={500}
+                            rows={3}
+                            className="w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
+                          />
+                        </label>
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            disabled={isWorking}
+                            disabled={
+                              isWorking || cancelTarget.reason.trim().length < 10
+                            }
                             onClick={() =>
                               setDisciplineStatusMutation.mutate({
                                 id: discipline.id,
-                                status: ElectiveDisciplineStatus.ARCHIVED,
+                                status: ElectiveDisciplineStatus.CANCELLED,
+                                reason: cancelTarget.reason.trim(),
                               })
                             }
-                            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                            className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-red-300"
                           >
-                            <Archive className="h-4 w-4" aria-hidden="true" />
-                            {t("electives.admin.archive")}
+                            <Ban className="h-4 w-4" aria-hidden="true" />
+                            {t("electives.admin.confirmCancel")}
                           </button>
-                        )}
+                          <button
+                            type="button"
+                            disabled={isWorking}
+                            onClick={() => setCancelTarget(null)}
+                            className="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-white"
+                          >
+                            {t("common.cancel")}
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
                     <div className="mt-3 grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-3">
                       <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
                         {discipline.credits} {t("electives.credits")}
                       </div>
                       <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                        {discipline.semester} {t("electives.semesterShort")}
+                        {formatTerm(discipline.term, t)}
                       </div>
                       <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
                         {discipline.enrolledCount}/{discipline.capacity}{" "}
@@ -1073,7 +1076,7 @@ export default function ElectiveAdminPage() {
 
           {canManagePeriods && (
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="mb-4 grid gap-3 md:grid-cols-2">
+              <div className="mb-4">
                 <select
                   value={periodFilters.status}
                   onChange={(event) => {
@@ -1094,23 +1097,6 @@ export default function ElectiveAdminPage() {
                     </option>
                   ))}
                 </select>
-                <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  placeholder={t("electives.semester")}
-                  value={periodFilters.semester}
-                  onChange={(event) => {
-                    const semester = event.target.value
-                      ? Number(event.target.value)
-                      : "";
-                    setPeriodFilters((current) => ({
-                      ...current,
-                      semester,
-                    }));
-                  }}
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-                />
               </div>
 
               <h2 className="text-lg font-semibold text-slate-900">
@@ -1147,8 +1133,7 @@ export default function ElectiveAdminPage() {
                               {t(`electives.statuses.${period.status}`)}
                             </span>
                             <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
-                              {period.academicYear}, {period.semester}{" "}
-                              {t("electives.semesterShort")}
+                              {formatTerm(period.term, t)}
                             </span>
                           </div>
                           <h3 className="text-base font-semibold text-slate-900">

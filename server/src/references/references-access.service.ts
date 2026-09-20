@@ -11,8 +11,8 @@ import {
   CourseAssignmentDocument,
   CourseDocument,
 } from '../courses/schemas';
-import { ScheduleEntry, ScheduleEntryDocument } from '../schedule/schemas';
 import { User, UserDocument } from '../users/schemas';
+import { pickActiveLeanStudentProfile } from '../users/student-profile.filters';
 import {
   throwReferenceNotFound,
   toReferenceObjectId,
@@ -46,8 +46,6 @@ export class ReferencesAccessService {
     private readonly courseModel: Model<CourseDocument>,
     @InjectModel(CourseAssignment.name)
     private readonly courseAssignmentModel: Model<CourseAssignmentDocument>,
-    @InjectModel(ScheduleEntry.name)
-    private readonly scheduleEntryModel: Model<ScheduleEntryDocument>,
     @InjectModel(Faculty.name)
     private readonly facultyModel: Model<Faculty>,
     @InjectModel(Department.name)
@@ -107,9 +105,16 @@ export class ReferencesAccessService {
     const [account, assignmentIds] = await Promise.all([
       this.userModel
         .findById(userId)
-        .select('studentProfile.group teacherProfile.department')
+        .select(
+          'studentProfiles activeStudentProfileId teacherProfile.department',
+        )
         .lean<{
-          studentProfile?: { group?: unknown };
+          studentProfiles?: Array<{
+            _id: Types.ObjectId;
+            group?: unknown;
+            status?: string;
+          }>;
+          activeStudentProfileId?: Types.ObjectId | null;
           teacherProfile?: { department?: unknown };
         }>()
         .exec(),
@@ -135,7 +140,11 @@ export class ReferencesAccessService {
     const directFacultyIds: Types.ObjectId[] = [];
     const directGroupIds: Types.ObjectId[] = [];
 
-    const studentGroupId = toId(account?.studentProfile?.group);
+    const activeProfile = pickActiveLeanStudentProfile(
+      account?.studentProfiles,
+      account?.activeStudentProfileId,
+    );
+    const studentGroupId = toId(activeProfile?.group);
     if (user.role === Role.STUDENT && Types.ObjectId.isValid(studentGroupId)) {
       directGroupIds.push(new Types.ObjectId(studentGroupId));
     }
@@ -242,20 +251,8 @@ export class ReferencesAccessService {
       groups.map((group) => group.specialty),
     );
 
-    const scheduleEntries =
-      assignmentIds.length === 0
-        ? []
-        : await this.scheduleEntryModel
-            .find({
-              courseAssignment: { $in: assignmentIds },
-              classroom: { $type: 'objectId' },
-            } as unknown as QueryFilter<ScheduleEntryDocument>)
-            .select('classroom')
-            .lean<Array<{ classroom?: unknown }>>()
-            .exec();
-    const classroomIds = this.uniqueObjectIds(
-      scheduleEntries.map((entry) => entry.classroom),
-    );
+    // Classrooms are no longer derived from the schedule: the MAUP API snapshot doesn't reference the reference book.
+    const classroomIds: Types.ObjectId[] = [];
 
     return {
       classroomIds,

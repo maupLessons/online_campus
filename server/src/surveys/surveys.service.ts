@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
+import { ConfigService } from '@nestjs/config';
 import { Model, Types } from 'mongoose';
 import {
   buildSpreadsheetExportArtifact,
@@ -15,6 +16,8 @@ import {
 } from '../common/export';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { toId } from '../common/utils/to-id.util';
+import { NotificationType } from '../notifications/dto/create-notification.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 import { UsersService } from '../users/users.service';
 import {
   CreateSurveyDto,
@@ -81,6 +84,8 @@ export class SurveysService {
     private readonly usersService: UsersService,
     private readonly audienceService: SurveyAudienceService,
     private readonly accessPolicy: SurveyAccessPolicy,
+    private readonly notificationsService: NotificationsService,
+    private readonly configService: ConfigService,
     private readonly auditLogService?: AuditLogService,
   ) {}
 
@@ -93,6 +98,11 @@ export class SurveysService {
     const createdBy = this.toObjectId(user.sub);
     const questionPayload = normalizeSurveyQuestions(dto.questions);
     const targetType = dto.targetType ?? SurveyTargetType.ALL;
+    if (!this.accessPolicy.canTargetAudience(user, targetType)) {
+      throw new ForbiddenException(
+        'Ця роль не може створювати опитування для груп чи дисциплін',
+      );
+    }
 
     const survey = await this.surveyModel.create({
       title: this.trimRequired(dto.title, 'Назва опитування обовʼязкова'),
@@ -104,6 +114,7 @@ export class SurveysService {
       createdBy,
       startDate: dates.startDate,
       endDate: dates.endDate,
+      estimatedMinutes: dto.estimatedMinutes,
     });
 
     try {
@@ -127,7 +138,7 @@ export class SurveysService {
     user: AuthenticatedUser,
   ): Promise<SurveyDto[]> {
     this.ensureCanListManagedSurveys(user);
-    await this.closeExpiredSurveys();
+    await this.refreshSurveyLifecycle();
 
     const filter: Record<string, unknown> = {};
     const search = query.search?.trim();
@@ -154,8 +165,11 @@ export class SurveysService {
     );
   }
 
-  async findActiveForUser(user: AuthenticatedUser): Promise<SurveyDto[]> {
-    await this.closeExpiredSurveys();
+  async findActiveForUser(
+    user: AuthenticatedUser,
+    options: { completed?: boolean } = {},
+  ): Promise<SurveyDto[]> {
+    await this.refreshSurveyLifecycle(new Date(), { remind: true });
 
     const profile = await this.usersService.findOne(user.sub);
     const now = new Date();
@@ -174,7 +188,7 @@ export class SurveysService {
           },
         ],
       })
-      .sort({ createdAt: -1 })
+      .sort({ endDate: 1 })
       .exec();
 
     const visibleSurveys: SurveyDocument[] = [];
@@ -199,19 +213,63 @@ export class SurveysService {
       });
     }
 
-    return visibleSurveys.map((survey) =>
+    return visibleSurveys
+      .map((survey) => {
+        const completed = completedSurveyIds.has(toId(survey._id));
+        return { survey, completed };
+      })
+      .filter(({ completed }) =>
+        options.completed === undefined
+          ? true
+          : completed === options.completed,
+      )
+      .map(({ survey, completed }) =>
+        mapSurveyToDto(
+          survey,
+          questionsBySurvey.get(toId(survey._id)) ?? [],
+          completed,
+        ),
+      );
+  }
+
+  async findCompletedForUser(user: AuthenticatedUser): Promise<SurveyDto[]> {
+    const completions = await this.completionModel
+      .find({ user: this.toObjectId(user.sub) })
+      .sort({ completedAt: -1 })
+      .select('survey')
+      .exec();
+    if (completions.length === 0) {
+      return [];
+    }
+
+    const ids = completions.map((completion) => completion.survey);
+    const surveys = await this.surveyModel.find({ _id: { $in: ids } }).exec();
+    const order = new Map(ids.map((id, index) => [toId(id), index]));
+    surveys.sort(
+      (a, b) => (order.get(toId(a._id)) ?? 0) - (order.get(toId(b._id)) ?? 0),
+    );
+    const questionsBySurvey = await this.loadQuestionsForSurveys(surveys);
+
+    return surveys.map((survey) =>
       mapSurveyToDto(
         survey,
         questionsBySurvey.get(toId(survey._id)) ?? [],
-        completedSurveyIds.has(toId(survey._id)),
+        true,
       ),
     );
   }
 
   async findOne(id: string, user: AuthenticatedUser): Promise<SurveyDto> {
-    await this.closeExpiredSurveys();
+    await this.refreshSurveyLifecycle();
 
     const survey = await this.getSurveyOrThrow(id);
+    if (
+      survey.status === SurveyStatus.SCHEDULED &&
+      !this.accessPolicy.canManage(survey, user) &&
+      !this.accessPolicy.hasGlobalManagementScope(user)
+    ) {
+      throw new NotFoundException('Опитування не знайдено');
+    }
     const canView = await this.canViewSurvey(survey, user);
     if (!canView) {
       throw new ForbiddenException('Немає доступу до цього опитування');
@@ -242,6 +300,7 @@ export class SurveysService {
       targetIds: [...survey.targetIds],
       startDate: survey.startDate,
       endDate: survey.endDate,
+      estimatedMinutes: survey.estimatedMinutes,
     };
 
     const updateData: Partial<Survey> = {};
@@ -261,11 +320,20 @@ export class SurveysService {
 
     const nextTargetType = dto.targetType ?? survey.targetType;
     if (dto.targetType !== undefined || dto.targetIds !== undefined) {
+      if (!this.accessPolicy.canTargetAudience(user, nextTargetType)) {
+        throw new ForbiddenException(
+          'Ця роль не може створювати опитування для груп чи дисциплін',
+        );
+      }
       updateData.targetType = nextTargetType;
       updateData.targetIds = this.normalizeTargetIds(
         nextTargetType,
         dto.targetIds ?? survey.targetIds,
       );
+    }
+
+    if (dto.estimatedMinutes !== undefined) {
+      updateData.estimatedMinutes = dto.estimatedMinutes;
     }
 
     if (dto.startDate !== undefined || dto.endDate !== undefined) {
@@ -343,17 +411,20 @@ export class SurveysService {
       );
     }
 
+    const nextStatus =
+      survey.startDate > now ? SurveyStatus.SCHEDULED : SurveyStatus.ACTIVE;
+
     const savedSurvey = await this.surveyModel
       .findOneAndUpdate(
         { _id: survey._id, status: SurveyStatus.DRAFT },
         {
           $set: {
-            status: SurveyStatus.ACTIVE,
+            status: nextStatus,
             startDate: survey.startDate,
             publishedAt: now,
             expectedRecipients,
           },
-          $unset: { closedAt: 1 },
+          $unset: { closedAt: 1, closedReason: 1 },
         },
         {
           returnDocument: 'after',
@@ -368,7 +439,12 @@ export class SurveysService {
       );
     }
 
-    await this.audienceService.notifyPublished(savedSurvey);
+    // new_survey is sent only at the moment of actual activation (spec §7.1):
+    // if the start is scheduled for the future, the notification will arrive later —
+    // via the lazily executed activateDueSurveys().
+    if (savedSurvey.status === SurveyStatus.ACTIVE) {
+      await this.audienceService.notifyPublished(savedSurvey);
+    }
     await audit?.record({
       action: AUDIT_ACTIONS.SURVEY_PUBLISH,
       targetEntity: 'survey',
@@ -384,6 +460,52 @@ export class SurveysService {
     });
 
     return mapSurveyToDto(savedSurvey, questions);
+  }
+
+  async unpublish(
+    id: string,
+    user: AuthenticatedUser,
+    audit?: DomainAuditContext,
+  ): Promise<SurveyDto> {
+    const survey = await this.getSurveyOrThrow(id);
+    this.ensureCanManageSurvey(survey, user);
+
+    if (survey.status !== SurveyStatus.SCHEDULED) {
+      throw new BadRequestException(
+        'Зняти з публікації можна лише заплановане опитування',
+      );
+    }
+
+    const saved = await this.surveyModel
+      .findOneAndUpdate(
+        { _id: survey._id, status: SurveyStatus.SCHEDULED },
+        {
+          $set: { status: SurveyStatus.DRAFT },
+          $unset: { publishedAt: 1, expectedRecipients: 1 },
+        },
+        { returnDocument: 'after', runValidators: true },
+      )
+      .exec();
+
+    if (!saved) {
+      throw new ConflictException(
+        'Статус опитування вже змінився. Оновіть сторінку.',
+      );
+    }
+
+    const questions = await this.getQuestionsForSurvey(saved._id);
+    await audit?.record({
+      action: AUDIT_ACTIONS.SURVEY_UNPUBLISH,
+      targetEntity: 'survey',
+      targetId: toId(saved._id),
+      details: {
+        title: saved.title,
+        before: { status: SurveyStatus.SCHEDULED },
+        after: { status: saved.status },
+      },
+    });
+
+    return mapSurveyToDto(saved, questions);
   }
 
   async close(
@@ -405,6 +527,7 @@ export class SurveysService {
           $set: {
             status: SurveyStatus.CLOSED,
             closedAt: new Date(),
+            closedReason: 'manual',
           },
         },
         {
@@ -465,7 +588,7 @@ export class SurveysService {
     dto: SubmitSurveyResponseDto,
     user: AuthenticatedUser,
   ): Promise<SurveySubmissionResultDto> {
-    await this.closeExpiredSurveys();
+    await this.refreshSurveyLifecycle();
 
     const survey = await this.getSurveyOrThrow(id);
     await this.ensureCanRespond(survey, user);
@@ -517,7 +640,7 @@ export class SurveysService {
     id: string,
     user: AuthenticatedUser,
   ): Promise<SurveyResponseStateDto> {
-    await this.closeExpiredSurveys();
+    await this.refreshSurveyLifecycle();
 
     const survey = await this.getSurveyOrThrow(id);
     await this.ensureCanRespondOrViewOwnState(survey, user);
@@ -558,7 +681,7 @@ export class SurveysService {
     id: string,
     user: AuthenticatedUser,
   ): Promise<SurveyResultsDto> {
-    await this.closeExpiredSurveys();
+    await this.refreshSurveyLifecycle();
 
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanViewResults(survey, user);
@@ -611,7 +734,7 @@ export class SurveysService {
     id: string,
     user: AuthenticatedUser,
   ): Promise<SurveyResultsDto> {
-    await this.closeExpiredSurveys();
+    await this.refreshSurveyLifecycle();
 
     const survey = await this.getSurveyOrThrow(id);
     this.ensureCanViewResults(survey, user);
@@ -633,7 +756,7 @@ export class SurveysService {
       throw new BadRequestException('Опитування ще не розпочалося');
     }
     if (survey.endDate && survey.endDate < now) {
-      await this.closeExpiredSurveys(now);
+      await this.refreshSurveyLifecycle(now);
       throw new BadRequestException('Опитування вже завершене');
     }
 
@@ -667,6 +790,9 @@ export class SurveysService {
 
     if (survey.status === SurveyStatus.DRAFT) {
       return false;
+    }
+    if (survey.status === SurveyStatus.SCHEDULED) {
+      return this.accessPolicy.hasGlobalManagementScope(user);
     }
 
     const profile = await this.usersService.findOne(user.sub);
@@ -720,10 +846,12 @@ export class SurveysService {
   }
 
   private ensureDraftSurvey(survey: SurveyDocument): void {
+    if (survey.status === SurveyStatus.SCHEDULED) {
+      // SURV-005: the survey is already published (awaiting start) — unpublish first
+      throw new ConflictException('Редагувати можна лише чернетку');
+    }
     if (survey.status !== SurveyStatus.DRAFT) {
-      throw new BadRequestException(
-        'Редагувати або видаляти можна лише чернетку',
-      );
+      throw new BadRequestException('Редагувати можна лише чернетку');
     }
   }
 
@@ -836,17 +964,162 @@ export class SurveysService {
     return normalized;
   }
 
+  /**
+   * Lazy survey lifecycle transitions (Р8: no scheduler).
+   * Called at the start of every survey read.
+   * `remind: true` — only on the `GET /surveys/active` path (spec §7.1).
+   */
+  async refreshSurveyLifecycle(
+    now = new Date(),
+    options: { remind?: boolean } = {},
+  ): Promise<void> {
+    // We close expired ones BEFORE activation: otherwise a scheduled survey whose
+    // endDate has already passed manages to activate and send out new_survey moments
+    // before that same call closes it as deadline (I3).
+    await this.closeExpiredSurveys(now);
+    await this.activateDueSurveys(now);
+    if (options.remind) {
+      const hours = Number(
+        this.configService.get<string>('SURVEY_REMINDER_HOURS') ?? 24,
+      );
+      await this.remindDueSurveys(now, hours);
+    }
+  }
+
+  private async activateDueSurveys(now = new Date()): Promise<number> {
+    let activated = 0;
+    for (;;) {
+      // conditional update on a single document: a parallel read by another
+      // user won't pass through the same document twice (spec §7.1)
+      const survey = await this.surveyModel
+        .findOneAndUpdate(
+          {
+            status: SurveyStatus.SCHEDULED,
+            startDate: { $lte: now },
+            // A survey with an endDate already in the past is closed by closeExpiredSurveys
+            // (I3) — it must never be activated here.
+            $or: [{ endDate: { $gt: now } }, { endDate: null }],
+          },
+          { $set: { status: SurveyStatus.ACTIVE, activatedAt: now } },
+          { returnDocument: 'after' },
+        )
+        .exec();
+      if (!survey) {
+        return activated;
+      }
+      activated += 1;
+      // new_survey is sent HERE, not on publish (spec §7.1)
+      await this.audienceService.notifyPublished(survey);
+      // An audit entry must not break the read: log and continue (as in
+      // SurveyAudienceService.notifyPublished).
+      try {
+        await this.auditLogService?.logAction({
+          userId: null,
+          userLogin: 'system',
+          action: AUDIT_ACTIONS.SURVEY_ACTIVATE,
+          targetEntity: 'survey',
+          targetId: toId(survey._id),
+          details: {
+            automated: true,
+            before: { status: SurveyStatus.SCHEDULED },
+            after: { status: SurveyStatus.ACTIVE },
+          },
+          ipAddress: 'internal',
+          userAgent: 'survey-lifecycle',
+          result: 'success',
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'unknown error';
+        this.logger.warn(
+          `Survey activation audit entry was not recorded for ${toId(survey._id)}: ${message}`,
+        );
+      }
+    }
+  }
+
+  private async remindDueSurveys(
+    now = new Date(),
+    hours: number,
+  ): Promise<number> {
+    const deadline = new Date(now.getTime() + hours * 3_600_000);
+    let reminded = 0;
+    for (;;) {
+      const survey = await this.surveyModel
+        .findOneAndUpdate(
+          {
+            status: SurveyStatus.ACTIVE,
+            endDate: { $gt: now, $lte: deadline },
+            $or: [
+              { reminderSentAt: null },
+              { reminderSentAt: { $exists: false } },
+            ],
+          },
+          { $set: { reminderSentAt: now } },
+          { returnDocument: 'after' },
+        )
+        .exec();
+      if (!survey) {
+        return reminded;
+      }
+      reminded += 1;
+      // SURV-008: for anonymous surveys, "who hasn't completed it yet" is derived from
+      // SurveyCompletion (the fact of completion), not from answers
+      const recipients = await this.audienceService.resolveRecipientIds(survey);
+      const completed = new Set(
+        (
+          await this.completionModel
+            .find({ survey: survey._id })
+            .select('user')
+            .exec()
+        ).map((completion) => toId(completion.user)),
+      );
+      const pending = recipients.filter((id) => !completed.has(id));
+      if (pending.length === 0) {
+        continue;
+      }
+      // A reminder notification must not break the read: log and
+      // continue (as in SurveyAudienceService.notifyPublished).
+      try {
+        await this.notificationsService.createMany(
+          pending.map((userId) => ({
+            title: 'Опитування завершується',
+            message: `«${survey.title}» доступне до ${survey.endDate.toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' })}.`,
+            type: NotificationType.NEW_SURVEY,
+            targetType: 'all' as const,
+            userId,
+            actionUrl: `/surveys/${toId(survey._id)}`,
+            entityType: 'survey',
+            entityId: toId(survey._id),
+            important: true,
+          })),
+        );
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'unknown error';
+        this.logger.warn(
+          `Survey reminder was not sent for ${toId(survey._id)}: ${message}`,
+        );
+      }
+    }
+  }
+
   private async closeExpiredSurveys(now = new Date()): Promise<void> {
     const result = await this.surveyModel
       .updateMany(
         {
-          status: SurveyStatus.ACTIVE,
-          endDate: { $lt: now },
+          $or: [
+            { status: SurveyStatus.ACTIVE, endDate: { $lt: now } },
+            // An expired scheduled survey (endDate already passed) is closed here,
+            // not activated-and-immediately-closed (I3).
+            { status: SurveyStatus.SCHEDULED, endDate: { $lte: now } },
+          ],
         },
         {
           $set: {
             status: SurveyStatus.CLOSED,
             closedAt: now,
+            closedReason: 'deadline',
           },
         },
       )
@@ -861,7 +1134,7 @@ export class SurveysService {
         details: {
           automated: true,
           closedCount: result.modifiedCount,
-          before: { status: SurveyStatus.ACTIVE },
+          before: { status: [SurveyStatus.ACTIVE, SurveyStatus.SCHEDULED] },
           after: { status: SurveyStatus.CLOSED },
           cutoff: now,
         },

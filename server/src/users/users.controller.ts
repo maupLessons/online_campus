@@ -18,6 +18,10 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/roles.guard';
 import { UsersService } from './users.service';
+import {
+  StudentProfileSyncService,
+  SyncResult,
+} from './student-profile-sync.service';
 import { Role } from '../common/types/roles.enum';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { PaginatedDto } from '../common/dto/paginated.dto';
@@ -41,6 +45,7 @@ export class UsersController {
   constructor(
     private usersService: UsersService,
     private readonly auditLogService: AuditLogService,
+    private readonly studentProfileSync: StudentProfileSyncService,
   ) {}
 
   @Post()
@@ -146,5 +151,12 @@ export class UsersController {
   @Roles(Role.ADMIN, Role.RECTOR, Role.PRESIDENT, Role.DEAN)
   findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.usersService.findOne(id, req.user);
+  }
+
+  @Post(':id/sync-student')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Синхронізувати профілі студента з MAUP API' })
+  syncStudent(@Param('id') id: string): Promise<SyncResult> {
+    return this.studentProfileSync.syncUser(id, 'manual');
   }
 }

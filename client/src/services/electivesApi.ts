@@ -27,13 +27,13 @@ const teacherRoles: Role[] = [
 
 export type ElectiveDisciplineFilters = {
   status?: ElectiveDisciplineStatus | "";
-  semester?: number | "";
+  termId?: string;
   departmentId?: string;
 };
 
 export type ElectivePeriodFilters = {
   status?: ElectivePeriodStatus | "";
-  semester?: number | "";
+  termId?: string;
 };
 
 export type ElectiveExportFormat = SpreadsheetExportFormat;
@@ -106,10 +106,14 @@ export const electivesApi = {
     return data;
   },
 
-  setDisciplineStatus: async (id: string, status: ElectiveDisciplineStatus) => {
+  setDisciplineStatus: async (
+    id: string,
+    status: ElectiveDisciplineStatus,
+    reason?: string,
+  ) => {
     const { data } = await api.patch<ElectiveDiscipline>(
       `/electives/disciplines/${id}/status`,
-      { status },
+      reason ? { status, reason } : { status },
     );
     return data;
   },

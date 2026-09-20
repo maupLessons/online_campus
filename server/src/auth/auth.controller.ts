@@ -43,9 +43,10 @@ import { AuditEvent } from '../audit-log/audit.decorator';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { markDomainAuditRecorded } from '../audit-log/audit-context';
+import { Role } from '../common/types/roles.enum';
 
 interface RequestWithUser extends RequestWithId {
-  user: { sub: string; login: string; role?: string };
+  user: { sub: string; login: string; role?: Role };
 }
 
 type AuthTokens = {
@@ -344,7 +345,14 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Current user profile' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getProfile(@Req() req: RequestWithUser) {
-    return this.authService.getProfile(req.user.sub);
+    // A student sees their own profile without externalStudentId (spec §8) —
+    // `getProfile` passes the group to class-transformer only when the actor themselves is admin.
+    return this.authService.getProfile(
+      req.user.sub,
+      req.user.role
+        ? { sub: req.user.sub, login: req.user.login, role: req.user.role }
+        : undefined,
+    );
   }
 
   private setAuthCookies(res: Response, auth: AuthTokens) {

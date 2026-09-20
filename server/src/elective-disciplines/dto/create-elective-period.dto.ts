@@ -6,13 +6,13 @@ import {
   IsDateString,
   IsInt,
   IsMongoId,
+  IsOptional,
   IsString,
   Length,
-  Matches,
   Max,
   Min,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateElectivePeriodDto {
   @ApiProperty({ example: 'Вибір дисциплін на осінній семестр' })
@@ -20,17 +20,12 @@ export class CreateElectivePeriodDto {
   @Length(2, 160)
   title: string;
 
-  @ApiProperty({ example: '2026/2027' })
-  @IsString()
-  @Matches(/^\d{4}\/\d{4}$/)
-  academicYear: string;
-
-  @ApiProperty({ minimum: 1, maximum: 12 })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(12)
-  semester: number;
+  @ApiPropertyOptional({
+    description: 'Id навчального періоду; за замовчуванням — поточний',
+  })
+  @IsOptional()
+  @IsMongoId()
+  termId?: string;
 
   @ApiProperty()
   @IsDateString()

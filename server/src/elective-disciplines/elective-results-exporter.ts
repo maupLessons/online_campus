@@ -28,7 +28,7 @@ export type ElectiveExportResults = {
   period: {
     title: string;
     academicYear: string;
-    semester: number;
+    termNumber: number;
     startsAt: string;
     endsAt: string;
     status: string;
@@ -65,7 +65,7 @@ export function buildElectiveResultsCsv(
     [
       'Період',
       'Навчальний рік',
-      'Семестр',
+      'Навчальний період',
       'Статус',
       'Початок',
       'Завершення',
@@ -96,7 +96,7 @@ export function buildElectiveResultsCsv(
     const disciplineColumns = [
       results.period.title,
       results.period.academicYear,
-      String(results.period.semester),
+      String(results.period.termNumber),
       periodStatusLabel(results.period.status),
       formatDateTime(results.period.startsAt),
       formatDateTime(results.period.endsAt),
@@ -177,7 +177,7 @@ function addSummaryWorksheet(
   const metadata: Array<[string, string | number]> = [
     ['Період', results.period.title],
     ['Навчальний рік', results.period.academicYear],
-    ['Семестр', results.period.semester],
+    ['Навчальний період', results.period.termNumber],
     ['Статус', periodStatusLabel(results.period.status)],
     ['Початок', formatDateTime(results.period.startsAt)],
     ['Завершення', formatDateTime(results.period.endsAt)],

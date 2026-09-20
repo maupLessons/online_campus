@@ -49,28 +49,17 @@ const AUDIT_DOMAIN_FILTERS: Record<
     actions: ['auth', 'user'],
     entities: ['auth', 'user', 'users'],
   },
+  [AuditLogDomain.ACADEMIC]: {
+    actions: ['academic_term', 'student_profile'],
+    entities: ['academic_term'],
+  },
   [AuditLogDomain.SCHEDULE]: {
     actions: ['schedule'],
     entities: ['schedule', 'schedule-template'],
   },
   [AuditLogDomain.LEARNING]: {
-    actions: [
-      'course',
-      'grade',
-      'material',
-      'assignment',
-      'submission',
-      'journal',
-    ],
-    entities: [
-      'courses',
-      'course',
-      'grade',
-      'material',
-      'assignment',
-      'submission',
-      'journal',
-    ],
+    actions: ['course'],
+    entities: ['courses', 'course'],
   },
   [AuditLogDomain.SURVEYS]: {
     actions: ['survey'],

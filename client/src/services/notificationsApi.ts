@@ -63,10 +63,10 @@ export const notificationsApi = {
   },
 
   getUnreadCount: async () => {
-    const { data } = await api.get<{ count: number }>(
+    const { data } = await api.get<{ count: number; importantCount: number }>(
       '/notifications/unread-count',
     );
-    return data.count;
+    return data;
   },
 
   create: async (payload: NotificationInput) => {

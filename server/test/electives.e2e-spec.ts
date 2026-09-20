@@ -50,6 +50,7 @@ type BaseFixture = {
   departmentBId: Types.ObjectId;
   groupAId: Types.ObjectId;
   groupBId: Types.ObjectId;
+  termId: Types.ObjectId;
 };
 
 type DisciplineBody = {
@@ -58,7 +59,32 @@ type DisciplineBody = {
   department: { id: string };
 };
 
+function studentProfileFields(input: {
+  group: Types.ObjectId;
+  recordBookNumber: string;
+  year: number;
+  externalStudentId?: string;
+}) {
+  const _id = new Types.ObjectId();
+  return {
+    studentProfiles: [
+      {
+        _id,
+        externalStudentId: input.externalStudentId ?? input.recordBookNumber,
+        group: input.group,
+        recordBookNumber: input.recordBookNumber,
+        year: input.year,
+        status: 'active',
+        syncedAt: new Date(),
+      },
+    ],
+    activeStudentProfileId: _id,
+  };
+}
+
 type ActivePeriodBody = {
+  period: { id: string };
+  phase: string;
   disciplines: Array<{ id: string }>;
 };
 
@@ -174,6 +200,20 @@ describe('Elective disciplines (e2e)', () => {
     const departmentBId = new Types.ObjectId();
     const groupAId = new Types.ObjectId();
     const groupBId = new Types.ObjectId();
+    const termId = new Types.ObjectId();
+
+    await collection('AcademicTerm').insertOne({
+      _id: termId,
+      academicYear: '2026/2027',
+      termNumber: 1,
+      startsAt: new Date('2026-09-01'),
+      endsAt: new Date('2027-01-31'),
+      status: 'current',
+      maupAcademicYear: 2026,
+      maupSemester: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
 
     await collection('Department').insertMany([
       {
@@ -233,25 +273,25 @@ describe('Elective disciplines (e2e)', () => {
       teacherProfile: { department: departmentBId, position: 'Professor' },
     });
     const studentA = await createActor(Role.STUDENT, 'student-a', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupAId,
         recordBookNumber: `EA-${new Types.ObjectId().toHexString()}`,
         year: 1,
-      },
+      }),
     });
     const studentB = await createActor(Role.STUDENT, 'student-b', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupAId,
         recordBookNumber: `EB-${new Types.ObjectId().toHexString()}`,
         year: 1,
-      },
+      }),
     });
     const outsiderStudent = await createActor(Role.STUDENT, 'outsider', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupBId,
         recordBookNumber: `EO-${new Types.ObjectId().toHexString()}`,
         year: 1,
-      },
+      }),
     });
 
     return {
@@ -268,6 +308,7 @@ describe('Elective disciplines (e2e)', () => {
       departmentBId,
       groupAId,
       groupBId,
+      termId,
     };
   };
 
@@ -283,7 +324,7 @@ describe('Elective disciplines (e2e)', () => {
       description: 'Secure elective workflow',
       department: fixture.departmentAId,
       teacher: fixture.teacherA.id,
-      semester: 1,
+      term: fixture.termId,
       credits: 3,
       capacity: 10,
       enrolledCount: 0,
@@ -304,8 +345,7 @@ describe('Elective disciplines (e2e)', () => {
     await collection('ElectiveSelectionPeriod').insertOne({
       _id: id,
       title: 'Enterprise selection period',
-      academicYear: '2026/2027',
-      semester: 1,
+      term: fixture.termId,
       startsAt: new Date(Date.now() - 60_000),
       endsAt: new Date(Date.now() + 60 * 60_000),
       status: ElectiveSelectionPeriodStatus.ACTIVE,
@@ -359,7 +399,6 @@ describe('Elective disciplines (e2e)', () => {
         title: 'Own department elective',
         departmentId: fixture.departmentAId.toHexString(),
         teacherId: fixture.teacherA.id.toHexString(),
-        semester: 1,
         credits: 3,
         capacity: 25,
       })
@@ -377,7 +416,6 @@ describe('Elective disciplines (e2e)', () => {
         title: 'Foreign department elective',
         departmentId: fixture.departmentBId.toHexString(),
         teacherId: fixture.teacherB.id.toHexString(),
-        semester: 1,
         credits: 3,
         capacity: 25,
       })
@@ -398,7 +436,6 @@ describe('Elective disciplines (e2e)', () => {
         code: 'EL-INVALID',
         title: 'Invalid payload',
         departmentId: fixture.departmentAId.toHexString(),
-        semester: 1,
         credits: 3,
         capacity: 25,
         unexpectedPrivilege: true,
@@ -432,6 +469,22 @@ describe('Elective disciplines (e2e)', () => {
       .get('/api/electives/active')
       .set('Authorization', `Bearer ${fixture.teacherA.token}`)
       .expect(403);
+  });
+
+  it('returns [] without a current academic term', async () => {
+    const fixture = await seedBase();
+    await seedDiscipline(fixture);
+    await seedPeriod(fixture);
+    await collection('AcademicTerm').updateMany(
+      {},
+      { $set: { status: 'closed' } },
+    );
+
+    const res = await request(app.getHttpServer())
+      .get('/api/electives/active')
+      .set('Authorization', `Bearer ${fixture.studentA.token}`)
+      .expect(200);
+    expect(res.body).toEqual([]);
   });
 
   it('atomically assigns the last available seat to only one student', async () => {
@@ -514,11 +567,15 @@ describe('Elective disciplines (e2e)', () => {
     expect(responses.map((response) => response.status).sort()).toEqual([
       200, 404,
     ]);
+    // Cancellation is now soft (status: 'cancelled'), not document deletion —
+    // selection history is preserved (Task 2/3 model and cancellation cascade).
     expect(
-      await collection('ElectiveSelection').countDocuments({
-        _id: new Types.ObjectId(selectionId),
-      }),
-    ).toBe(0);
+      (
+        await collection('ElectiveSelection').findOne({
+          _id: new Types.ObjectId(selectionId),
+        })
+      )?.status,
+    ).toBe('cancelled');
     const discipline = await collection('ElectiveDiscipline').findOne({
       _id: disciplineId,
     });
@@ -649,10 +706,14 @@ describe('Elective disciplines (e2e)', () => {
         entityId: periodId.toHexString(),
       }),
     ).toBe(1);
-    await request(app.getHttpServer())
+    const afterFinalize = await request(app.getHttpServer())
       .get('/api/electives/active')
       .set('Authorization', `Bearer ${fixture.studentA.token}`)
-      .expect(200, []);
+      .expect(200);
+    const afterFinalizeBody = afterFinalize.body as ActivePeriodBody[];
+    expect(afterFinalizeBody).toHaveLength(1);
+    expect(afterFinalizeBody[0].period.id).toBe(periodId.toHexString());
+    expect(afterFinalizeBody[0].phase).toBe('finalized');
     await request(app.getHttpServer())
       .delete(
         `/api/electives/periods/${periodId.toHexString()}/selections/${selectionId}`,
@@ -864,7 +925,7 @@ describe('Elective disciplines (e2e)', () => {
     expect(csvText.startsWith('\uFEFF')).toBe(true);
     expect(csvText).not.toContain('sep=;');
     expect(csvText.split('\r\n')[0]).toContain(
-      'Період;Навчальний рік;Семестр;Статус',
+      'Період;Навчальний рік;Навчальний період;Статус',
     );
     expect(csvText).toContain('Код дисципліни;Дисципліна;Кафедра');
     expect(csvText).toContain('ID студента;Логін;ПІБ студента;Група');

@@ -6,18 +6,9 @@ export enum ScheduleEntryType {
   CONSULTATION = 'consultation',
 }
 
-export enum ScheduleEntryStatus {
-  SCHEDULED = 'scheduled',
-  CANCELLED = 'cancelled',
-  RESCHEDULED = 'rescheduled',
-  SUBSTITUTED = 'substituted',
-}
-
-export enum ScheduleChangeAction {
-  CREATED = 'created',
-  UPDATED = 'updated',
-  CANCELLED = 'cancelled',
-  RESCHEDULED = 'rescheduled',
-  SUBSTITUTED = 'substituted',
-  DELETED = 'deleted',
+export enum ScheduleControlType {
+  EXAM = 'exam',
+  CREDIT = 'credit',
+  COURSEWORK = 'coursework',
+  OTHER = 'other',
 }

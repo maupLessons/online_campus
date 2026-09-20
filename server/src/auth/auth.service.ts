@@ -1,15 +1,23 @@
 import {
   Injectable,
+  Logger,
   UnauthorizedException,
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { Types } from 'mongoose';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
+import { UserDto } from '../users/dto/user.dto';
+import { StudentProfile } from '../users/schemas';
+import { StudentProfileSyncService } from '../users/student-profile-sync.service';
+import { Role } from '../common/types/roles.enum';
+import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { transformToDtoForRole } from '../common/utils/transform.util';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
@@ -18,10 +26,12 @@ import { PasswordResetEmailService } from './password-reset-email.service';
 interface AuthUser {
   id: string;
   login: string;
-  role: string;
+  role: Role;
   status: string;
   passwordHash: string;
   refreshTokenHashes?: string[];
+  activeStudentProfileId?: Types.ObjectId | null;
+  studentProfiles: StudentProfile[];
   toObject: () => Record<string, unknown>;
 }
 
@@ -29,6 +39,7 @@ interface ValidJwtPayload {
   sub: string;
   login: string;
   role: string;
+  activeStudentProfileId?: string;
 }
 
 type PasswordResetResponse = {
@@ -77,6 +88,7 @@ function getJwtVerifyFailureReason(err: unknown): string {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly accessTokenExpiresIn: NonNullable<
     JwtSignOptions['expiresIn']
   >;
@@ -92,6 +104,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly auditLogService: AuditLogService,
     private readonly passwordResetEmailService: PasswordResetEmailService,
+    private readonly studentProfileSync: StudentProfileSyncService,
     configService: ConfigService,
   ) {
     this.accessTokenExpiresIn =
@@ -178,6 +191,9 @@ export class AuthService {
       sub: user.id,
       login: user.login,
       role: user.role,
+      activeStudentProfileId: user.activeStudentProfileId
+        ? String(user.activeStudentProfileId)
+        : undefined,
     };
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: this.accessTokenExpiresIn,
@@ -204,17 +220,29 @@ export class AuthService {
       requestId,
     });
 
-    const userObj = user.toObject();
-    const safeUser: Record<string, unknown> = { ...userObj };
+    if (
+      user.role === Role.STUDENT &&
+      this.studentProfileSync.shouldSyncOnLogin(user)
+    ) {
+      void this.studentProfileSync
+        .syncUser(user.id, 'login')
+        .catch((error: unknown) =>
+          this.logger.warn(
+            `Login-time profile sync failed: ${error instanceof Error ? error.message : 'unknown'}`,
+          ),
+        );
+    }
 
-    Reflect.deleteProperty(safeUser, 'passwordHash');
-    Reflect.deleteProperty(safeUser, 'refreshTokenHashes');
+    // The same role gate as `/auth/profile` (getProfile below):
+    // requester is the user logging in themselves, so a student doesn't see
+    // their own externalStudentId, while admin does (spec §8).
+    const userDto = transformToDtoForRole(UserDto, user.toObject(), user.role);
 
-    return { accessToken, refreshToken, user: safeUser };
+    return { accessToken, refreshToken, user: userDto };
   }
 
-  async getProfile(userId: string) {
-    const userDto = await this.usersService.findOne(userId);
+  async getProfile(userId: string, requester?: AuthenticatedUser) {
+    const userDto = await this.usersService.findOne(userId, requester);
     if (!userDto) throw new UnauthorizedException('Користувача не знайдено');
     return userDto;
   }
@@ -446,6 +474,9 @@ export class AuthService {
       sub: user.id,
       login: user.login,
       role: user.role,
+      activeStudentProfileId: user.activeStudentProfileId
+        ? String(user.activeStudentProfileId)
+        : undefined,
     };
     const newAccessToken = this.jwtService.sign(newPayload, {
       expiresIn: this.accessTokenExpiresIn,

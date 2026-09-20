@@ -2,83 +2,11 @@ import { Link, Outlet, useLocation } from 'react-router';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/authStore';
-import { Role, ROLE_LABEL_KEYS } from '../types';
+import { ROLE_LABEL_KEYS } from '../types';
 import NotificationsBell from './notifications/NotificationsBell';
 import LanguageSwitcher from './LanguageSwitcher';
-
-const ALL_ROLES = Object.values(Role) as Role[];
-
-const NAV_ITEMS: {
-  labelKey: string;
-  path: string;
-  roles: Role[];
-}[] = [
-  { labelKey: 'nav.profile', path: '/profile', roles: ALL_ROLES },
-  { labelKey: 'nav.dashboard', path: '/dashboard', roles: ALL_ROLES },
-  { labelKey: 'nav.news', path: '/news', roles: ALL_ROLES },
-  { labelKey: 'nav.schedule', path: '/schedule', roles: ALL_ROLES },
-  {
-    labelKey: 'nav.courses',
-    path: '/courses',
-    roles: [
-      Role.STUDENT,
-      Role.TEACHER,
-      Role.DEPARTMENT_HEAD,
-      Role.DEAN,
-      Role.ADMIN,
-    ],
-  },
-  {
-    labelKey: 'nav.surveys',
-    path: '/surveys',
-    roles: [Role.STUDENT, Role.TEACHER],
-  },
-  {
-    labelKey: 'nav.surveyAdmin',
-    path: '/surveys/admin',
-    roles: [Role.ADMIN, Role.DEAN, Role.RECTOR, Role.PRESIDENT],
-  },
-  {
-    labelKey: 'nav.electives',
-    path: '/electives',
-    roles: [Role.STUDENT],
-  },
-  {
-    labelKey: 'nav.electiveAdmin',
-    path: '/electives/admin',
-    roles: [
-      Role.ADMIN,
-      Role.DEPARTMENT_HEAD,
-      Role.DEAN,
-    ],
-  },
-  {
-    labelKey: 'nav.reports',
-    path: '/reports',
-    roles: [
-      Role.DEPARTMENT_HEAD,
-      Role.DEAN,
-      Role.RECTOR,
-      Role.PRESIDENT,
-      Role.ADMIN,
-    ],
-  },
-  {
-    labelKey: 'nav.users',
-    path: '/users',
-    roles: [Role.ADMIN, Role.RECTOR, Role.PRESIDENT],
-  },
-  {
-    labelKey: 'nav.auditLog',
-    path: '/audit-log',
-    roles: [Role.ADMIN],
-  },
-  {
-    labelKey: 'nav.references',
-    path: '/references',
-    roles: ALL_ROLES,
-  },
-];
+import NoCurrentTermBanner from './NoCurrentTermBanner';
+import { getNavItemsForRole, getPageTitleKey } from './navItems';
 
 export default function Layout() {
   const location = useLocation();
@@ -94,8 +22,9 @@ export default function Layout() {
     }
   }, [user, isAuthenticated, loadProfile]);
 
-  const visibleNavItems = NAV_ITEMS.filter((item) =>
-    user ? item.roles.includes(user.role) : false,
+  const visibleNavItems = useMemo(
+    () => (user ? getNavItemsForRole(user.role) : []),
+    [user],
   );
 
   const handleLogout = async () => {
@@ -103,51 +32,10 @@ export default function Layout() {
     await logout().catch(() => undefined);
   };
 
-  const pageTitle = useMemo(() => {
-    if (location.pathname.startsWith('/surveys/admin')) {
-      return t('nav.surveyAdmin');
-    }
-
-    if (location.pathname.startsWith('/surveys')) {
-      return t('nav.surveys');
-    }
-
-    if (location.pathname.startsWith('/electives/admin')) {
-      return t('nav.electiveAdmin');
-    }
-
-    if (location.pathname.startsWith('/electives')) {
-      return t('nav.electives');
-    }
-
-    switch (location.pathname) {
-      case '/dashboard':
-        return t('nav.dashboard');
-      case '/profile':
-        return t('nav.profile');
-      case '/schedule':
-        return t('nav.schedule');
-      case '/courses':
-        return t('nav.courses');
-      case '/assignments':
-      case '/grades':
-        return t('moodle.title');
-      case '/users':
-        return t('nav.users');
-      case '/notifications':
-        return t('nav.notifications');
-      case '/news':
-        return t('nav.news');
-      case '/audit-log':
-        return t('nav.auditLog');
-      case '/reports':
-        return t('nav.reports');
-      case '/references':
-        return t('nav.references');
-      default:
-        return t('app.title');
-    }
-  }, [location.pathname, t]);
+  const pageTitle = useMemo(
+    () => t(getPageTitleKey(location.pathname)),
+    [location.pathname, t],
+  );
 
   const greetingName =
     user?.firstName ||
@@ -220,7 +108,14 @@ export default function Layout() {
                 const isActive =
                   location.pathname === item.path ||
                   (item.path !== '/dashboard' &&
-                    location.pathname.startsWith(item.path));
+                    location.pathname.startsWith(`${item.path}/`) &&
+                    !visibleNavItems.some(
+                      (other) =>
+                        other.path !== item.path &&
+                        other.path.startsWith(`${item.path}/`) &&
+                        (location.pathname === other.path ||
+                          location.pathname.startsWith(`${other.path}/`)),
+                    ));
 
                 return (
                   <Link
@@ -309,6 +204,7 @@ export default function Layout() {
         </header>
 
         <main className="px-4 py-6 sm:px-6">
+          <NoCurrentTermBanner />
           <Outlet />
         </main>
       </div>

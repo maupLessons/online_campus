@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Role, type Notification, type Role as UserRole } from '../../types';
+import { getNotificationTypeMeta } from './notificationTypeMeta';
 
 interface Props {
   notification: Notification;
@@ -70,6 +71,8 @@ export default function NotificationItem({
   const actionUrl = getSafeActionUrl(notification, viewerRole);
   const isReadable = Boolean(onRead);
   const isUnread = isReadable && !notification.readFlag;
+  const typeMeta = getNotificationTypeMeta(notification.type);
+  const TypeIcon = typeMeta.icon;
 
   return (
     <details
@@ -83,16 +86,21 @@ export default function NotificationItem({
       }}
       className={`mb-3 overflow-hidden rounded-xl border transition-colors ${
         isUnread ? 'border-blue-200 bg-blue-50' : 'border-gray-200 bg-gray-50'
-      }`}
+      } ${notification.important ? 'border-l-4 border-l-amber-500' : ''}`}
     >
       <summary className="cursor-pointer list-none p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <strong className="text-sm text-slate-600">
-              {t(`notifications.types.${notification.type}`, {
-                defaultValue: notification.type,
-              })}
+            <strong className="inline-flex items-center gap-1.5 text-sm text-slate-600">
+              <TypeIcon className="h-4 w-4" aria-hidden="true" />
+              {t(typeMeta.labelKey)}
             </strong>
+
+            {notification.important && (
+              <span className="ml-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                {t('notifications.importantBadge')}
+              </span>
+            )}
 
             <div className="mt-1 font-semibold">
               {notification.title}

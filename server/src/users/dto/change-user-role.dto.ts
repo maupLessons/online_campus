@@ -1,18 +1,21 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsEnum,
-  IsInt,
   IsMongoId,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MaxLength,
-  Min,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Role } from '../../common/types/roles.enum';
 import { ExistsInDatabase } from '../../common/validators/exists-in-database.validator';
-import { Department, Group } from '../../references/schemas';
+import { Department } from '../../references/schemas';
+import { StudentProfileInputDto } from './student-profile-input.dto';
 
 export class ChangeUserRoleDto {
   @ApiProperty({ enum: Role })
@@ -20,42 +23,24 @@ export class ChangeUserRoleDto {
   role: Role;
 
   @ApiPropertyOptional({
+    type: [StudentProfileInputDto],
     description: 'Required when changing the user role to student',
   })
-  @ValidateIf((dto: ChangeUserRoleDto) => dto.role === Role.STUDENT)
-  @IsMongoId()
-  @ExistsInDatabase(Group.name)
-  groupId?: string;
-
-  @ApiPropertyOptional({
-    description: 'Required when changing the user role to student',
-  })
-  @ValidateIf((dto: ChangeUserRoleDto) => dto.role === Role.STUDENT)
-  @IsString()
-  @IsNotEmpty()
-  recordBookNumber?: string;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => StudentProfileInputDto)
+  studentProfiles?: StudentProfileInputDto[];
 
   @ApiPropertyOptional({
     description:
-      'Optional immutable MAUP student_id used for backend API integrations',
+      'Optional immutable MAUP prepod_id used for backend API integrations',
   })
-  @ValidateIf(
-    (dto: ChangeUserRoleDto) =>
-      dto.role === Role.STUDENT && dto.externalStudentId !== undefined,
-  )
+  @IsOptional()
   @IsString()
-  @MaxLength(128)
-  externalStudentId?: string;
-
-  @ApiPropertyOptional({
-    description: 'Required when changing the user role to student',
-    minimum: 1,
-  })
-  @ValidateIf((dto: ChangeUserRoleDto) => dto.role === Role.STUDENT)
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  year?: number;
+  @MaxLength(64)
+  externalTeacherId?: string;
 
   @ApiPropertyOptional({
     description: 'Required when changing the user role to teacher',

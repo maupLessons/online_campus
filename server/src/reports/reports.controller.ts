@@ -112,8 +112,7 @@ export class ReportsController {
         page: result.page,
         limit: result.limit,
         filters: {
-          academicYear: query.academicYear ?? null,
-          semester: query.semester ?? null,
+          termId: query.termId ?? null,
           departmentId: query.departmentId ?? null,
           groupId: query.groupId ?? null,
           courseAssignmentId: query.courseAssignmentId ?? null,

@@ -18,6 +18,17 @@ export const ApiPaginatedResponse = <TModel extends Type<any>>(
                 type: 'array',
                 items: { $ref: getSchemaPath(model) },
               },
+              meta: {
+                type: 'object',
+                nullable: true,
+                properties: {
+                  term: { type: 'object', nullable: true },
+                  reason: {
+                    type: 'string',
+                    enum: ['no_current_term', 'no_active_profile'],
+                  },
+                },
+              },
             },
           },
         ],

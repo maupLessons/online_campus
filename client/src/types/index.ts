@@ -20,6 +20,37 @@ export const ROLE_LABEL_KEYS: Record<Role, string> = {
   [Role.ADMIN]: 'roles.admin',
 };
 
+export type StudentProfileStatus = 'active' | 'inactive';
+
+export interface StudentProfileGroupRef {
+  id: string;
+  code?: string;
+}
+
+export interface StudentProfile {
+  id: string;
+  group: StudentProfileGroupRef | null;
+  recordBookNumber: string;
+  year: number;
+  studyForm?: string;
+  institute?: string;
+  specialty?: string;
+  status: StudentProfileStatus;
+  syncedAt: string;
+  /** The server sends this only to the administrator (class-transformer group `admin`). */
+  externalStudentId?: string;
+}
+
+export interface StudentProfileInput {
+  externalStudentId: string;
+  groupId: string;
+  recordBookNumber: string;
+  year: number;
+  studyForm?: string;
+  institute?: string;
+  specialty?: string;
+}
+
 export interface User {
   id: string;
   _id?: string;
@@ -32,15 +63,12 @@ export interface User {
   middleName?: string;
   avatarUrl?: string;
   status: 'active' | 'blocked';
-  studentProfile?: {
-    group: string | null;
-    recordBookNumber: string;
-    externalStudentId?: string;
-    year: number;
-  };
+  studentProfiles?: StudentProfile[];
+  activeStudentProfileId?: string | null;
   teacherProfile?: {
     department: string | null;
     position: string;
+    externalTeacherId?: string;
   };
   createdAt?: string;
   updatedAt?: string;
@@ -53,120 +81,124 @@ export type ScheduleEntryType =
   | 'exam'
   | 'consultation';
 
-export type ScheduleEntryStatus =
-  | 'scheduled'
-  | 'cancelled'
-  | 'rescheduled'
-  | 'substituted';
-
-export interface ScheduleChangeHistory {
-  action:
-    | 'created'
-    | 'updated'
-    | 'cancelled'
-    | 'rescheduled'
-    | 'substituted'
-    | 'deleted';
-  reason?: string;
-  actorId?: string | null;
-  actorLogin?: string;
-  changedAt: string;
-}
+export type ScheduleControlType = 'exam' | 'credit' | 'coursework' | 'other';
 
 export interface ScheduleEntry {
   id: string;
-  courseAssignmentId: string;
-  classroomId?: string;
   date: string;
   startTime: string;
   endTime: string;
+  courseTitle: string;
+  subjectKey: string;
   type: ScheduleEntryType;
-  status: ScheduleEntryStatus;
-  courseName?: string;
-  courseCode?: string;
-  groupCode?: string;
-  teacherId?: string;
+  controlType?: ScheduleControlType;
   teacherName?: string;
   classroom?: string;
+  onlineFormat: boolean;
   onlineUrl?: string;
-  changeReason?: string;
-  cancelledAt?: string;
-  rescheduledAt?: string;
-  substitutedAt?: string;
-  changeHistory?: ScheduleChangeHistory[];
-  createdAt?: string;
-  updatedAt?: string;
+  groupCode: string;
 }
 
-export interface ScheduleEntryInput {
-  courseAssignmentId: string;
-  classroomId?: string;
+export type ScheduleUnavailableReason =
+  | 'no_current_term'
+  | 'no_active_profile'
+  | 'no_snapshot'
+  | 'no_external_teacher_id';
+
+export interface ScheduleMeta {
+  term?: { id: string; academicYear: string; termNumber: number };
+  fetchedAt?: string;
+  stale: boolean;
+  reason?: ScheduleUnavailableReason;
+}
+
+export interface ScheduleResponse {
+  entries: ScheduleEntry[];
+  meta: ScheduleMeta;
+}
+
+// §5.3a — a separate type, since /schedule/today returns TWO arrays, not `entries`.
+export interface ScheduleTodayResponse {
   date: string;
-  startTime: string;
-  endTime: string;
-  type: ScheduleEntryType;
-  status?: ScheduleEntryStatus;
-  onlineUrl?: string;
-  changeReason?: string;
+  lessons: ScheduleEntry[];
+  session: ScheduleEntry[];
+  meta: ScheduleMeta;
 }
 
-export type ScheduleTemplateStatus = 'active' | 'archived';
+// §5.3b — a flat allowlist without `meta`.
+export interface ScheduleGroupResponse {
+  groupCode: string;
+  isExamSession: boolean;
+  periodFrom: string | null;
+  periodTo: string | null;
+  fetchedAt: string | null;
+  stale: boolean;
+  entries: ScheduleEntry[];
+}
 
-export interface ScheduleTemplate {
+export interface ScheduleRefreshSummary {
+  groups: Array<{ groupCode: string; status: 'updated' | 'skipped' | 'failed'; reason?: string }>;
+}
+
+export interface OnlineLessonLink {
+  _id: string;
+  groupCode: string;
+  subjectKey: string;
+  date: string | null;
+  startTime: string | null;
+  url: string;
+}
+
+export interface OnlineLessonLinkInput {
+  groupCode: string;
+  subjectKey: string;
+  date?: string;
+  startTime?: string;
+  url: string;
+}
+
+export interface AcademicTermRef {
   id: string;
-  title: string;
-  courseAssignmentId: string;
-  classroomId?: string;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  type: ScheduleEntryType;
-  status: ScheduleTemplateStatus;
-  courseName?: string;
-  courseCode?: string;
-  groupCode?: string;
-  teacherName?: string;
-  classroom?: string;
-  onlineUrl?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  academicYear?: string;
+  termNumber?: 1 | 2;
 }
 
-export interface ScheduleTemplateInput {
-  title: string;
-  courseAssignmentId: string;
-  classroomId?: string;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
-  type: ScheduleEntryType;
-  onlineUrl?: string;
+export interface AcademicTerm {
+  id: string;
+  academicYear: string;
+  termNumber: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  status: 'planned' | 'current' | 'closed';
+  maupAcademicYear: number;
+  maupSemester: number;
+  activatedAt: string | null;
+  closedAt: string | null;
 }
 
-export interface ScheduleBulkResultItem {
-  index?: number;
-  id?: string;
-  success: boolean;
-  entry?: ScheduleEntry;
-  error?: string;
+export interface CreateAcademicTermInput {
+  academicYear: string;
+  termNumber: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  maupAcademicYear?: number;
+  maupSemester?: number;
 }
 
-export interface ScheduleBulkResult {
-  dryRun: boolean;
-  created?: number;
-  updated?: number;
-  cancelled?: number;
-  skipped: number;
-  items: ScheduleBulkResultItem[];
-}
+export type UpdateAcademicTermInput = Partial<
+  Pick<
+    CreateAcademicTermInput,
+    'startsAt' | 'endsAt' | 'maupAcademicYear' | 'maupSemester'
+  >
+>;
 
 export interface CourseAssignment {
   id: string;
   courseId: string;
   groupId: string;
   teacherId: string;
-  academicYear: string;
-  semester: number;
+  term: AcademicTermRef | null;
+  curriculumSemester?: number | null;
   courseName?: string;
   courseCode?: string;
   credits?: number;
@@ -181,6 +213,72 @@ export interface CourseAssignment {
   };
   groupCode?: string;
 }
+
+export type CourseStatus = 'active' | 'archived';
+export type CourseResourceType = 'link' | 'video' | 'document' | 'other';
+
+export interface CourseResource {
+  id: string;
+  title: string;
+  type: CourseResourceType;
+  url: string;
+  addedAt: string;
+}
+
+export interface ResourceInput {
+  title: string;
+  type: CourseResourceType;
+  url: string;
+}
+
+export interface CourseCatalogItem {
+  id: string;
+  code: string;
+  name: string;
+  description?: string;
+  credits: number;
+  externalSubjectId?: string;
+  moodleUrl?: string;
+  status: CourseStatus;
+  departmentId: string;
+  departmentName?: string;
+  activeAssignmentsCount?: number;
+}
+
+export interface CourseAssignmentCard {
+  id: string;
+  source: 'standard' | 'elective';
+  course: {
+    id: string; code: string; name: string; description?: string;
+    credits: number; externalSubjectId?: string; moodleUrl?: string;
+    department: { id: string; name: string };
+  };
+  group: { id: string; code: string };
+  teacher: { id: string; fullName: string } | null;
+  term: { id: string; academicYear: string; termNumber: number };
+  curriculumSemester?: number;
+  resources: CourseResource[];
+  upcomingLessons: ScheduleEntry[];
+  moodleHref: string;
+  canEditResources: boolean;
+  canEditMoodleUrl: boolean;
+  meta: { scheduleUnavailable: boolean };
+}
+
+export interface CourseCatalogFilters {
+  status?: CourseStatus;
+  departmentId?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface CreateCourseInput {
+  code: string; name: string; description?: string; departmentId: string;
+  credits: number; externalSubjectId?: string; moodleUrl?: string;
+}
+export type UpdateCourseInput = Partial<
+  Pick<CreateCourseInput, 'name' | 'description' | 'credits' | 'externalSubjectId'>
+>;
 
 export interface PaginatedResponse<T> {
   docs: T[];
@@ -205,130 +303,21 @@ export interface ResourceLink {
   url: string;
 }
 
-export type MaterialCategory =
-  | 'lecture'
-  | 'presentation'
-  | 'syllabus'
-  | 'work_program'
-  | 'external_resource'
-  | 'other';
+// exactly 5 values: 4 from plan 01 + elective (Р11). Do NOT add session/finance.
+export const NOTIFICATION_TYPES = [
+  'schedule_change',
+  'elective',
+  'new_survey',
+  'announcement',
+  'system',
+] as const;
 
-export interface Material {
-  id: string;
-  courseAssignmentId?: string;
-  title: string;
-  description?: string;
-  category: MaterialCategory;
-  files?: FileDto[];
-  resourceLinks?: ResourceLink[];
-  fileLink?: string;
-  originalName?: string;
-  publishDate: string;
-  createdAt?: string;
-}
-
-export interface Assignment {
-  id: string;
-  courseAssignmentId: string;
-  title: string;
-  description: string;
-  criteria?: string;
-  resourceLinks?: ResourceLink[];
-  files: FileDto[];
-  dueDate: string;
-  maxScore: number;
-  courseName?: string;
-  submission?: {
-    id: string;
-    assignmentId: string;
-    studentId: string;
-    files: FileDto[];
-    submittedAt: string;
-    status: 'submitted' | 'graded' | 'returned';
-    score?: number;
-    comment?: string;
-    attemptNumber: number;
-    returnComment?: string | null;
-    returnedAt?: string | null;
-    fileLink?: string;
-    originalName?: string;
-  } | null;
-}
-
-export interface StudentCourse {
-  courseAssignmentId: string;
-  courseName: string;
-  courseCode: string;
-  academicYear: string;
-  semester: number;
-}
-
-export interface Grade {
-  id: string;
-  studentId: string;
-  courseAssignmentId: string;
-  lessonJournalEntryId?: string | null;
-  assignmentId?: string | null;
-  submissionId?: string | null;
-  date: string;
-  type: string;
-  value: number;
-  comment?: string;
-  courseName?: string;
-  courseCode?: string;
-  assignmentTitle?: string;
-  assignmentDueDate?: string | null;
-  canModify: boolean;
-}
-
-export interface GradeJournalResponse {
-  studentId: string;
-  studentName: string;
-  grades: Grade[];
-}
-
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused';
-
-export interface LessonJournalAttendance {
-  studentId: string;
-  studentName: string;
-  login?: string;
-  status: AttendanceStatus;
-  comment?: string;
-}
-
-export interface LessonJournalGrade {
-  id: string;
-  studentId: string;
-  studentName: string;
-  login?: string;
-  value: number;
-  type: string;
-  date: string;
-  comment?: string;
-}
-
-export interface LessonJournalEntry {
-  id: string;
-  courseAssignmentId: string;
-  scheduleEntryId?: string | null;
-  teacherId: string;
-  date: string;
-  startTime?: string;
-  endTime?: string;
-  type?: string;
-  topic: string;
-  description?: string;
-  attendance: LessonJournalAttendance[];
-  grades: LessonJournalGrade[];
-  createdAt: string;
-  updatedAt: string;
-}
+export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 
 export interface Notification {
   id: string;
   userId?: string | null;
-  type: string;
+  type: NotificationType | string;
   title: string;
   message: string;
   targetType?: 'all' | 'students' | 'teachers' | 'students_teachers' | 'group';
@@ -341,9 +330,6 @@ export interface Notification {
     | 'survey'
     | 'elective'
     | 'course'
-    | 'assignment'
-    | 'submission'
-    | 'grade'
     | 'schedule'
     | 'system'
     | string
@@ -365,6 +351,7 @@ export interface NotificationInput {
 
 export const SurveyStatus = {
   DRAFT: 'draft',
+  SCHEDULED: 'scheduled',
   ACTIVE: 'active',
   CLOSED: 'closed',
 } as const;
@@ -414,7 +401,9 @@ export interface Survey {
   endDate: string;
   publishedAt?: string;
   closedAt?: string;
+  closedReason?: 'manual' | 'deadline';
   expectedRecipients?: number;
+  estimatedMinutes?: number;
   createdAt?: string;
   updatedAt?: string;
   completed?: boolean;
@@ -455,6 +444,7 @@ export interface CreateSurveyInput {
   targetIds?: string[];
   startDate: string;
   endDate: string;
+  estimatedMinutes?: number;
   questions: CreateSurveyQuestionInput[];
 }
 
@@ -521,6 +511,7 @@ export interface SurveyResults {
 export const ElectiveDisciplineStatus = {
   DRAFT: 'draft',
   ACTIVE: 'active',
+  CANCELLED: 'cancelled',
   ARCHIVED: 'archived',
 } as const;
 
@@ -550,12 +541,14 @@ export interface ElectiveDiscipline {
   description?: string;
   department: ReferenceView;
   teacher?: ReferenceView | null;
-  semester: number;
+  term: AcademicTermRef;
   credits: number;
   capacity: number;
   enrolledCount: number;
   availableSeats: number;
   status: ElectiveDisciplineStatus;
+  cancelReason?: string;
+  cancelledAt?: string;
   createdBy: string;
   createdAt?: string;
   updatedAt?: string;
@@ -564,8 +557,7 @@ export interface ElectiveDiscipline {
 export interface ElectivePeriod {
   id: string;
   title: string;
-  academicYear: string;
-  semester: number;
+  term: AcademicTermRef;
   startsAt: string;
   endsAt: string;
   status: ElectivePeriodStatus;
@@ -579,6 +571,15 @@ export interface ElectivePeriod {
   updatedAt?: string;
 }
 
+export const ElectiveSelectionStatus = {
+  SELECTED: 'selected',
+  CANCELLED: 'cancelled',
+  ENROLLED: 'enrolled',
+} as const;
+
+export type ElectiveSelectionStatus =
+  (typeof ElectiveSelectionStatus)[keyof typeof ElectiveSelectionStatus];
+
 export interface ElectiveSelection {
   id: string;
   periodId: string;
@@ -586,9 +587,14 @@ export interface ElectiveSelection {
   student: ReferenceView;
   group: ReferenceView;
   selectedAt: string;
+  status: ElectiveSelectionStatus;
+  cancelReason?: 'student' | 'discipline_cancelled' | 'incomplete_set';
+  cancelledAt?: string;
   courseAssignmentId?: string;
   finalizedAt?: string;
 }
+
+export type ElectivePhase = 'upcoming' | 'open' | 'closed' | 'finalized';
 
 export interface ActiveElectivePeriod {
   period: ElectivePeriod;
@@ -596,6 +602,7 @@ export interface ActiveElectivePeriod {
   selections: ElectiveSelection[];
   selectedCount: number;
   remainingChoices: number;
+  phase: ElectivePhase;
 }
 
 export interface CreateElectiveDisciplineInput {
@@ -604,15 +611,14 @@ export interface CreateElectiveDisciplineInput {
   description?: string;
   departmentId: string;
   teacherId?: string;
-  semester: number;
+  termId?: string;
   credits: number;
   capacity: number;
 }
 
 export interface CreateElectivePeriodInput {
   title: string;
-  academicYear: string;
-  semester: number;
+  termId?: string;
   startsAt: string;
   endsAt: string;
   targetGroupIds: string[];
@@ -637,6 +643,10 @@ export interface ElectivePeriodResults {
       group: ReferenceView;
       selectedAt: string;
     }>;
+  }>;
+  cancelledByDiscipline: Array<{
+    discipline: ElectiveDiscipline;
+    cancelledCount: number;
   }>;
 }
 
@@ -672,20 +682,3 @@ export interface AuditLogEntry {
   updatedAt: string;
 }
 
-export interface Submission {
-  id: string;
-  assignmentId: string;
-  studentId: string;
-  studentName?: string;
-  studentLogin?: string;
-  files: FileDto[];
-  submittedAt: string;
-  fileLink?: string;
-  originalName?: string;
-  score?: number;
-  comment?: string;
-  status: 'submitted' | 'graded' | 'returned';
-  attemptNumber: number;
-  returnComment?: string | null;
-  returnedAt?: string | null;
-}

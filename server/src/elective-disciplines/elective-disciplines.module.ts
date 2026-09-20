@@ -6,6 +6,7 @@ import {
   CourseAssignmentSchema,
   CourseSchema,
 } from '../courses/schemas';
+import { AcademicTermsModule } from '../academic-terms/academic-terms.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import {
   Department,
@@ -32,6 +33,7 @@ import { AuditLogModule } from '../audit-log/audit-log.module';
     UsersModule,
     NotificationsModule,
     AuditLogModule,
+    AcademicTermsModule,
     MongooseModule.forFeature([
       { name: ElectiveDiscipline.name, schema: ElectiveDisciplineSchema },
       {

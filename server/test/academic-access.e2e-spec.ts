@@ -5,7 +5,6 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
 import { promises as fs } from 'fs';
 import { Connection, Types } from 'mongoose';
-import * as path from 'path';
 import * as request from 'supertest';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import { AppModule } from '../src/app.module';
@@ -38,8 +37,6 @@ type Fixture = {
   courseBId: Types.ObjectId;
   scheduleAId: Types.ObjectId;
   scheduleBId: Types.ObjectId;
-  fileId: Types.ObjectId;
-  storagePath: string;
 };
 
 type IdView = {
@@ -49,6 +46,30 @@ type IdView = {
 type PaginatedIdView = {
   docs: IdView[];
 };
+
+function studentProfileFields(input: {
+  group: Types.ObjectId;
+  recordBookNumber: string;
+  year: number;
+  externalStudentId?: string;
+  status?: 'active' | 'inactive';
+}) {
+  const _id = new Types.ObjectId();
+  return {
+    studentProfiles: [
+      {
+        _id,
+        externalStudentId: input.externalStudentId ?? input.recordBookNumber,
+        group: input.group,
+        recordBookNumber: input.recordBookNumber,
+        year: input.year,
+        status: input.status ?? 'active',
+        syncedAt: new Date(),
+      },
+    ],
+    activeStudentProfileId: _id,
+  };
+}
 
 describe('Academic object access (e2e)', () => {
   let app: NestExpressApplication;
@@ -160,8 +181,7 @@ describe('Academic object access (e2e)', () => {
     const assignmentBId = new Types.ObjectId();
     const scheduleAId = new Types.ObjectId();
     const scheduleBId = new Types.ObjectId();
-    const fileId = new Types.ObjectId();
-    const storagePath = `academic-access-${fileId.toHexString()}.pdf`;
+    const termId = new Types.ObjectId();
 
     const admin = await createActor(Role.ADMIN, 'admin');
     const deanA = await createActor(Role.DEAN, 'dean-a', {
@@ -183,25 +203,25 @@ describe('Academic object access (e2e)', () => {
       },
     });
     const enrolledStudent = await createActor(Role.STUDENT, 'enrolled', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupAId,
         recordBookNumber: 'ACCESS-001',
         year: 1,
-      },
+      }),
     });
     const sameGroupOutsider = await createActor(Role.STUDENT, 'outsider', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupAId,
         recordBookNumber: 'ACCESS-002',
         year: 1,
-      },
+      }),
     });
     const foreignStudent = await createActor(Role.STUDENT, 'foreign', {
-      studentProfile: {
+      ...studentProfileFields({
         group: groupBId,
         recordBookNumber: 'ACCESS-003',
         year: 1,
-      },
+      }),
     });
 
     await collection('Faculty').insertMany([
@@ -260,8 +280,9 @@ describe('Academic object access (e2e)', () => {
         name: 'Scoped Elective A',
         code: 'ACCESS-EL-A',
         department: departmentAId,
-        semester: 1,
         credits: 3,
+        status: 'active',
+        createdBy: admin.id,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -270,20 +291,32 @@ describe('Academic object access (e2e)', () => {
         name: 'Scoped Course B',
         code: 'ACCESS-B',
         department: departmentBId,
-        semester: 1,
         credits: 3,
+        status: 'active',
+        createdBy: admin.id,
         createdAt: new Date(),
         updatedAt: new Date(),
       },
     ]);
+    await collection('AcademicTerm').insertOne({
+      _id: termId,
+      academicYear: '2026/2027',
+      termNumber: 1,
+      startsAt: new Date('2026-09-01'),
+      endsAt: new Date('2027-01-31'),
+      status: 'current',
+      maupAcademicYear: 2026,
+      maupSemester: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
     await collection('CourseAssignment').insertMany([
       {
         _id: assignmentAId,
         course: courseAId,
         group: groupAId,
         teacher: teacherA.id,
-        academicYear: '2026/2027',
-        semester: 1,
+        term: termId,
         source: CourseAssignmentSource.ELECTIVE,
         enrolledStudents: [enrolledStudent.id],
         finalizedAt: new Date(),
@@ -295,8 +328,7 @@ describe('Academic object access (e2e)', () => {
         course: courseBId,
         group: groupBId,
         teacher: teacherB.id,
-        academicYear: '2026/2027',
-        semester: 1,
+        term: termId,
         source: CourseAssignmentSource.STANDARD,
         enrolledStudents: [],
         createdAt: new Date(),
@@ -329,34 +361,6 @@ describe('Academic object access (e2e)', () => {
         updatedAt: new Date(),
       },
     ]);
-    await collection('File').insertOne({
-      _id: fileId,
-      originalName: 'elective-material.pdf',
-      storagePath,
-      mimetype: 'application/pdf',
-      size: 18,
-      uploadedBy: teacherA.id,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    await collection('Material').insertOne({
-      _id: new Types.ObjectId(),
-      courseAssignment: assignmentAId,
-      title: 'Elective material',
-      description: 'Restricted to enrolled students',
-      category: 'lecture',
-      files: [fileId],
-      resourceLinks: [],
-      publishDate: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    const uploadPath = path.join(process.cwd(), 'uploads', storagePath);
-    await fs.mkdir(path.dirname(uploadPath), { recursive: true });
-    await fs.writeFile(uploadPath, Buffer.from('%PDF academic access'));
-    createdFiles.add(uploadPath);
-
     return {
       admin,
       deanA,
@@ -371,12 +375,10 @@ describe('Academic object access (e2e)', () => {
       courseBId,
       scheduleAId,
       scheduleBId,
-      fileId,
-      storagePath,
     };
   };
 
-  it('protects elective files and schedules from same-group non-enrolled students', async () => {
+  it('protects elective schedules from same-group non-enrolled students', async () => {
     const fixture = await seedFixture();
 
     const enrolledSchedule = await request(app.getHttpServer())
@@ -392,16 +394,6 @@ describe('Academic object access (e2e)', () => {
       .set('Authorization', `Bearer ${fixture.sameGroupOutsider.token}`)
       .expect(200);
     expect(outsiderSchedule.body).toEqual([]);
-
-    await request(app.getHttpServer())
-      .get(`/api/files/download/${fixture.fileId.toHexString()}`)
-      .set('Authorization', `Bearer ${fixture.enrolledStudent.token}`)
-      .expect(200);
-
-    await request(app.getHttpServer())
-      .get(`/api/files/download/${fixture.fileId.toHexString()}`)
-      .set('Authorization', `Bearer ${fixture.sameGroupOutsider.token}`)
-      .expect(403);
   });
 
   it('notifies only the assigned teacher and enrolled elective students', async () => {
@@ -473,13 +465,10 @@ describe('Academic object access (e2e)', () => {
       expect.objectContaining({ id: fixture.courseAId.toHexString() }),
     ]);
 
-    const assignments = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .get('/api/courses/my')
       .set('Authorization', `Bearer ${fixture.deanA.token}`)
-      .expect(200);
-    expect((assignments.body as PaginatedIdView).docs).toEqual([
-      expect.objectContaining({ id: fixture.assignmentAId.toHexString() }),
-    ]);
+      .expect(403);
 
     const schedule = await request(app.getHttpServer())
       .get('/api/schedule')
@@ -493,5 +482,129 @@ describe('Academic object access (e2e)', () => {
         expect.objectContaining({ id: fixture.scheduleBId.toHexString() }),
       ]),
     );
+  });
+
+  it('scopes /api/courses/my to the active student profile group', async () => {
+    const groupAId = new Types.ObjectId();
+    const groupBId = new Types.ObjectId();
+    const courseAId = new Types.ObjectId();
+    const courseBId = new Types.ObjectId();
+    const assignmentAId = new Types.ObjectId();
+    const assignmentBId = new Types.ObjectId();
+    const termId = new Types.ObjectId();
+    const departmentId = new Types.ObjectId();
+    const teacher = await createActor(Role.TEACHER, 'multi-profile-teacher', {
+      teacherProfile: { department: departmentId, position: 'Professor' },
+    });
+
+    const profileAId = new Types.ObjectId();
+    const profileBId = new Types.ObjectId();
+    const student = await createActor(Role.STUDENT, 'multi-profile', {
+      studentProfiles: [
+        {
+          _id: profileAId,
+          externalStudentId: 'MULTI-A',
+          group: groupAId,
+          recordBookNumber: 'MULTI-A',
+          year: 1,
+          status: 'active',
+          syncedAt: new Date(),
+        },
+        {
+          _id: profileBId,
+          externalStudentId: 'MULTI-B',
+          group: groupBId,
+          recordBookNumber: 'MULTI-B',
+          year: 1,
+          status: 'active',
+          syncedAt: new Date(),
+        },
+      ],
+      activeStudentProfileId: profileAId,
+    });
+
+    await collection('Group').insertMany([
+      {
+        _id: groupAId,
+        code: 'MULTI-A',
+        specialty: new Types.ObjectId(),
+        course: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        _id: groupBId,
+        code: 'MULTI-B',
+        specialty: new Types.ObjectId(),
+        course: 1,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    await collection('Course').insertMany([
+      {
+        _id: courseAId,
+        name: 'Multi Profile Course A',
+        code: 'MULTI-CRS-A',
+        department: departmentId,
+        credits: 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        _id: courseBId,
+        name: 'Multi Profile Course B',
+        code: 'MULTI-CRS-B',
+        department: departmentId,
+        credits: 3,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+    await collection('AcademicTerm').insertOne({
+      _id: termId,
+      academicYear: '2026/2027',
+      termNumber: 1,
+      startsAt: new Date('2026-09-01'),
+      endsAt: new Date('2027-01-31'),
+      status: 'current',
+      maupAcademicYear: 2026,
+      maupSemester: 1,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await collection('CourseAssignment').insertMany([
+      {
+        _id: assignmentAId,
+        course: courseAId,
+        group: groupAId,
+        teacher: teacher.id,
+        term: termId,
+        source: CourseAssignmentSource.STANDARD,
+        enrolledStudents: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        _id: assignmentBId,
+        course: courseBId,
+        group: groupBId,
+        teacher: teacher.id,
+        term: termId,
+        source: CourseAssignmentSource.STANDARD,
+        enrolledStudents: [],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ]);
+
+    const assignments = await request(app.getHttpServer())
+      .get('/api/courses/my')
+      .set('Authorization', `Bearer ${student.token}`)
+      .expect(200);
+
+    expect((assignments.body as PaginatedIdView).docs).toEqual([
+      expect.objectContaining({ id: assignmentAId.toHexString() }),
+    ]);
   });
 });

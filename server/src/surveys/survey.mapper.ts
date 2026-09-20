@@ -31,6 +31,10 @@ export function mapSurveyToDto(
     ...(survey.expectedRecipients === undefined
       ? {}
       : { expectedRecipients: survey.expectedRecipients }),
+    ...(survey.estimatedMinutes
+      ? { estimatedMinutes: survey.estimatedMinutes }
+      : {}),
+    ...(survey.closedReason ? { closedReason: survey.closedReason } : {}),
     ...(survey.createdAt ? { createdAt: survey.createdAt.toISOString() } : {}),
     ...(survey.updatedAt ? { updatedAt: survey.updatedAt.toISOString() } : {}),
     ...(completed === undefined ? {} : { completed }),

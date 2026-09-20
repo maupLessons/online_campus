@@ -18,31 +18,25 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Response } from 'express';
+import { AcademicTermsService } from '../academic-terms/academic-terms.service';
+import { AuditLogService } from '../audit-log/audit-log.service';
+import { createAuditContext } from '../audit-log/audit-context';
+import { SkipAudit } from '../audit-log/audit.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles, RolesGuard } from '../auth/roles.guard';
 import { sendSpreadsheetExport } from '../common/export';
 import { AuthenticatedRequest } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
 import {
-  CreateScheduleEntryDto,
-  ApplyScheduleTemplateDto,
-  BulkCancelScheduleEntriesDto,
-  BulkCreateScheduleEntriesDto,
-  CreateScheduleTemplateDto,
-  RescheduleScheduleEntryDto,
-  ScheduleEntryDto,
   ScheduleExportQueryDto,
-  ScheduleQueryDto,
-  ScheduleReasonDto,
-  SubstituteScheduleEntryDto,
-  UpdateScheduleTemplateDto,
-  UpdateScheduleEntryDto,
+  ScheduleGroupResponseDto,
+  ScheduleRangeQueryDto,
+  ScheduleResponseDto,
+  TodayScheduleResponseDto,
+  UpsertOnlineLinkDto,
 } from './dto';
+import { OnlineLessonLinksService } from './online-lesson-links.service';
 import { ScheduleService } from './schedule.service';
-import { AuditLogService } from '../audit-log/audit-log.service';
-import { createAuditContext } from '../audit-log/audit-context';
-import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
-import { AuditEvent } from '../audit-log/audit.decorator';
 
 @ApiTags('schedule')
 @ApiBearerAuth()
@@ -50,246 +44,155 @@ import { AuditEvent } from '../audit-log/audit.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ScheduleController {
   constructor(
-    private readonly scheduleService: ScheduleService,
+    private readonly schedule: ScheduleService,
+    private readonly links: OnlineLessonLinksService,
+    private readonly terms: AcademicTermsService,
     private readonly auditLogService: AuditLogService,
   ) {}
 
-  @Get()
-  @ApiOperation({ summary: 'List schedule entries visible to current user' })
-  @ApiResponse({ status: 200, type: [ScheduleEntryDto] })
-  findAll(
-    @Query() query: ScheduleQueryDto,
+  @Get('my')
+  @Roles(Role.STUDENT, Role.TEACHER)
+  @ApiOperation({ summary: 'Personal class schedule from MAUP API cache' })
+  @ApiResponse({ status: 200, type: ScheduleResponseDto })
+  findMy(
+    @Query() query: ScheduleRangeQueryDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.scheduleService.findForUser(req.user, query);
+    return this.schedule.findMy(req.user, query);
   }
 
-  @Get('my')
-  @ApiOperation({ summary: 'List current user schedule entries' })
-  @ApiResponse({ status: 200, type: [ScheduleEntryDto] })
-  findMy(
-    @Query() query: ScheduleQueryDto,
+  @Get('session/my')
+  @Roles(Role.STUDENT, Role.TEACHER)
+  @ApiOperation({ summary: 'Personal exam session schedule' })
+  findSession(
+    @Query() query: ScheduleRangeQueryDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.scheduleService.findMyForUser(req.user, query);
+    return this.schedule.findSession(req.user, query);
+  }
+
+  @Get('today')
+  @Roles(Role.STUDENT, Role.TEACHER)
+  @ApiOperation({
+    summary: 'Today lessons + session for the dashboard widget (DASH-001)',
+  })
+  @ApiResponse({ status: 200, type: TodayScheduleResponseDto })
+  // No parameters (spec §5.3a): the date is computed by the server in Europe/Kyiv.
+  findToday(@Request() req: AuthenticatedRequest) {
+    return this.schedule.findToday(req.user);
   }
 
   @Get('export')
-  @ApiOperation({ summary: 'Export schedule entries as CSV or XLSX' })
-  async exportCsv(
+  @Roles(Role.STUDENT, Role.TEACHER)
+  @ApiOperation({ summary: 'Export personal schedule as CSV or XLSX' })
+  async export(
     @Query() query: ScheduleExportQueryDto,
     @Request() req: AuthenticatedRequest,
     @Res() res: Response,
   ) {
-    const artifact = await this.scheduleService.export(req.user, query);
+    const artifact = await this.schedule.export(req.user, query);
     return sendSpreadsheetExport(res, artifact);
   }
 
-  @Get('templates')
-  @Roles(Role.ADMIN)
-  @ApiOperation({ summary: 'List active schedule templates' })
-  findTemplates() {
-    return this.scheduleService.findTemplates();
+  @Get('online-links/my')
+  @Roles(Role.TEACHER)
+  @ApiOperation({ summary: 'Own online lesson links for the current term' })
+  async listMyLinks(@Request() req: AuthenticatedRequest) {
+    const term = await this.terms.requireCurrent();
+    return this.links.listMine(req.user, String(term._id));
   }
 
-  @Post('templates')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_CREATE, 'schedule-template')
-  @ApiOperation({ summary: 'Create reusable schedule template' })
-  createTemplate(
-    @Body() body: CreateScheduleTemplateDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.createTemplate(
-      body,
-      createAuditContext(req, this.auditLogService),
-      req.user,
-    );
-  }
-
-  @Put('templates/:id')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_UPDATE, 'schedule-template')
-  @ApiOperation({ summary: 'Update schedule template' })
-  updateTemplate(
-    @Param('id') id: string,
-    @Body() body: UpdateScheduleTemplateDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.updateTemplate(
-      id,
-      body,
-      createAuditContext(req, this.auditLogService),
-    );
-  }
-
-  @Delete('templates/:id')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_DELETE, 'schedule-template')
-  @ApiOperation({ summary: 'Archive schedule template' })
-  deleteTemplate(
-    @Param('id') id: string,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.deleteTemplate(
-      id,
-      createAuditContext(req, this.auditLogService),
-    );
-  }
-
-  @Post('templates/:id/apply')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_TEMPLATE_APPLY, 'schedule-template')
-  @ApiOperation({ summary: 'Apply schedule template to a date range' })
-  applyTemplate(
-    @Param('id') id: string,
-    @Body() body: ApplyScheduleTemplateDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.applyTemplate(
-      id,
-      body,
-      createAuditContext(req, this.auditLogService),
-      req.user,
-    );
-  }
-
-  @Post('bulk')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_BULK_CREATE, 'schedule')
+  // Р12 and spec §5.2: ONLY the teacher sets the online link.
+  // department_head and admin get 403 here, at the @Roles level (acceptance criterion §10.6).
+  @Put('online-links')
+  @Roles(Role.TEACHER)
+  @SkipAudit()
   @ApiOperation({
-    summary: 'Bulk create schedule entries with conflict checks',
+    summary: 'Set online lesson link for a subject/date/pair (teacher only)',
   })
-  bulkCreate(
-    @Body() body: BulkCreateScheduleEntriesDto,
+  async upsertLink(
+    @Body() body: UpsertOnlineLinkDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.scheduleService.bulkCreate(
+    const term = await this.terms.requireCurrent();
+    return this.links.upsert(
       body,
-      createAuditContext(req, this.auditLogService),
       req.user,
+      String(term._id),
+      createAuditContext(req, this.auditLogService),
     );
   }
 
-  @Post('bulk/cancel')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_BULK_CANCEL, 'schedule')
-  @ApiOperation({ summary: 'Bulk cancel schedule entries with one reason' })
-  bulkCancel(
-    @Body() body: BulkCancelScheduleEntriesDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.bulkCancel(
-      body,
-      createAuditContext(req, this.auditLogService),
-      req.user,
-    );
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get schedule entry by id' })
-  @ApiResponse({ status: 200, type: ScheduleEntryDto })
-  findOne(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
-    return this.scheduleService.findOneForUser(id, req.user);
-  }
-
-  @Post()
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_CREATE, 'schedule')
-  @ApiOperation({ summary: 'Create schedule entry with conflict checks' })
-  @ApiResponse({ status: 201, type: ScheduleEntryDto })
-  create(
-    @Body() body: CreateScheduleEntryDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.create(
-      body,
-      createAuditContext(req, this.auditLogService),
-      req.user,
-    );
-  }
-
-  @Put(':id')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_UPDATE, 'schedule')
-  @ApiOperation({ summary: 'Update schedule entry with conflict checks' })
-  @ApiResponse({ status: 200, type: ScheduleEntryDto })
-  update(
+  @Delete('online-links/:id')
+  @Roles(Role.TEACHER)
+  @SkipAudit()
+  async deleteLink(
     @Param('id') id: string,
-    @Body() body: UpdateScheduleEntryDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.scheduleService.update(
+    await this.links.remove(
       id,
-      body,
-      createAuditContext(req, this.auditLogService),
       req.user,
+      createAuditContext(req, this.auditLogService),
+    );
+    return { deleted: true };
+  }
+
+  @Get('groups/:groupCode')
+  @Roles(
+    Role.ADMIN,
+    Role.RECTOR,
+    Role.PRESIDENT,
+    Role.DEAN,
+    Role.DEPARTMENT_HEAD,
+  )
+  @ApiOperation({ summary: 'Cached group schedule (no API refresh)' })
+  @ApiResponse({ status: 200, type: ScheduleGroupResponseDto })
+  findForGroup(
+    @Param('groupCode') groupCode: string,
+    @Query() query: ScheduleRangeQueryDto,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    return this.schedule.findForGroup(
+      req.user,
+      groupCode,
+      query,
+      query.session === 'true',
     );
   }
 
-  @Post(':id/cancel')
+  @Post('groups/:groupCode/refresh')
   @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_CANCEL, 'schedule')
-  @ApiOperation({ summary: 'Cancel schedule entry with a required reason' })
-  @ApiResponse({ status: 200, type: ScheduleEntryDto })
-  cancel(
-    @Param('id') id: string,
-    @Body() body: ScheduleReasonDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.cancel(
-      id,
-      body,
-      createAuditContext(req, this.auditLogService),
-      req.user,
-    );
-  }
-
-  @Post(':id/reschedule')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_RESCHEDULE, 'schedule')
-  @ApiOperation({ summary: 'Move schedule entry to a new slot' })
-  @ApiResponse({ status: 200, type: ScheduleEntryDto })
-  reschedule(
-    @Param('id') id: string,
-    @Body() body: RescheduleScheduleEntryDto,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.scheduleService.reschedule(
-      id,
-      body,
-      createAuditContext(req, this.auditLogService),
-      req.user,
-    );
-  }
-
-  @Post(':id/substitution')
-  @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_SUBSTITUTE, 'schedule')
+  @SkipAudit()
   @ApiOperation({
-    summary: 'Substitute teacher/course/classroom/time for entry',
+    summary: 'Force refresh of a group snapshot from MAUP API (ignores TTL)',
   })
-  @ApiResponse({ status: 200, type: ScheduleEntryDto })
-  substitute(
-    @Param('id') id: string,
-    @Body() body: SubstituteScheduleEntryDto,
+  refreshGroup(
+    @Param('groupCode') groupCode: string,
+    @Query() query: ScheduleRangeQueryDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.scheduleService.substitute(
-      id,
-      body,
-      createAuditContext(req, this.auditLogService),
+    // session not set → both snapshots are refreshed (lessons + session), spec §7.1.
+    const session =
+      query.session === undefined ? undefined : query.session === 'true';
+    return this.schedule.refreshGroup(
       req.user,
+      groupCode,
+      session,
+      createAuditContext(req, this.auditLogService),
     );
   }
 
-  @Delete(':id')
+  @Post('refresh')
   @Roles(Role.ADMIN)
-  @AuditEvent(AUDIT_ACTIONS.SCHEDULE_DELETE, 'schedule')
-  @ApiOperation({ summary: 'Delete schedule entry' })
-  delete(@Param('id') id: string, @Request() req: AuthenticatedRequest) {
-    return this.scheduleService.delete(
-      id,
+  @SkipAudit()
+  @ApiOperation({
+    summary:
+      'Force refresh of every group of the current term (both snapshots)',
+  })
+  refreshAll(@Request() req: AuthenticatedRequest) {
+    return this.schedule.refreshAll(
+      req.user,
       createAuditContext(req, this.auditLogService),
     );
   }

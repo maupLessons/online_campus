@@ -46,8 +46,13 @@ function buildSurveyParams(filters?: SurveyListFilters) {
 }
 
 export const surveysApi = {
-  listActive: async () => {
-    const { data } = await api.get<Survey[]>("/surveys/active");
+  listActive: async (params?: { completed?: boolean }) => {
+    const { data } = await api.get<Survey[]>("/surveys/active", { params });
+    return data;
+  },
+
+  listCompleted: async () => {
+    const { data } = await api.get<Survey[]>("/surveys/completed");
     return data;
   },
 
@@ -88,6 +93,11 @@ export const surveysApi = {
 
   close: async (id: string) => {
     const { data } = await api.patch<Survey>(`/surveys/${id}/close`);
+    return data;
+  },
+
+  unpublish: async (id: string) => {
+    const { data } = await api.patch<Survey>(`/surveys/${id}/unpublish`);
     return data;
   },
 

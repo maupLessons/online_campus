@@ -1,150 +1,72 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
-import api from '../../services/api';
+import { Role } from '../../types';
 import ProfileSummaryCard from '../../components/dashboard/ProfileSummaryCard';
-import PerformanceCard from '../../components/dashboard/PerformanceCard';
+import AccountStatusCard from '../../components/dashboard/AccountStatusCard';
 import TodayScheduleCard from '../../components/dashboard/TodayScheduleCard';
-import DeadlinesCard from '../../components/dashboard/DeadlinesCard';
-import SurveyHighlightCard from '../../components/dashboard/SurveyHighlightCard';
+import ActiveSurveysCard from '../../components/dashboard/ActiveSurveysCard';
+import ElectiveStatusCard from '../../components/dashboard/ElectiveStatusCard';
+import ImportantNotificationsCard from '../../components/dashboard/ImportantNotificationsCard';
 import CampusNewsCard from '../../components/dashboard/CampusNewsCard';
-import { newsApi, type NewsItem } from '../../services/newsApi';
+import { scheduleApi, scheduleQueryKeys } from '../../services/scheduleApi';
+import { surveysApi } from '../../services/surveysApi';
+import { electivesApi } from '../../services/electivesApi';
+import { notificationsApi, notificationsQueryKeys } from '../../services/notificationsApi';
+import { newsApi, newsQueryKeys } from '../../services/newsApi';
 
-export type ScheduleItem = {
-  id?: string;
-  title?: string;
-  subjectName?: string;
-  courseName?: string;
-  lessonType?: string;
-  teacherName?: string;
-  classroom?: string;
-  classroomName?: string;
-  startTime?: string;
-  endTime?: string;
-  status?: string;
-  date?: string;
-};
-
-export type NotificationItem = {
-  id?: string;
-  title?: string;
-  message?: string;
-  createdAt?: string;
-  type?: string;
-  read?: boolean;
-  readFlag?: boolean;
-  actionUrl?: string;
-  entityType?: string | null;
-  entityId?: string | null;
-};
-
-function normalizeArray<T>(value: unknown): T[] {
-  if (Array.isArray(value)) return value as T[];
-  if (
-    value &&
-    typeof value === 'object' &&
-    'items' in value &&
-    Array.isArray((value as { items?: unknown[] }).items)
-  ) {
-    return ((value as { items: T[] }).items ?? []) as T[];
-  }
-  return [];
-}
+const IMPORTANT_FILTERS = { important: true, readState: 'unread' as const };
+const ACTIVE_SURVEYS_FILTERS = { completed: false };
+const ACTIVE_SURVEYS_KEY = ['surveys', 'active', ACTIVE_SURVEYS_FILTERS] as const;
+const ACTIVE_ELECTIVES_KEY = ['electives', 'active'] as const;
 
 export default function DashboardPage() {
   const { user } = useAuthStore();
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [newsUnavailable, setNewsUnavailable] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const userId = user?.id ?? 'anonymous';
+  const isStudent = user?.role === Role.STUDENT;
+  const hasSchedule = isStudent || user?.role === Role.TEACHER;
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadDashboardData = async () => {
-      setIsLoading(true);
-
-      const [scheduleResult, notificationsResult, newsResult] =
-        await Promise.allSettled([
-          api.get('/schedule/my'),
-          api.get('/notifications'),
-          newsApi.listLatest(3),
-        ]);
-
-      if (!isMounted) return;
-
-      if (scheduleResult.status === 'fulfilled') {
-        setSchedule(normalizeArray<ScheduleItem>(scheduleResult.value.data));
-      } else {
-        setSchedule([]);
-      }
-
-      if (notificationsResult.status === 'fulfilled') {
-        setNotifications(
-          normalizeArray<NotificationItem>(notificationsResult.value.data),
-        );
-      } else {
-        setNotifications([]);
-      }
-
-      if (newsResult.status === 'fulfilled') {
-        setNews(newsResult.value.items);
-        setNewsUnavailable(newsResult.value.unavailable);
-      } else {
-        setNews([]);
-        setNewsUnavailable(true);
-      }
-
-      setIsLoading(false);
-    };
-
-    loadDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const todaySchedule = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-
-    const filtered = schedule.filter((item) => {
-      if (!item.date) return true;
-      return item.date.slice(0, 10) === today;
-    });
-
-    return filtered.slice(0, 4);
-  }, [schedule]);
+  const [schedule, surveys, electives, important, news] = useQueries({
+    queries: [
+      { queryKey: scheduleQueryKeys.today(), queryFn: scheduleApi.today, enabled: hasSchedule },
+      { queryKey: ACTIVE_SURVEYS_KEY, queryFn: () => surveysApi.listActive(ACTIVE_SURVEYS_FILTERS), enabled: hasSchedule },
+      { queryKey: ACTIVE_ELECTIVES_KEY, queryFn: electivesApi.listActive, enabled: isStudent },
+      { queryKey: notificationsQueryKeys.all(userId, IMPORTANT_FILTERS), queryFn: () => notificationsApi.list(IMPORTANT_FILTERS) },
+      { queryKey: newsQueryKeys.latest(3), queryFn: () => newsApi.listLatest(3) },
+    ],
+  });
 
   return (
     <div className="space-y-6">
-      {/* <div>
-        <h1 className="text-4xl font-bold tracking-tight text-slate-900">
-          {t('dashboard.welcome', { name: greetingName })}
-        </h1>
-        <p className="mt-2 text-base text-slate-500">
-          {t('dashboard.overview')}
-        </p>
-      </div> */}
-
       <div className="grid gap-6 xl:grid-cols-[460px_minmax(0,1fr)]">
         <div className="space-y-6">
           <ProfileSummaryCard user={user} />
-          <PerformanceCard user={user} />
+          <AccountStatusCard user={user} />
         </div>
 
         <div className="space-y-6">
-          <TodayScheduleCard items={todaySchedule} isLoading={isLoading} />
-          <CampusNewsCard
-            items={news}
-            isLoading={isLoading}
-            unavailable={newsUnavailable}
-          />
+          {hasSchedule && (
+            <TodayScheduleCard
+              lessons={schedule.data?.lessons ?? []}
+              session={schedule.data?.session ?? []}
+              meta={schedule.data?.meta ?? { stale: false }}
+              isLoading={schedule.isPending}
+            />
+          )}
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <DeadlinesCard items={notifications} />
-            <SurveyHighlightCard items={notifications} />
-          </div>
+          {(hasSchedule || isStudent) && (
+            <div className={`grid gap-6 ${isStudent ? 'lg:grid-cols-2' : ''}`}>
+              {hasSchedule && <ActiveSurveysCard surveys={surveys.data ?? []} isLoading={surveys.isPending} />}
+              {isStudent && <ElectiveStatusCard items={electives.data ?? []} isLoading={electives.isPending} />}
+            </div>
+          )}
+
+          <ImportantNotificationsCard items={important.data ?? []} isLoading={important.isPending} />
+
+          <CampusNewsCard
+            items={news.data?.items ?? []}
+            isLoading={news.isPending}
+            unavailable={news.isError || news.data?.unavailable === true}
+          />
         </div>
       </div>
     </div>

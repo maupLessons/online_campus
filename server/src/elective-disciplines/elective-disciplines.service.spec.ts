@@ -3,16 +3,21 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { Role } from '../common/types/roles.enum';
+import { AcademicTermsService } from '../academic-terms/academic-terms.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { UsersService } from '../users/users.service';
 import { ElectiveDisciplinesService } from './elective-disciplines.service';
 import {
   ElectiveDisciplineStatus,
   ElectiveSelectionPeriodStatus,
+  ElectiveSelectionStatus,
 } from './schemas';
 import { DomainAuditEvent } from '../audit-log/audit-context';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 
 type QueryChain<T> = {
   populate: jest.Mock<QueryChain<T>, [unknown?]>;
@@ -39,6 +44,8 @@ function queryChain<T>(value: T): QueryChain<T> {
   return chain;
 }
 
+const fixtureTermId = new Types.ObjectId('6622b2a00f3a22d5b625d1a0');
+
 function createDiscipline(overrides: Record<string, unknown> = {}) {
   return {
     _id: new Types.ObjectId('6622b2a00f3a22d5b625d180'),
@@ -50,7 +57,11 @@ function createDiscipline(overrides: Record<string, unknown> = {}) {
       name: 'Кафедра ІТ',
     },
     teacher: null,
-    semester: 3,
+    term: {
+      _id: fixtureTermId,
+      academicYear: '2026/2027',
+      termNumber: 1,
+    },
     credits: 4,
     capacity: 2,
     enrolledCount: 0,
@@ -67,8 +78,11 @@ function createPeriod(overrides: Record<string, unknown> = {}) {
   return {
     _id: new Types.ObjectId('6622b2a00f3a22d5b625d183'),
     title: 'Вибір на осінній семестр',
-    academicYear: '2026/2027',
-    semester: 3,
+    term: {
+      _id: fixtureTermId,
+      academicYear: '2026/2027',
+      termNumber: 1,
+    },
     startsAt: new Date('2026-01-01T00:00:00.000Z'),
     endsAt: new Date('2099-01-01T00:00:00.000Z'),
     status: ElectiveSelectionPeriodStatus.ACTIVE,
@@ -100,15 +114,31 @@ describe('ElectiveDisciplinesService', () => {
     find: jest.Mock;
     findById: jest.Mock;
     findOneAndUpdate: jest.Mock;
+    create: jest.Mock;
     updateMany: jest.Mock;
     updateOne: jest.Mock;
+    exists: jest.Mock;
+  };
+  let groupModel: {
+    countDocuments: jest.Mock;
+  };
+  let departmentModel: {
+    findById: jest.Mock;
+    find: jest.Mock;
+  };
+  let academicTerms: {
+    getCurrent: jest.Mock;
+    requireCurrent: jest.Mock;
+    findById: jest.Mock;
   };
   let selectionModel: {
     find: jest.Mock;
     findOne: jest.Mock;
     findOneAndDelete: jest.Mock;
+    findOneAndUpdate: jest.Mock;
     findById: jest.Mock;
     countDocuments: jest.Mock;
+    distinct: jest.Mock;
     create: jest.Mock;
     updateMany: jest.Mock;
   };
@@ -124,12 +154,25 @@ describe('ElectiveDisciplinesService', () => {
     find: jest.Mock;
     countDocuments: jest.Mock;
   };
-  let usersService: jest.Mocked<Pick<UsersService, 'findOne'>>;
+  let usersService: jest.Mocked<
+    Pick<UsersService, 'findOne' | 'getActiveStudentProfile'>
+  >;
+  let notificationsService: { createMany: jest.Mock };
 
   const studentId = new Types.ObjectId('6622b2a00f3a22d5b625d185');
   const groupId = '6622b2a00f3a22d5b625d184';
   const period = createPeriod();
   const discipline = createDiscipline();
+  const admin = {
+    sub: '6622b2a00f3a22d5b625d1a3',
+    login: 'admin1',
+    role: Role.ADMIN,
+  };
+  const student = {
+    sub: studentId.toHexString(),
+    login: 'student1',
+    role: Role.STUDENT,
+  };
 
   beforeEach(() => {
     disciplineModel = {
@@ -141,14 +184,35 @@ describe('ElectiveDisciplinesService', () => {
     periodModel = {
       find: jest.fn().mockReturnValue(queryChain([period])),
       findById: jest.fn().mockReturnValue(queryChain(period)),
-      findOneAndUpdate: jest.fn().mockReturnValue(queryChain(period)),
+      // Default: no period matches a lazy transition's conditional filter
+      // (findActiveForStudent/listPeriods now also call remindDuePeriods,
+      // which loops on findOneAndUpdate until it returns null). Tests that
+      // exercise finalizePeriod's own two-step lock/finalize sequence queue
+      // their own mockReturnValueOnce values, taking precedence over this.
+      findOneAndUpdate: jest.fn().mockReturnValue(queryChain(null)),
+      create: jest.fn().mockResolvedValue(period),
       updateMany: jest.fn().mockReturnValue(queryChain({ modifiedCount: 0 })),
       updateOne: jest.fn().mockReturnValue(queryChain({ modifiedCount: 1 })),
+      exists: jest.fn().mockReturnValue(queryChain(null)),
+    };
+    groupModel = {
+      countDocuments: jest.fn().mockReturnValue(queryChain(1)),
+    };
+    departmentModel = {
+      findById: jest.fn().mockReturnValue(queryChain(null)),
+      find: jest.fn().mockReturnValue(queryChain([])),
+    };
+    academicTerms = {
+      getCurrent: jest.fn().mockResolvedValue({ _id: fixtureTermId }),
+      requireCurrent: jest.fn().mockResolvedValue({ _id: fixtureTermId }),
+      findById: jest.fn().mockResolvedValue({ _id: fixtureTermId }),
     };
     selectionModel = {
       find: jest.fn().mockReturnValue(queryChain([])),
       findOne: jest.fn().mockReturnValue(queryChain(null)),
       findOneAndDelete: jest.fn().mockReturnValue(queryChain(null)),
+      findOneAndUpdate: jest.fn().mockReturnValue(queryChain(null)),
+      distinct: jest.fn().mockReturnValue(queryChain([])),
       findById: jest.fn().mockReturnValue(
         queryChain({
           _id: new Types.ObjectId('6622b2a00f3a22d5b625d186'),
@@ -171,7 +235,6 @@ describe('ElectiveDisciplinesService', () => {
           _id: new Types.ObjectId('6622b2a00f3a22d5b625d190'),
           code: discipline.code,
           department: discipline.department,
-          semester: discipline.semester,
           credits: discipline.credits,
         }),
       ),
@@ -201,15 +264,31 @@ describe('ElectiveDisciplinesService', () => {
         firstName: 'Test',
         lastName: 'Student',
         status: 'active',
-        studentProfile: {
-          group: groupId,
-          recordBookNumber: 'RB-1',
-          year: 3,
-        },
+        studentProfiles: [
+          {
+            id: '6622b2a00f3a22d5b625d189',
+            group: { id: groupId },
+            recordBookNumber: 'RB-1',
+            year: 3,
+            status: 'active',
+            syncedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        activeStudentProfileId: '6622b2a00f3a22d5b625d189',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
+      getActiveStudentProfile: jest.fn().mockResolvedValue({
+        _id: new Types.ObjectId('6622b2a00f3a22d5b625d189'),
+        group: { _id: new Types.ObjectId(groupId), code: 'КН-31' },
+        recordBookNumber: 'RB-1',
+        year: 3,
+        status: 'active',
+        syncedAt: new Date('2026-01-01T00:00:00.000Z'),
+      }),
     };
+
+    notificationsService = { createMany: jest.fn() };
 
     service = new ElectiveDisciplinesService(
       disciplineModel as never,
@@ -217,11 +296,13 @@ describe('ElectiveDisciplinesService', () => {
       selectionModel as never,
       courseModel as never,
       courseAssignmentModel as never,
-      {} as never,
-      {} as never,
+      departmentModel as never,
+      groupModel as never,
       userModel as never,
       usersService as unknown as UsersService,
-      { createMany: jest.fn() } as unknown as NotificationsService,
+      notificationsService as unknown as NotificationsService,
+      academicTerms as unknown as AcademicTermsService,
+      { get: jest.fn() } as unknown as ConfigService,
     );
   });
 
@@ -245,6 +326,19 @@ describe('ElectiveDisciplinesService', () => {
         availableSeats: 2,
       }),
     );
+  });
+
+  it('returns an empty list without a current academic term', async () => {
+    academicTerms.getCurrent.mockResolvedValue(null);
+
+    const result = await service.findActiveForStudent({
+      sub: studentId.toHexString(),
+      login: 'student1',
+      role: Role.STUDENT,
+    });
+
+    expect(result).toEqual([]);
+    expect(periodModel.find).not.toHaveBeenCalled();
   });
 
   it('selects a discipline and reserves capacity atomically', async () => {
@@ -345,11 +439,17 @@ describe('ElectiveDisciplinesService', () => {
       firstName: 'Test',
       lastName: 'Student',
       status: 'active',
-      studentProfile: {
-        group: '6622b2a00f3a22d5b625d187',
-        recordBookNumber: 'RB-1',
-        year: 3,
-      },
+      studentProfiles: [
+        {
+          id: '6622b2a00f3a22d5b625d18a',
+          group: { id: '6622b2a00f3a22d5b625d187' },
+          recordBookNumber: 'RB-1',
+          year: 3,
+          status: 'active',
+          syncedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      activeStudentProfileId: '6622b2a00f3a22d5b625d18a',
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
@@ -488,10 +588,7 @@ describe('ElectiveDisciplinesService', () => {
     ];
     expect(assignmentCall[0].course).toBeInstanceOf(Types.ObjectId);
     expect(assignmentCall[0].group).toBeInstanceOf(Types.ObjectId);
-    expect(assignmentCall[0]).toMatchObject({
-      academicYear: closedPeriod.academicYear,
-      semester: closedPeriod.semester,
-    });
+    expect(assignmentCall[0].term).toEqual(fixtureTermId);
     expect(assignmentCall[1].$addToSet?.enrolledStudents?.$each).toEqual([
       studentId,
     ]);
@@ -509,5 +606,287 @@ describe('ElectiveDisciplinesService', () => {
     expect(selectionCall[1].$set?.finalizedBy).toBeInstanceOf(Types.ObjectId);
     expect(result.period.status).toBe(ElectiveSelectionPeriodStatus.FINALIZED);
     expect(result.courseAssignments).toHaveLength(1);
+  });
+
+  it('rejects finalization when the matching course is archived', async () => {
+    const record = jest
+      .fn<Promise<void>, [DomainAuditEvent]>()
+      .mockResolvedValue(undefined);
+    const audit = { record };
+    const closedPeriod = createPeriod({
+      status: ElectiveSelectionPeriodStatus.CLOSED,
+      closedAt: new Date('2026-01-10T00:00:00.000Z'),
+    });
+    const teacherId = new Types.ObjectId('6622b2a00f3a22d5b625d188');
+    const finalizedDiscipline = createDiscipline({ teacher: teacherId });
+    const departmentId = new Types.ObjectId('6622b2a00f3a22d5b625d181');
+    const selectionId = new Types.ObjectId('6622b2a00f3a22d5b625d189');
+    const selection = {
+      _id: selectionId,
+      period: closedPeriod._id,
+      discipline: finalizedDiscipline,
+      student: {
+        _id: studentId,
+        login: 'student1',
+        firstName: 'Test',
+        lastName: 'Student',
+      },
+      group: closedPeriod.targetGroups[0],
+      selectedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+
+    const finalizedPeriod = createPeriod({
+      ...closedPeriod,
+      status: ElectiveSelectionPeriodStatus.FINALIZED,
+      finalizedAt: new Date('2026-01-10T00:05:00.000Z'),
+    });
+    periodModel.findOneAndUpdate
+      .mockReturnValueOnce(queryChain(closedPeriod))
+      .mockReturnValueOnce(queryChain(finalizedPeriod));
+    periodModel.findById.mockReturnValue(queryChain(finalizedPeriod));
+    selectionModel.find.mockReturnValueOnce(queryChain([selection]));
+    userModel.find.mockReturnValueOnce(
+      queryChain([
+        {
+          _id: teacherId,
+          teacherProfile: { department: departmentId },
+        },
+      ]),
+    );
+    courseModel.findOneAndUpdate.mockReturnValueOnce(
+      queryChain({ status: 'archived', code: 'EL-1' }),
+    );
+
+    await expect(
+      service.finalizePeriod(
+        closedPeriod._id.toString(),
+        {
+          sub: '6622b2a00f3a22d5b625d182',
+          login: 'dean1',
+          role: Role.DEAN,
+        },
+        audit,
+      ),
+    ).rejects.toThrow(ConflictException);
+
+    expect(courseAssignmentModel.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('createPeriod without termId uses the current academic term', async () => {
+    const currentTermId = new Types.ObjectId('6622b2a00f3a22d5b625d1a1');
+    academicTerms.requireCurrent.mockResolvedValue({ _id: currentTermId });
+
+    await service.createPeriod(
+      {
+        title: 'Осінь',
+        startsAt: '2026-10-01',
+        endsAt: '2026-10-15',
+        targetGroupIds: [groupId],
+        requiredChoices: 1,
+      },
+      {
+        sub: '6622b2a00f3a22d5b625d182',
+        login: 'dean1',
+        role: Role.DEAN,
+      },
+    );
+
+    expect(periodModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ term: currentTermId }),
+    );
+  });
+
+  it('select rejects a discipline from another academic term', async () => {
+    const otherTermId = new Types.ObjectId('6622b2a00f3a22d5b625d1a2');
+    disciplineModel.findById.mockReturnValueOnce(
+      queryChain(
+        createDiscipline({
+          term: {
+            _id: otherTermId,
+            academicYear: '2025/2026',
+            termNumber: 2,
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      service.selectDiscipline(
+        period._id.toString(),
+        { disciplineId: discipline._id.toString() },
+        {
+          sub: studentId.toHexString(),
+          login: 'student1',
+          role: Role.STUDENT,
+        },
+      ),
+    ).rejects.toThrow(
+      'Дисципліна не належить до навчального періоду цього періоду вибору',
+    );
+  });
+
+  describe('cancelDiscipline', () => {
+    it('rejects cancellation when the discipline belongs to a finalized period', async () => {
+      const cancelDiscipline = createDiscipline({
+        status: ElectiveDisciplineStatus.ACTIVE,
+      });
+      disciplineModel.findById.mockReturnValue(queryChain(cancelDiscipline));
+      selectionModel.distinct.mockReturnValue(
+        queryChain([new Types.ObjectId()]),
+      );
+      periodModel.exists.mockReturnValue(
+        queryChain({ _id: new Types.ObjectId() }),
+      ); // finalized
+      await expect(
+        service.cancelDiscipline(
+          cancelDiscipline._id.toHexString(),
+          'Викладач звільнився',
+          admin,
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(selectionModel.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('cascades cancellation to selected selections and notifies students', async () => {
+      const cancelDiscipline = createDiscipline({
+        status: ElectiveDisciplineStatus.ACTIVE,
+      });
+      disciplineModel.findById.mockReturnValue(queryChain(cancelDiscipline));
+      selectionModel.distinct.mockReturnValue(
+        queryChain([new Types.ObjectId()]),
+      );
+      periodModel.exists.mockReturnValue(queryChain(null));
+      selectionModel.find.mockReturnValue(
+        queryChain([
+          {
+            _id: new Types.ObjectId(),
+            student: new Types.ObjectId(),
+            status: ElectiveSelectionStatus.SELECTED,
+          },
+        ]),
+      );
+      selectionModel.updateMany.mockReturnValue(
+        queryChain({ modifiedCount: 1 }),
+      );
+      disciplineModel.updateOne.mockReturnValue(
+        queryChain({ modifiedCount: 1 }),
+      );
+      userModel.find.mockReturnValue(queryChain([]));
+      const record = jest
+        .fn<Promise<void>, [DomainAuditEvent]>()
+        .mockResolvedValue(undefined);
+      const audit = { record };
+
+      await service.cancelDiscipline(
+        cancelDiscipline._id.toHexString(),
+        'Викладач звільнився',
+        admin,
+        audit,
+      );
+
+      const [updateFilter, updateOp] = selectionModel.updateMany.mock
+        .calls[0] as [
+        Record<string, unknown>,
+        { $set: Record<string, unknown> },
+      ];
+      expect(updateFilter).toMatchObject({
+        discipline: cancelDiscipline._id,
+        status: ElectiveSelectionStatus.SELECTED,
+      });
+      expect(updateOp.$set).toMatchObject({
+        status: ElectiveSelectionStatus.CANCELLED,
+        cancelReason: 'discipline_cancelled',
+      });
+      expect(notificationsService.createMany).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: NotificationType.ELECTIVE,
+            actionUrl: '/electives',
+          }),
+        ]),
+      );
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AUDIT_ACTIONS.ELECTIVE_DISCIPLINE_STATUS_CHANGE,
+        }),
+      );
+      const [cancelEvent] = record.mock.calls[0];
+      expect(cancelEvent.details).toMatchObject({
+        before: { status: 'active' },
+        after: { status: 'cancelled' },
+        reason: 'Викладач звільнився',
+        affectedSelections: 1,
+      });
+      // §8/AUD-003: no student list in the payload
+      expect(Object.keys(cancelEvent.details ?? {})).not.toContain('students');
+    });
+  });
+
+  describe('setDisciplineStatus (не-cancel гілки)', () => {
+    it('audits archiving with before/after', async () => {
+      const archivedDiscipline = createDiscipline({
+        status: ElectiveDisciplineStatus.ACTIVE,
+      });
+      disciplineModel.findById.mockReturnValue(queryChain(archivedDiscipline));
+      const record = jest
+        .fn<Promise<void>, [DomainAuditEvent]>()
+        .mockResolvedValue(undefined);
+      const audit = { record };
+
+      await service.setDisciplineStatus(
+        archivedDiscipline._id.toHexString(),
+        { status: ElectiveDisciplineStatus.ARCHIVED },
+        admin,
+        audit,
+      );
+
+      expect(record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: AUDIT_ACTIONS.ELECTIVE_DISCIPLINE_STATUS_CHANGE,
+        }),
+      );
+      const [archiveEvent] = record.mock.calls[0];
+      expect(archiveEvent.details).toMatchObject({
+        before: { status: 'active' },
+        after: { status: 'archived' },
+      });
+    });
+  });
+
+  describe('cancelSelection', () => {
+    it('marks selection cancelled instead of deleting', async () => {
+      const cancelPeriod = createPeriod();
+      periodModel.findById.mockReturnValue(queryChain(cancelPeriod));
+      const selection = {
+        _id: new Types.ObjectId(),
+        discipline: new Types.ObjectId(),
+        group: new Types.ObjectId(),
+        choiceSlot: 0,
+      };
+      selectionModel.findOneAndUpdate.mockReturnValue(queryChain(selection));
+      disciplineModel.updateOne.mockReturnValue(
+        queryChain({ modifiedCount: 1 }),
+      );
+
+      await service.cancelSelection(
+        cancelPeriod._id.toHexString(),
+        selection._id.toHexString(),
+        student,
+      );
+
+      expect(selectionModel.findOneAndDelete).not.toHaveBeenCalled();
+      const [updateFilter, updateOp] = selectionModel.findOneAndUpdate.mock
+        .calls[0] as [
+        Record<string, unknown>,
+        { $set: Record<string, unknown> },
+      ];
+      expect(updateFilter).toMatchObject({
+        status: ElectiveSelectionStatus.SELECTED,
+      });
+      expect(updateOp.$set).toMatchObject({
+        status: ElectiveSelectionStatus.CANCELLED,
+        cancelReason: 'student',
+      });
+    });
   });
 });

@@ -5,6 +5,16 @@ import { Role, ROLE_LABEL_KEYS } from "../types";
 import { useTranslation } from "react-i18next";
 import { useAutoDismissState } from "../hooks/useAutoDismissState";
 import { getLocalizedApiErrorMessage } from "../utils/apiErrorMessage";
+import { Plus, Trash2 } from "lucide-react";
+import {
+  MAX_STUDENT_PROFILES,
+  buildStudentProfilesPayload,
+  emptyStudentProfileRow,
+  studentProfileRowsFromUser,
+  validateStudentProfileRows,
+  type StudentProfileRow,
+} from "../utils/studentProfileForm";
+import type { StudentProfile } from "../types";
 
 interface ReferenceItem {
   id?: string;
@@ -22,15 +32,12 @@ interface UserProfile {
   lastName?: string;
   middleName?: string;
   phone?: string;
-  studentProfile?: {
-    group?: ReferenceItem | string | null;
-    recordBookNumber?: string;
-    externalStudentId?: string;
-    year?: number;
-  };
+  studentProfiles?: StudentProfile[];
+  activeStudentProfileId?: string | null;
   teacherProfile?: {
     department?: ReferenceItem | string | null;
     position?: string;
+    externalTeacherId?: string;
   };
 }
 
@@ -43,12 +50,10 @@ type UserFormData = {
   lastName: string;
   middleName: string;
   phone: string;
-  groupId: string;
-  recordBookNumber: string;
-  externalStudentId: string;
-  year: number;
+  studentProfiles: StudentProfileRow[];
   departmentId: string;
   position: string;
+  externalTeacherId: string;
 };
 
 interface Props {
@@ -77,12 +82,10 @@ function buildInitialFormData(userToEdit?: UserProfile | null): UserFormData {
       lastName: "",
       middleName: "",
       phone: "",
-      groupId: "",
-      recordBookNumber: "",
-      externalStudentId: "",
-      year: 1,
+      studentProfiles: studentProfileRowsFromUser(userToEdit),
       departmentId: "",
       position: "",
+      externalTeacherId: "",
     };
   }
 
@@ -95,12 +98,10 @@ function buildInitialFormData(userToEdit?: UserProfile | null): UserFormData {
     lastName: userToEdit.lastName || "",
     middleName: userToEdit.middleName || "",
     phone: userToEdit.phone || "",
-    groupId: getReferenceId(userToEdit.studentProfile?.group),
-    recordBookNumber: userToEdit.studentProfile?.recordBookNumber || "",
-    externalStudentId: userToEdit.studentProfile?.externalStudentId || "",
-    year: userToEdit.studentProfile?.year || 1,
+    studentProfiles: studentProfileRowsFromUser(userToEdit),
     departmentId: getReferenceId(userToEdit.teacherProfile?.department),
     position: userToEdit.teacherProfile?.position || "",
+    externalTeacherId: userToEdit.teacherProfile?.externalTeacherId || "",
   };
 }
 
@@ -121,6 +122,41 @@ export default function CreateUserModal({
   const [error, setError] = useAutoDismissState("");
   const [passwordError, setPasswordError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // PATCH /users/:id fully replaces the profiles array, so we send it only
+  // when the administrator actually edited the profiles block.
+  const [profilesDirty, setProfilesDirty] = useState(false);
+
+  const updateProfileRow = (
+    index: number,
+    patch: Partial<StudentProfileRow>,
+  ) => {
+    setProfilesDirty(true);
+    setFormData((current) => ({
+      ...current,
+      studentProfiles: current.studentProfiles.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row,
+      ),
+    }));
+  };
+
+  const addProfileRow = () => {
+    setProfilesDirty(true);
+    setFormData((current) => ({
+      ...current,
+      studentProfiles: [...current.studentProfiles, emptyStudentProfileRow()],
+    }));
+  };
+
+  const removeProfileRow = (index: number) => {
+    setProfilesDirty(true);
+    setFormData((current) => ({
+      ...current,
+      studentProfiles: current.studentProfiles.filter(
+        (_, rowIndex) => rowIndex !== index,
+      ),
+    }));
+  };
 
   const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]+$/;
 
@@ -176,22 +212,24 @@ export default function CreateUserModal({
     return payload;
   };
 
+  const roleChanged = Boolean(userToEdit) && userToEdit?.role !== formData.role;
+  const sendsProfiles = !userToEdit || roleChanged || profilesDirty;
+
   const buildRolePayload = () => {
     const payload: Record<string, unknown> = {
       role: formData.role,
     };
 
-    if (formData.role === Role.STUDENT) {
-      payload.groupId = formData.groupId;
-      payload.recordBookNumber = formData.recordBookNumber.trim();
-      payload.externalStudentId =
-        formData.externalStudentId.trim() || undefined;
-      payload.year = formData.year;
+    if (formData.role === Role.STUDENT && sendsProfiles) {
+      payload.studentProfiles = buildStudentProfilesPayload(
+        formData.studentProfiles,
+      );
     }
 
     if (formData.role === Role.TEACHER) {
       payload.departmentId = formData.departmentId;
       payload.position = formData.position.trim();
+      payload.externalTeacherId = formData.externalTeacherId.trim() || undefined;
     }
 
     return payload;
@@ -213,13 +251,22 @@ export default function CreateUserModal({
       }
     }
 
+    if (formData.role === Role.STUDENT && sendsProfiles) {
+      const profilesErrorKey = validateStudentProfileRows(
+        formData.studentProfiles,
+      );
+      if (profilesErrorKey) {
+        setError(t(profilesErrorKey));
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       const basePayload = buildBasePayload();
       const rolePayload = buildRolePayload();
 
       if (userToEdit) {
-        const roleChanged = userToEdit.role !== formData.role;
-
         if (roleChanged) {
           await api.patch(`/users/${userToEdit.id}`, basePayload);
           await api.patch(`/users/${userToEdit.id}/role`, rolePayload);
@@ -435,76 +482,144 @@ export default function CreateUserModal({
             </div>
 
             {formData.role === Role.STUDENT && (
-              <div className="p-4 border border-blue-100 bg-blue-50/50 rounded-lg space-y-4">
-                <h3 className="font-medium text-blue-900">
-                  {t("users.form.studentData")}
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t("users.form.group")} *
-                    </label>
-                    <select
-                      name="groupId"
-                      value={formData.groupId}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    >
-                      <option value="">{t("users.form.selectGroup")}</option>
-                      {groups.map((g) => (
-                        <option key={g.id || g._id} value={g.id || g._id}>
-                          {g.code}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t("users.form.recordBookNumber")} *
-                    </label>
-                    <input
-                      type="text"
-                      name="recordBookNumber"
-                      value={formData.recordBookNumber}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                    />
-                  </div>
+              <div className="space-y-4 rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="font-medium text-blue-900">
+                    {t("users.form.studentProfiles")}
+                  </h3>
+
+                  <button
+                    type="button"
+                    onClick={addProfileRow}
+                    disabled={
+                      formData.studentProfiles.length >= MAX_STUDENT_PROFILES
+                    }
+                    className="inline-flex items-center gap-1 rounded-lg border border-blue-300 px-3 py-1.5 text-sm text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Plus className="h-4 w-4" aria-hidden="true" />
+                    {t("users.form.addProfile")}
+                  </button>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t("users.form.studyYear")} *
-                  </label>
-                  <input
-                    type="number"
-                    name="year"
-                    value={formData.year}
-                    onChange={handleChange}
-                    required
-                    min={1}
-                    max={6}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t("users.form.externalStudentId")}
-                  </label>
-                  <input
-                    type="text"
-                    name="externalStudentId"
-                    value={formData.externalStudentId}
-                    onChange={handleChange}
-                    maxLength={128}
-                    placeholder={t("users.form.externalStudentIdPlaceholder")}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-                  />
-                  <p className="mt-1 text-xs text-gray-400">
-                    {t("users.form.externalStudentIdHint")}
-                  </p>
-                </div>
+
+                <p className="text-xs text-gray-500">
+                  {t("users.form.studentProfilesHint")}
+                </p>
+
+                {formData.studentProfiles.map((row, index) => (
+                  <fieldset
+                    key={index}
+                    className="space-y-4 rounded-lg border border-blue-200 bg-white p-3"
+                  >
+                    <legend className="flex w-full items-center justify-between gap-3 px-1 text-sm font-medium text-blue-900">
+                      <span>
+                        {t("users.form.profileNumber", { n: index + 1 })}
+                      </span>
+
+                      {formData.studentProfiles.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeProfileRow(index)}
+                          className="text-red-600 hover:text-red-800"
+                          title={t("users.form.removeProfile")}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                    </legend>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">
+                          {t("users.form.group")} *
+                        </label>
+                        <select
+                          value={row.groupId}
+                          onChange={(event) =>
+                            updateProfileRow(index, {
+                              groupId: event.currentTarget.value,
+                            })
+                          }
+                          required
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">
+                            {t("users.form.selectGroup")}
+                          </option>
+                          {groups.map((group) => (
+                            <option
+                              key={group.id || group._id}
+                              value={group.id || group._id}
+                            >
+                              {group.code}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">
+                          {t("users.form.recordBookNumber")} *
+                        </label>
+                        <input
+                          type="text"
+                          value={row.recordBookNumber}
+                          onChange={(event) =>
+                            updateProfileRow(index, {
+                              recordBookNumber: event.currentTarget.value,
+                            })
+                          }
+                          required
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">
+                          {t("users.form.studyYear")} *
+                        </label>
+                        <input
+                          type="number"
+                          value={row.year}
+                          onChange={(event) =>
+                            updateProfileRow(index, {
+                              year: Number(event.currentTarget.value),
+                            })
+                          }
+                          required
+                          min={1}
+                          max={6}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">
+                          {t("users.form.externalStudentId")} *
+                        </label>
+                        <input
+                          type="text"
+                          value={row.externalStudentId}
+                          onChange={(event) =>
+                            updateProfileRow(index, {
+                              externalStudentId: event.currentTarget.value,
+                            })
+                          }
+                          required
+                          maxLength={128}
+                          placeholder={t(
+                            "users.form.externalStudentIdPlaceholder",
+                          )}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        <p className="mt-1 text-xs text-gray-400">
+                          {t("users.form.externalStudentIdHint")}
+                        </p>
+                      </div>
+                    </div>
+                  </fieldset>
+                ))}
               </div>
             )}
 
@@ -547,6 +662,22 @@ export default function CreateUserModal({
                       required
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {t("users.form.externalTeacherId")}
+                    </label>
+                    <input
+                      type="text"
+                      name="externalTeacherId"
+                      value={formData.externalTeacherId}
+                      onChange={handleChange}
+                      maxLength={64}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t("users.form.externalTeacherIdHint")}
+                    </p>
                   </div>
                 </div>
               </div>

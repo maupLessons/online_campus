@@ -26,6 +26,7 @@ export class CourseAssignmentSeeder {
       course: ca.courseId,
       group: ca.groupId,
       teacher: ca.teacherId,
+      term: ca.termId,
     }));
 
     await this.courseAssignmentModel.insertMany(data);

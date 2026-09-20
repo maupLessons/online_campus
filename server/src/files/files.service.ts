@@ -7,20 +7,11 @@ import * as path from 'path';
 import { randomUUID } from 'crypto';
 import { File, FileDocument, FileScanStatus } from './file.schema';
 import { FILE_SCANNER, FileScanner } from './file-scanner.types';
-import {
-  Assignment,
-  AssignmentDocument,
-  Material,
-  MaterialDocument,
-  Submission,
-  SubmissionDocument,
-} from '../courses/schemas';
 import { Role } from '../common/types/roles.enum';
 import { toId } from '../common/utils/to-id.util';
 import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { TransactionLifecycleService } from '../audit-log/transaction-lifecycle.service';
-import { AcademicAccessService } from '../common/access/academic-access.service';
 import { validateUploadFile } from './file-upload-validation.util';
 import {
   FileErrorCode,
@@ -39,13 +30,7 @@ const CLEAN_STORAGE_PREFIX = 'clean';
 export class FilesService {
   constructor(
     @InjectModel(File.name) private fileModel: Model<FileDocument>,
-    @InjectModel(Material.name) private materialModel: Model<MaterialDocument>,
-    @InjectModel(Assignment.name)
-    private assignmentModel: Model<AssignmentDocument>,
-    @InjectModel(Submission.name)
-    private submissionModel: Model<SubmissionDocument>,
     private readonly transactionLifecycle: TransactionLifecycleService,
-    private readonly academicAccessService: AcademicAccessService,
     @Inject(FILE_SCANNER) private readonly fileScanner: FileScanner,
   ) {}
 
@@ -160,7 +145,7 @@ export class FilesService {
 
     this.assertFileIsClean(file);
 
-    if (!(await this.canAccessFile(file, userId, role))) {
+    if (!this.canAccessFile(file, userId, role)) {
       throw fileForbidden(FileErrorCode.DOWNLOAD_FORBIDDEN);
     }
 
@@ -250,80 +235,13 @@ export class FilesService {
     }
   }
 
-  private async canAccessFile(file: FileDocument, userId: string, role: Role) {
-    if (role === Role.ADMIN || toId(file.uploadedBy) === userId) {
-      return true;
-    }
-
-    const fileId = new Types.ObjectId(toId(file._id));
-
-    const materials = await this.materialModel
-      .find({ files: fileId } as never)
-      .select('courseAssignment')
-      .lean()
-      .exec();
-
-    for (const material of materials) {
-      if (
-        await this.canAccessCourseAssignment(
-          toId(material.courseAssignment),
-          userId,
-          role,
-        )
-      ) {
-        return true;
-      }
-    }
-
-    const assignments = await this.assignmentModel
-      .find({ files: fileId } as never)
-      .select('courseAssignment')
-      .lean()
-      .exec();
-
-    for (const assignment of assignments) {
-      if (
-        await this.canAccessCourseAssignment(
-          toId(assignment.courseAssignment),
-          userId,
-          role,
-        )
-      ) {
-        return true;
-      }
-    }
-
-    const submissions = await this.submissionModel
-      .find({ files: fileId } as never)
-      .select('student assignment')
-      .lean()
-      .exec();
-
-    for (const submission of submissions) {
-      if (role === Role.STUDENT && toId(submission.student) === userId) {
-        return true;
-      }
-
-      const submittedAssignment = await this.assignmentModel
-        .findById(submission.assignment)
-        .select('courseAssignment')
-        .lean()
-        .exec();
-
-      if (
-        role !== Role.STUDENT &&
-        submittedAssignment &&
-        (await this.canAccessCourseAssignment(
-          toId(submittedAssignment.courseAssignment),
-          userId,
-          role,
-        ))
-      ) {
-        return true;
-      }
-    }
-
-    return false;
+  private canAccessFile(
+    file: FileDocument,
+    userId: string,
+    role: Role,
+  ): boolean {
+    // Materials/assignments/submissions were removed (Р6): access remains with the owner and admin.
+    return role === Role.ADMIN || toId(file.uploadedBy) === userId;
   }
 
   private assertFileIsClean(file: FileDocument): void {
@@ -373,33 +291,5 @@ export class FilesService {
         throw error;
       }
     }
-  }
-
-  private async canAccessCourseAssignment(
-    courseAssignmentId: string,
-    userId: string,
-    role: Role,
-  ) {
-    if (!Types.ObjectId.isValid(userId)) {
-      return false;
-    }
-
-    if (
-      role !== Role.ADMIN &&
-      role !== Role.STUDENT &&
-      role !== Role.TEACHER &&
-      role !== Role.DEPARTMENT_HEAD
-    ) {
-      return false;
-    }
-
-    return this.academicAccessService.canAccessCourseAssignment(
-      courseAssignmentId,
-      {
-        sub: userId,
-        login: '',
-        role,
-      },
-    );
   }
 }

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../store/authStore";
-import { ROLE_LABEL_KEYS } from "../../types";
+import { Role, ROLE_LABEL_KEYS } from "../../types";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Eye, EyeOff } from "lucide-react";
 import { useAutoDismissState } from "../../hooks/useAutoDismissState";
+import { pickActiveStudentProfile } from "../../utils/activeStudentProfile";
+import StudentProfileSections from "../../components/profile/StudentProfileSections";
 
 type InfoRowProps = {
   label: string;
@@ -300,6 +302,13 @@ export default function ProfilePage() {
 
             <InfoRow label={t("profile.phone")} value={user.phone || "—"} />
 
+            {user.role === Role.STUDENT && (
+              <InfoRow
+                label={t("profile.groupCode")}
+                value={pickActiveStudentProfile(user)?.group?.code}
+              />
+            )}
+
             <InfoRow
               label={t("profile.status")}
               value={
@@ -316,30 +325,7 @@ export default function ProfilePage() {
           </div>
         </section>
 
-        {user.studentProfile && (
-          <section className="rounded-3xl bg-white p-6 shadow-sm">
-            <h2 className="mb-5 text-lg font-semibold text-gray-900">
-              {t("profile.studentInfo")}
-            </h2>
-
-            <div className="space-y-3 text-sm">
-              <InfoRow
-                label={t("profile.recordBookNumber")}
-                value={user.studentProfile.recordBookNumber || "—"}
-              />
-
-              <InfoRow
-                label={t("profile.year")}
-                value={user.studentProfile.year ?? "—"}
-              />
-
-              <InfoRow
-                label={t("profile.groupId")}
-                value={user.studentProfile.group || "—"}
-              />
-            </div>
-          </section>
-        )}
+        <StudentProfileSections user={user} />
 
         {user.teacherProfile && (
           <section className="rounded-3xl bg-white p-6 shadow-sm">

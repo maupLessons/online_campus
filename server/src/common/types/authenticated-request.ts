@@ -5,6 +5,7 @@ export interface AuthenticatedUser {
   sub: string;
   login: string;
   role: Role;
+  activeStudentProfileId?: string;
 }
 
 export interface AuthenticatedRequest extends Request {

@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -119,7 +120,11 @@ describe('SurveysService', () => {
   beforeEach(() => {
     surveyModel = {
       findById: jest.fn().mockReturnValue(execQuery(surveyDoc)),
-      findOneAndUpdate: jest.fn(),
+      // Default: no scheduled survey is due for lazy activation
+      // (refreshSurveyLifecycle -> activateDueSurveys is now called at the
+      // start of most read paths; individual tests override this with
+      // mockReturnValueOnce for their own findOneAndUpdate expectations).
+      findOneAndUpdate: jest.fn().mockReturnValue(execQuery(null)),
       updateMany: jest.fn().mockReturnValue(execQuery({ modifiedCount: 0 })),
     };
     questionModel = {
@@ -144,11 +149,17 @@ describe('SurveysService', () => {
         firstName: 'Test',
         lastName: 'Student',
         status: 'active',
-        studentProfile: {
-          group: '6622b2a00f3a22d5b625d174',
-          recordBookNumber: 'RB-1',
-          year: 1,
-        },
+        studentProfiles: [
+          {
+            id: '6622b2a00f3a22d5b625d176',
+            group: { id: '6622b2a00f3a22d5b625d174', code: 'GR-1' },
+            recordBookNumber: 'RB-1',
+            year: 1,
+            status: 'active',
+            syncedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        activeStudentProfileId: '6622b2a00f3a22d5b625d176',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
@@ -164,11 +175,17 @@ describe('SurveysService', () => {
           firstName: 'Test',
           lastName: 'Student',
           status: 'active',
-          studentProfile: {
-            group: '6622b2a00f3a22d5b625d174',
-            recordBookNumber: 'RB-1',
-            year: 1,
-          },
+          studentProfiles: [
+            {
+              id: '6622b2a00f3a22d5b625d176',
+              group: { id: '6622b2a00f3a22d5b625d174', code: 'GR-1' },
+              recordBookNumber: 'RB-1',
+              year: 1,
+              status: 'active',
+              syncedAt: '2026-01-01T00:00:00.000Z',
+            },
+          ],
+          activeStudentProfileId: '6622b2a00f3a22d5b625d176',
           createdAt: '2026-01-01T00:00:00.000Z',
           updatedAt: '2026-01-01T00:00:00.000Z',
         },
@@ -197,6 +214,8 @@ describe('SurveysService', () => {
         notificationsService as unknown as NotificationsService,
       ),
       new SurveyAccessPolicy(),
+      notificationsService as unknown as NotificationsService,
+      { get: jest.fn() } as unknown as ConfigService,
     );
   });
 
@@ -329,6 +348,8 @@ describe('SurveysService', () => {
       firstName: 'Test',
       lastName: 'Teacher',
       status: 'active',
+      studentProfiles: [],
+      activeStudentProfileId: null,
       teacherProfile: {
         department: '6622b2a00f3a22d5b625d177',
         position: 'Lecturer',
@@ -359,6 +380,8 @@ describe('SurveysService', () => {
       firstName: 'Test',
       lastName: 'Teacher',
       status: 'active',
+      studentProfiles: [],
+      activeStudentProfileId: null,
       teacherProfile: {
         department: '6622b2a00f3a22d5b625d177',
         position: 'Lecturer',

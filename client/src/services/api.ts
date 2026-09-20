@@ -309,39 +309,4 @@ api.interceptors.response.use(
   },
 );
 
-export const filesApi = {
-  uploadMaterial: async (caId: string, title: string, file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const uploadRes = await api.post('/files/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    const fileId = uploadRes.data.fileId;
-    const materialRes = await api.post(`/courses/${caId}/materials`, {
-      title,
-      fileIds: [fileId],
-    });
-    return materialRes.data;
-  },
-
-  submitAssignment: async (assignmentId: string, file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const uploadRes = await api.post('/files/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    const fileId = uploadRes.data.fileId;
-    const submitRes = await api.post(
-      `/courses/assignments/${assignmentId}/submit`,
-      {
-        fileIds: [fileId],
-      },
-    );
-    return submitRes.data;
-  },
-
-  deleteFile: async (fileId: string) => {
-    return api.delete(`/files/${fileId}`);
-  },
-};
 export default api;

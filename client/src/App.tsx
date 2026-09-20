@@ -12,19 +12,27 @@ const ALL_ROLES = Object.values(Role) as Role[];
 
 const DashboardPage = lazy(() => import('./pages/shared/DashboardPage'));
 const SchedulePage = lazy(() => import('./pages/shared/SchedulePage'));
+const ScheduleSessionPage = lazy(
+  () => import('./pages/shared/ScheduleSessionPage'),
+);
 const CoursesPage = lazy(() => import('./pages/course/CoursesPage'));
 const CourseDetailPage = lazy(() => import('./pages/course/CourseDetailPage'));
-const MoodleRedirectPage = lazy(
-  () => import('./pages/shared/MoodleRedirectPage'),
-);
+const CourseCatalogPage = lazy(() => import('./pages/course/CourseCatalogPage'));
 const NotificationsPage = lazy(
   () => import('./pages/shared/NotificationsPage'),
 );
 const NewsPage = lazy(() => import('./pages/shared/NewsPage'));
 const UsersPage = lazy(() => import('./pages/admin/UsersPage'));
 const AuditLogPage = lazy(() => import('./pages/admin/AuditLogPage'));
+const AcademicTermsPage = lazy(
+  () => import('./pages/admin/AcademicTermsPage'),
+);
+const AdminScheduleGroupsPage = lazy(
+  () => import('./pages/admin/AdminScheduleGroupsPage'),
+);
 const ReportsPage = lazy(() => import('./pages/shared/ReportsPage'));
 const ReferencesPage = lazy(() => import('./pages/shared/ReferencesPage'));
+const ResourcesPage = lazy(() => import('./pages/shared/ResourcesPage'));
 const ProfilePage = lazy(() => import('./pages/shared/ProfilePage'));
 const SurveysPage = lazy(() => import('./pages/surveys/SurveysPage'));
 const SurveyPlayerPage = lazy(
@@ -90,19 +98,30 @@ export default function App() {
             }
           />
           <Route
+            path="schedule/session"
+            element={
+              <ProtectedRoute allowedRoles={[Role.STUDENT, Role.TEACHER]}>
+                <LazyPage>
+                  <ScheduleSessionPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="courses"
             element={
-              <ProtectedRoute
-                allowedRoles={[
-                  Role.STUDENT,
-                  Role.TEACHER,
-                  Role.DEPARTMENT_HEAD,
-                  Role.DEAN,
-                  Role.ADMIN,
-                ]}>
+              <ProtectedRoute allowedRoles={[Role.STUDENT, Role.TEACHER]}>
                 <LazyPage>
                   <CoursesPage />
                 </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="courses/catalog"
+            element={
+              <ProtectedRoute allowedRoles={[Role.DEPARTMENT_HEAD, Role.DEAN, Role.ADMIN]}>
+                <LazyPage><CourseCatalogPage /></LazyPage>
               </ProtectedRoute>
             }
           />
@@ -121,22 +140,6 @@ export default function App() {
                   <CourseDetailPage />
                 </LazyPage>
               </ProtectedRoute>
-            }
-          />
-          <Route
-            path="assignments"
-            element={
-              <LazyPage>
-                <MoodleRedirectPage />
-              </LazyPage>
-            }
-          />
-          <Route
-            path="grades"
-            element={
-              <LazyPage>
-                <MoodleRedirectPage />
-              </LazyPage>
             }
           />
           <Route
@@ -268,6 +271,26 @@ export default function App() {
             }
           />
           <Route
+            path="admin/academic-terms"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <LazyPage>
+                  <AcademicTermsPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/schedule/groups"
+            element={
+              <ProtectedRoute allowedRoles={[Role.ADMIN]}>
+                <LazyPage>
+                  <AdminScheduleGroupsPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="reports"
             element={
               <ProtectedRoute
@@ -290,6 +313,16 @@ export default function App() {
               <ProtectedRoute allowedRoles={ALL_ROLES}>
                 <LazyPage>
                   <ReferencesPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="resources"
+            element={
+              <ProtectedRoute allowedRoles={ALL_ROLES}>
+                <LazyPage>
+                  <ResourcesPage />
                 </LazyPage>
               </ProtectedRoute>
             }

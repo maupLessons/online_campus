@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, QueryFilter, Types } from 'mongoose';
+import { AcademicTermsService } from '../academic-terms/academic-terms.service';
 import { AcademicAccessService } from '../common/access/academic-access.service';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
@@ -16,20 +17,26 @@ import {
 } from '../courses/schemas';
 import { User, UserDocument } from '../users/schemas';
 import {
+  activeStudentsInGroup,
+  activeStudentsInGroups,
+} from '../users/student-profile.filters';
+import {
   ReportCourseOptionDto,
   ReportFiltersDto,
   ReportQueryDto,
   ReportScopeDto,
   ReportScopeType,
   ReportSelectedFiltersDto,
+  ReportTermOptionDto,
 } from './dto';
 import {
   AssignmentMetadata,
   PopulatedAssignment,
   REPORT_MAX_TIME_MS,
+  ReportTermRef,
   ResolvedReportScope,
 } from './reports.types';
-import { normalizeReportAcademicYear } from './reports-query.util';
+import { formatTermLabel } from './reports-query.util';
 
 @Injectable()
 export class ReportsScopeService {
@@ -44,6 +51,7 @@ export class ReportsScopeService {
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
     private readonly academicAccess: AcademicAccessService,
+    private readonly academicTerms: AcademicTermsService,
   ) {}
 
   async resolve(
@@ -69,8 +77,15 @@ export class ReportsScopeService {
     query: ReportQueryDto,
     user: AuthenticatedUser,
   ): Promise<ResolvedReportScope> {
-    const allAssignments = await this.findAuthorizedAssignments(user);
-    const filters = this.buildFilters(allAssignments, query);
+    const [allAssignments, current] = await Promise.all([
+      this.findAuthorizedAssignments(user),
+      this.academicTerms.getCurrent(),
+    ]);
+    const filters = this.buildFilters(
+      allAssignments,
+      query,
+      current ? toId(current._id) : null,
+    );
     const selectedAssignments = this.applyFilters(
       allAssignments,
       filters.selected,
@@ -86,10 +101,7 @@ export class ReportsScopeService {
     return JSON.stringify([
       user.sub,
       user.role,
-      query.academicYear
-        ? normalizeReportAcademicYear(query.academicYear)
-        : null,
-      query.semester ?? null,
+      query.termId ?? null,
       query.departmentId ?? null,
       query.groupId ?? null,
       query.courseAssignmentId ?? null,
@@ -127,13 +139,11 @@ export class ReportsScopeService {
       _id: {
         $in: [...studentIds].map((id) => new Types.ObjectId(id)),
       },
-      'studentProfile.group': new Types.ObjectId(groupId),
+      ...activeStudentsInGroup(new Types.ObjectId(groupId)),
     }));
 
     if (standardGroupIds.length > 0) {
-      branches.push({
-        'studentProfile.group': { $in: standardGroupIds },
-      });
+      branches.push(activeStudentsInGroups(standardGroupIds));
     }
     if (branches.length === 0) return 0;
 
@@ -167,7 +177,7 @@ export class ReportsScopeService {
       await this.academicAccess.buildCourseAssignmentFilter(user);
     const documents = (await this.courseAssignmentModel
       .find(scopeFilter as QueryFilter<CourseAssignmentDocument>)
-      .select('_id course group academicYear semester source enrolledStudents')
+      .select('_id course group term source enrolledStudents')
       .populate({
         path: 'course',
         select: 'name code department',
@@ -178,6 +188,7 @@ export class ReportsScopeService {
         },
       })
       .populate({ path: 'group', select: 'code' })
+      .populate({ path: 'term', select: 'academicYear termNumber' })
       .maxTimeMS(REPORT_MAX_TIME_MS)
       .lean()
       .exec()) as unknown as PopulatedAssignment[];
@@ -206,8 +217,7 @@ export class ReportsScopeService {
 
     return {
       id,
-      academicYear: normalizeReportAcademicYear(assignment.academicYear),
-      semester: assignment.semester,
+      term: termRefOf(assignment.term),
       source: assignment.source ?? CourseAssignmentSource.STANDARD,
       enrolledStudentIds: uniqueIds(assignment.enrolledStudents ?? []),
       courseName: assignment.course?.name?.trim() || 'Unknown course',
@@ -227,32 +237,21 @@ export class ReportsScopeService {
   private buildFilters(
     assignments: AssignmentMetadata[],
     query: ReportQueryDto,
+    currentTermId: string | null,
   ): ReportFiltersDto {
-    const academicYears = uniqueStrings(
-      assignments.map((item) => item.academicYear),
-    ).sort((left, right) => right.localeCompare(left));
-    const semesters = [
-      ...new Set(assignments.map((item) => item.semester)),
-    ].sort((left, right) => left - right);
-    const requestedAcademicYear = query.academicYear
-      ? normalizeReportAcademicYear(query.academicYear)
-      : undefined;
-    const selectedAcademicYear =
-      requestedAcademicYear ?? academicYears[0] ?? null;
-
-    if (
-      requestedAcademicYear &&
-      !academicYears.includes(requestedAcademicYear)
-    ) {
+    const terms = uniqueTerms(assignments);
+    if (query.termId && !terms.some((item) => item.id === query.termId)) {
       throw new BadRequestException(
-        'Academic year is not available in the authorized scope',
+        'Academic term is not available in the authorized scope',
       );
     }
-    if (query.semester && !semesters.includes(query.semester)) {
-      throw new BadRequestException(
-        'Semester is not available in the authorized scope',
-      );
-    }
+    const selectedTermId =
+      query.termId ??
+      (currentTermId && terms.some((item) => item.id === currentTermId)
+        ? currentTermId
+        : null) ??
+      terms[0]?.id ??
+      null;
 
     const departments = uniqueOptions(
       assignments.map((item) => ({
@@ -272,8 +271,8 @@ export class ReportsScopeService {
         label: `${item.courseName} · ${item.groupCode}`,
         courseName: item.courseName,
         groupCode: item.groupCode,
-        academicYear: item.academicYear,
-        semester: item.semester,
+        termId: item.term?.id ?? null,
+        termLabel: formatTermLabel(item.term),
         departmentId: item.departmentId,
         groupId: item.groupId,
       }))
@@ -284,14 +283,12 @@ export class ReportsScopeService {
     this.assertAuthorizedId(query.courseAssignmentId, courseAssignments);
 
     return {
-      academicYears,
-      semesters,
+      terms,
       departments,
       groups,
       courseAssignments,
       selected: {
-        academicYear: selectedAcademicYear,
-        semester: query.semester ?? null,
+        termId: selectedTermId,
         departmentId: query.departmentId ?? null,
         groupId: query.groupId ?? null,
         courseAssignmentId: query.courseAssignmentId ?? null,
@@ -318,9 +315,7 @@ export class ReportsScopeService {
   ): AssignmentMetadata[] {
     return assignments.filter(
       (item) =>
-        (!selected.academicYear ||
-          item.academicYear === selected.academicYear) &&
-        (!selected.semester || item.semester === selected.semester) &&
+        (!selected.termId || item.term?.id === selected.termId) &&
         (!selected.departmentId ||
           item.departmentId === selected.departmentId) &&
         (!selected.groupId || item.groupId === selected.groupId) &&
@@ -382,4 +377,31 @@ function uniqueOptions<T extends { id: string; label: string }>(
   return [
     ...new Map(options.map((option) => [option.id, option])).values(),
   ].sort((left, right) => left.label.localeCompare(right.label, 'uk'));
+}
+
+function termRefOf(value: PopulatedAssignment['term']): ReportTermRef | null {
+  if (!value || typeof value !== 'object') return null;
+  const id = toId(value._id);
+  if (!Types.ObjectId.isValid(id) || !value.academicYear || !value.termNumber)
+    return null;
+  return { id, academicYear: value.academicYear, termNumber: value.termNumber };
+}
+
+function uniqueTerms(assignments: AssignmentMetadata[]): ReportTermOptionDto[] {
+  const byId = new Map<string, ReportTermOptionDto>();
+  for (const item of assignments) {
+    if (item.term) {
+      byId.set(item.term.id, {
+        id: item.term.id,
+        label: formatTermLabel(item.term),
+        academicYear: item.term.academicYear,
+        termNumber: item.term.termNumber,
+      });
+    }
+  }
+  return [...byId.values()].sort(
+    (left, right) =>
+      right.academicYear.localeCompare(left.academicYear) ||
+      right.termNumber - left.termNumber,
+  );
 }

@@ -27,8 +27,7 @@ import { useAutoDismissState } from "../../hooks/useAutoDismissState";
 import { downloadBlob } from "../../utils/spreadsheetExport";
 
 type DraftFilters = {
-  academicYear: string;
-  semester: string;
+  termId: string;
   departmentId: string;
   groupId: string;
   courseAssignmentId: string;
@@ -37,8 +36,7 @@ type DraftFilters = {
 };
 
 const DEFAULT_FILTERS: DraftFilters = {
-  academicYear: "",
-  semester: "",
+  termId: "",
   departmentId: "",
   groupId: "",
   courseAssignmentId: "",
@@ -51,8 +49,7 @@ const MAX_REPORT_RANGE_DAYS = 366;
 
 function toQuery(filters: DraftFilters): ReportQuery {
   return {
-    academicYear: filters.academicYear || undefined,
-    semester: filters.semester ? Number(filters.semester) : undefined,
+    termId: filters.termId || undefined,
     departmentId: filters.departmentId || undefined,
     groupId: filters.groupId || undefined,
     courseAssignmentId: filters.courseAssignmentId || undefined,
@@ -244,7 +241,7 @@ function CourseMobileCard({
           </p>
         </div>
         <span className="shrink-0 rounded-md bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-          {t("reports.semesterShort", { semester: course.semester })}
+          {course.termLabel}
         </span>
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">
@@ -313,16 +310,7 @@ export default function ReportsPage() {
   const filteredCourseOptions = useMemo(() => {
     const options = report?.filters.courseAssignments ?? [];
     return options.filter((option) => {
-      if (
-        draftFilters.academicYear &&
-        option.academicYear !== draftFilters.academicYear
-      ) {
-        return false;
-      }
-      if (
-        draftFilters.semester &&
-        option.semester !== Number(draftFilters.semester)
-      ) {
+      if (draftFilters.termId && option.termId !== draftFilters.termId) {
         return false;
       }
       if (
@@ -482,39 +470,19 @@ export default function ReportsPage() {
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <FilterSelect
-            label={t("reports.filters.academicYear")}
-            value={
-              draftFilters.academicYear ||
-              report?.filters.selected.academicYear ||
-              ""
-            }
+            label={t("reports.filters.term")}
+            value={draftFilters.termId || report?.filters.selected.termId || ""}
             onChange={(value) =>
               setDraftFilters((current) => ({
                 ...current,
-                academicYear: value,
+                termId: value,
                 courseAssignmentId: "",
               }))
             }
-            allLabel={t("reports.filters.latestYear")}
-            options={(report?.filters.academicYears ?? []).map((year) => ({
-              id: year,
-              label: year,
-            }))}
-          />
-          <FilterSelect
-            label={t("reports.filters.semester")}
-            value={draftFilters.semester}
-            onChange={(value) =>
-              setDraftFilters((current) => ({
-                ...current,
-                semester: value,
-                courseAssignmentId: "",
-              }))
-            }
-            allLabel={t("reports.filters.allSemesters")}
-            options={(report?.filters.semesters ?? []).map((semester) => ({
-              id: String(semester),
-              label: String(semester),
+            allLabel={t("reports.filters.currentTerm")}
+            options={(report?.filters.terms ?? []).map((term) => ({
+              id: term.id,
+              label: term.label,
             }))}
           />
           <FilterSelect
@@ -764,10 +732,7 @@ export default function ReportsPage() {
                               {course.courseName}
                             </p>
                             <p className="mt-1 text-xs text-slate-500">
-                              {course.courseCode} · {course.academicYear} ·{" "}
-                              {t("reports.semesterShort", {
-                                semester: course.semester,
-                              })}
+                              {course.courseCode} · {course.termLabel}
                             </p>
                           </td>
                           <td className="px-4 py-3">

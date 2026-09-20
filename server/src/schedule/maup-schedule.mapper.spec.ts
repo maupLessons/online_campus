@@ -1,107 +1,170 @@
-import { mapMaupScheduleResponse } from './maup-schedule.mapper';
-import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
+import { MAUP_SCHEDULE_CONTRACT_FIXTURE } from '../integrations/maup-student-api/fixtures/maup-schedule.contract-fixture';
+import { MaupWireArray } from '../integrations/maup-student-api/maup-student-api.types';
+import {
+  hashWireResponse,
+  mapControlType,
+  mapMaupScheduleToSnapshot,
+} from './maup-schedule.mapper';
+import { ScheduleControlType, ScheduleEntryType } from './schedule.enums';
 
-describe('mapMaupScheduleResponse', () => {
-  it('expands recurring MAUP schedule items into concrete schedule entries', () => {
-    const result = mapMaupScheduleResponse(
-      [
-        {
-          student_id: 42,
-          group: 'КН-11',
-          from_date: '2026-09-01',
-          to_date: '2026-09-30',
-          schedule: [
-            {
-              pair_idx: 1,
-              day_of_week_raw: 0,
-              pair_weeks: 'Всі тижні',
-              from_time: '8:30',
-              to_time: '10:00',
-              pair_kind: 'Лекція',
-              pair_subject: 'Основи програмування',
-              pair_auditorium: '101',
-              pair_prepod: 'Мельник Віктор Олегович',
-              subject_id: 1001,
-              auditorium_id: 501,
-              prepod_id: 701,
-            },
-          ],
-        },
-      ],
-      { startDate: '2026-09-01', endDate: '2026-09-14' },
+describe('mapMaupScheduleToSnapshot', () => {
+  it('expands recurring lessons into dated entries with stable keys', () => {
+    const result = mapMaupScheduleToSnapshot(
+      [MAUP_SCHEDULE_CONTRACT_FIXTURE[0]],
+      { isExamSession: false },
     );
 
-    expect(result).toHaveLength(2);
-    const firstEntry = result[0];
-    expect(firstEntry).toBeDefined();
-    expect(firstEntry?.id).toMatch(/^maup:/);
-    expect(firstEntry).toMatchObject({
-      courseAssignmentId: 'maup:1001',
-      classroomId: 'maup:501',
-      teacherId: 'maup:701',
-      date: '2026-09-07',
+    expect(result.groupCode).toBe('КН-11');
+    expect(result.periodFrom).toBe('2026-09-01');
+    expect(result.periodTo).toBe('2026-09-30');
+    const mondays = result.entries.filter((e) => e.subjectKey === '1001');
+    expect(mondays.map((e) => e.date)).toEqual([
+      '2026-09-07',
+      '2026-09-14',
+      '2026-09-21',
+      '2026-09-28',
+    ]);
+    expect(mondays[0]).toMatchObject({
       startTime: '08:30',
       endTime: '10:00',
       type: ScheduleEntryType.LECTURE,
-      status: ScheduleEntryStatus.SCHEDULED,
-      courseName: 'Основи програмування',
-      courseCode: 'MAUP-1001',
-      groupCode: 'КН-11',
-      teacherName: 'Мельник Віктор Олегович',
+      teacherExternalId: '701',
       classroom: '101',
+      classroomExternalId: '501',
+      pairIdx: 1,
     });
-    expect(result[1]?.date).toBe('2026-09-14');
-  });
+    expect(mondays[0].key).toHaveLength(16);
+    expect(mondays[0].controlType).toBeUndefined();
 
-  it('uses exact day_date for exam/session schedule items', () => {
-    const result = mapMaupScheduleResponse(
-      [
-        {
-          student_id: 'student-1',
-          from_date: '2026-01-01',
-          to_date: '2026-01-31',
-          schedule: [
-            {
-              day_date: '2026-01-12',
-              from_time: '11:20',
-              to_time: '12:40',
-              pair_kind: 'Екзамен',
-              pair_subject: 'Математика',
-            },
-          ],
-        },
-      ],
-      { date: '2026-01-12' },
-    );
-
-    expect(result).toEqual([
-      expect.objectContaining({
-        date: '2026-01-12',
-        type: ScheduleEntryType.EXAM,
-        courseName: 'Математика',
-      }),
+    const oddWeeks = result.entries.filter((e) => e.subjectKey === '1002');
+    expect(oddWeeks.map((e) => e.date)).toEqual([
+      '2026-09-02',
+      '2026-09-16',
+      '2026-09-30',
     ]);
+    expect(oddWeeks[0].classroom).toBeUndefined();
   });
 
-  it('filters by status and drops malformed schedule items', () => {
-    const result = mapMaupScheduleResponse(
+  it('maps exam session entries with control type', () => {
+    const result = mapMaupScheduleToSnapshot(
+      [MAUP_SCHEDULE_CONTRACT_FIXTURE[1]],
+      { isExamSession: true },
+    );
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toMatchObject({
+      date: '2027-01-12',
+      type: ScheduleEntryType.EXAM,
+      controlType: ScheduleControlType.EXAM,
+      subjectKey: '1003',
+    });
+  });
+
+  it('maps control types from pair_kind text', () => {
+    expect(mapControlType('Екзамен')).toBe(ScheduleControlType.EXAM);
+    expect(mapControlType('Залік')).toBe(ScheduleControlType.CREDIT);
+    expect(mapControlType('Курсова робота')).toBe(
+      ScheduleControlType.COURSEWORK,
+    );
+    expect(mapControlType('Консультація')).toBe(ScheduleControlType.OTHER);
+  });
+
+  it('truncates untrusted strings and ignores malformed items', () => {
+    const result = mapMaupScheduleToSnapshot(
       [
         {
-          from_date: '2026-01-01',
-          to_date: '2026-01-31',
+          group: 'X-1',
+          from_date: '2026-09-01',
+          to_date: '2026-09-07',
           schedule: [
+            { from_time: 'bad', to_time: '10:00', day_date: '2026-09-01' },
             {
-              day_date: '2026-01-12',
-              from_time: 'bad',
-              to_time: '12:40',
-              pair_subject: 'Некоректний запис',
+              from_time: '9:00',
+              to_time: '10:00',
+              day_date: '2026-09-01',
+              pair_subject: 'a'.repeat(400),
             },
           ],
         },
       ],
-      { status: ScheduleEntryStatus.CANCELLED },
+      { isExamSession: false },
+    );
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].courseTitle).toHaveLength(300);
+  });
+
+  it('truncates external ids to the schema limit of 64 characters', () => {
+    const result = mapMaupScheduleToSnapshot(
+      [
+        {
+          group: 'X-1',
+          from_date: '2026-09-01',
+          to_date: '2026-09-07',
+          schedule: [
+            {
+              from_time: '9:00',
+              to_time: '10:00',
+              day_date: '2026-09-01',
+              subject_id: 'a'.repeat(100),
+              prepod_id: 'b'.repeat(100),
+              auditorium_id: 'c'.repeat(100),
+            },
+          ],
+        },
+      ],
+      { isExamSession: false },
+    );
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].subjectId).toHaveLength(64);
+    expect(result.entries[0].teacherExternalId).toHaveLength(64);
+    expect(result.entries[0].classroomExternalId).toHaveLength(64);
+  });
+
+  it('hashes the raw response deterministically', () => {
+    expect(hashWireResponse(MAUP_SCHEDULE_CONTRACT_FIXTURE)).toBe(
+      hashWireResponse(
+        JSON.parse(
+          JSON.stringify(MAUP_SCHEDULE_CONTRACT_FIXTURE),
+        ) as MaupWireArray,
+      ),
+    );
+  });
+
+  // Acceptance criterion of spec §10.17.
+  it('produces stable keys across runs and ignores classroom changes', () => {
+    const first = mapMaupScheduleToSnapshot(
+      [MAUP_SCHEDULE_CONTRACT_FIXTURE[0]],
+      { isExamSession: false },
+    );
+    const again = mapMaupScheduleToSnapshot(
+      JSON.parse(
+        JSON.stringify([MAUP_SCHEDULE_CONTRACT_FIXTURE[0]]),
+      ) as MaupWireArray,
+      { isExamSession: false },
+    );
+    expect(again.entries.map((e) => e.key)).toEqual(
+      first.entries.map((e) => e.key),
     );
 
-    expect(result).toEqual([]);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- deep clone for mutation, shape guaranteed by the fixture
+    const period = JSON.parse(
+      JSON.stringify(MAUP_SCHEDULE_CONTRACT_FIXTURE[0]),
+    );
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    period.schedule[0].pair_auditorium = '999';
+    expect(
+      mapMaupScheduleToSnapshot([period], { isExamSession: false }).entries.map(
+        (e) => e.key,
+      ),
+    ).toEqual(first.entries.map((e) => e.key));
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- deep clone for mutation, shape guaranteed by the fixture
+    const moved = JSON.parse(JSON.stringify(MAUP_SCHEDULE_CONTRACT_FIXTURE[0]));
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    moved.schedule[0].from_time = '10:10';
+    expect(
+      mapMaupScheduleToSnapshot([moved], { isExamSession: false }).entries.map(
+        (e) => e.key,
+      ),
+    ).not.toEqual(first.entries.map((e) => e.key));
   });
 });

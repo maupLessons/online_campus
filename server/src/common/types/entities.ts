@@ -17,15 +17,20 @@ export interface User {
 
 export interface StudentProfile {
   userId: string;
+  externalStudentId: string;
   groupId: string;
   recordBookNumber: string;
   year: number;
+  studyForm?: string;
+  institute?: string;
+  specialty?: string;
 }
 
 export interface TeacherProfile {
   userId: string;
   departmentId: string;
   position: string;
+  externalTeacherId?: string;
 }
 
 export interface Group {
@@ -60,8 +65,12 @@ export interface Course {
   name: string;
   code: string;
   departmentId: string;
-  semester: number;
   credits: number;
+  description?: string;
+  externalSubjectId?: string;
+  moodleUrl?: string;
+  status: 'active' | 'archived';
+  createdBy: string;
 }
 
 export interface CourseAssignment {
@@ -69,8 +78,18 @@ export interface CourseAssignment {
   courseId: string;
   groupId: string;
   teacherId: string;
+  termId: string;
+}
+
+export interface AcademicTermSeed {
+  id: string;
   academicYear: string;
-  semester: number;
+  termNumber: 1 | 2;
+  startsAt: string;
+  endsAt: string;
+  status: 'planned' | 'current' | 'closed';
+  maupAcademicYear: number;
+  maupSemester: number;
 }
 
 export interface Classroom {
@@ -81,67 +100,10 @@ export interface Classroom {
   type: 'lecture' | 'lab' | 'seminar' | 'online';
 }
 
-export interface ScheduleEntry {
-  id: string;
-  courseAssignmentId: string;
-  classroomId?: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  type: 'lecture' | 'seminar' | 'lab' | 'exam' | 'consultation';
-  status: 'scheduled' | 'cancelled' | 'rescheduled';
-}
-
-export interface Material {
-  id: string;
-  courseAssignmentId: string;
-  title: string;
-  description?: string;
-  fileLink?: string;
-  publishDate: string;
-}
-
-export interface Assignment {
-  id: string;
-  courseAssignmentId: string;
-  title: string;
-  description: string;
-  dueDate: string;
-  maxScore: number;
-}
-
-export interface Submission {
-  id: string;
-  assignmentId: string;
-  studentId: string;
-  submittedAt: string;
-  fileLink?: string;
-  score?: number;
-  comment?: string;
-  status: 'submitted' | 'graded' | 'returned';
-}
-
-export interface Grade {
-  id: string;
-  studentId: string;
-  courseAssignmentId: string;
-  date: string;
-  type: 'current' | 'module' | 'exam' | 'final';
-  value: number;
-  comment?: string;
-}
-
 export interface Notification {
   id: string;
   userId: string;
-  type:
-    | 'schedule_change'
-    | 'new_assignment'
-    | 'assignment_submitted'
-    | 'new_survey'
-    | 'grade'
-    | 'announcement'
-    | 'system';
+  type: 'schedule_change' | 'new_survey' | 'announcement' | 'system';
   title: string;
   message: string;
   createdAt: string;

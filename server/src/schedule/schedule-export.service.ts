@@ -14,6 +14,7 @@ export class ScheduleExportService {
     entries: ScheduleEntryDto[],
     format?: SpreadsheetExportFormat,
     locale?: SpreadsheetExportLocale,
+    session = false,
   ): Promise<SpreadsheetExportArtifact> {
     const exportFormat = format ?? SpreadsheetExportFormat.CSV;
     const exportLocale = locale ?? SpreadsheetExportLocale.UK;
@@ -22,9 +23,9 @@ export class ScheduleExportService {
 
     return buildSpreadsheetExportArtifact({
       format: exportFormat,
-      filename: 'schedule',
-      buildCsv: () => buildScheduleCsv(entries, exportLocale),
-      buildXlsx: () => buildScheduleXlsx(entries, exportLocale),
+      filename: session ? 'exam-session' : 'schedule',
+      buildCsv: () => buildScheduleCsv(entries, exportLocale, session),
+      buildXlsx: () => buildScheduleXlsx(entries, exportLocale, session),
     });
   }
 

@@ -48,6 +48,29 @@ type ConflictBody = {
   usages: Array<{ resource: string; count: number }>;
 };
 
+function studentProfileFields(input: {
+  group: Types.ObjectId;
+  recordBookNumber: string;
+  year: number;
+  externalStudentId?: string;
+}) {
+  const _id = new Types.ObjectId();
+  return {
+    studentProfiles: [
+      {
+        _id,
+        externalStudentId: input.externalStudentId ?? input.recordBookNumber,
+        group: input.group,
+        recordBookNumber: input.recordBookNumber,
+        year: input.year,
+        status: 'active',
+        syncedAt: new Date(),
+      },
+    ],
+    activeStudentProfileId: _id,
+  };
+}
+
 type ImportBody = {
   errors: Array<{ row: number; message: string }>;
 };
@@ -206,13 +229,11 @@ describe('References management (e2e)', () => {
       collection('User').updateOne(
         { _id: student.id },
         {
-          $set: {
-            studentProfile: {
-              group: new Types.ObjectId(groupId),
-              recordBookNumber: 'QA-REC-001',
-              year: 1,
-            },
-          },
+          $set: studentProfileFields({
+            group: new Types.ObjectId(groupId),
+            recordBookNumber: 'QA-REC-001',
+            year: 1,
+          }),
         },
       ),
       collection('User').updateOne(
@@ -230,13 +251,25 @@ describe('References management (e2e)', () => {
 
     const courseId = new Types.ObjectId();
     const assignmentId = new Types.ObjectId();
+    const termId = new Types.ObjectId();
     await collection('Course').insertOne({
       _id: courseId,
       name: 'Reference Security',
       code: 'REF-SEC-01',
       department: new Types.ObjectId(departmentId),
-      semester: 1,
       credits: 3,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    await collection('AcademicTerm').insertOne({
+      _id: termId,
+      academicYear: '2026/2027',
+      termNumber: 1,
+      startsAt: new Date('2026-09-01'),
+      endsAt: new Date('2027-01-31'),
+      status: 'current',
+      maupAcademicYear: 2026,
+      maupSemester: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -245,8 +278,7 @@ describe('References management (e2e)', () => {
       course: courseId,
       group: new Types.ObjectId(groupId),
       teacher: teacher.id,
-      academicYear: '2026/2027',
-      semester: 1,
+      term: termId,
       source: 'standard',
       enrolledStudents: [],
       createdAt: new Date(),

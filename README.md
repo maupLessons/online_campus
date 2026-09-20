@@ -56,7 +56,7 @@
 ### Ключові можливості
 
 - Особисті кабінети для **7 ролей** з різними наборами функцій
-- Перегляд розкладу (день / тиждень) з перевіркою конфліктів
+- Перегляд розкладу занять і сесії (день / тиждень) із кешу API МАУП, з онлайн-посиланнями на пари
 - Перегляд дисциплін поточного навчального контексту, додаткових матеріалів і зовнішніх HTTPS-посилань
 - Перехід до Moodle для завдань, здачі робіт та офіційного оцінювання
 - **Система опитувань** — створення, проходження студентами та викладачами, аналіз результатів
@@ -220,58 +220,72 @@
 
 **Файли:** `src/schedule/`
 
-**Відповідальність:** зберігання та відображення розкладу; перевірка конфліктів
-(накладання по викладачу, аудиторії та групі); рольове й об'єктне обмеження
-видимості; адміністративні workflow для скасування, перенесення та заміни занять;
-шаблони й масові операції; CSV/XLSX-експорт; персональні сповіщення про зміни.
+**Відповідальність:** розклад — read-only кеш, наповнюваний із API МАУП, а не
+локальна CRUD-сутність. `ScheduleSnapshotService` тримає один документ
+`ScheduleSnapshot` на `{groupCode, term, isExamSession}`, оновлює його з
+`/schedule` МАУП (`zes_schedule: 0` — заняття, `1` — сесія) за TTL і захищає
+одночасні запити in-memory lock + умовним `updateOne`; при недоступному API
+віддається старий кеш зі `stale: true`, а без кешу — `entries: []` і
+`meta.reason: 'no_snapshot'`. `ScheduleDiffService`/`ScheduleChangeNotifierService`
+порівнюють знімки й шлють персональні сповіщення `schedule_change`.
+`OnlineLessonLinksService` — окрема колекція HTTPS-посилань на онлайн-пари
+(`pair` > `date` > `subject` пріоритет), яку редагує лише `teacher`.
+
+**Джерело даних і кеш:** дані не створюються й не редагуються в кампусі —
+джерело правди API МАУП, кампус лише кешує останній знімок на групу і термін
+(`scheduleSnapshots`, ключ `{groupCode, term, isExamSession}`). `SCHEDULE_CACHE_TTL_MS`
+(default 15 хв) визначає, коли кеш вважається застарілим і оновлюється з API;
+`SCHEDULE_DIFF_MAX_AGE_MS` (default 7 діб) — після якого віку попередній знімок
+трактується як відсутній (diff не рахується, сповіщень немає); `SCHEDULE_DIFF_BULK_THRESHOLD`
+(default 20) — поріг кількості змінених записів (або 30% майбутніх записів),
+вище якого замість поштучних сповіщень надсилається одне агреговане.
 
 **Ендпоінти та доступ:**
 
-| Метод  | Шлях                                                              | Доступ                                               |
-| ------ | ----------------------------------------------------------------- | ---------------------------------------------------- |
-| GET    | `/schedule?date=&startDate=&endDate=&groupId=&teacherId=&status=` | авторизовані; результат обмежується академічним scope |
-| GET    | `/schedule/my`                                                    | авторизовані; особистий видимий розклад              |
-| GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`                 | авторизовані; CSV/XLSX у межах видимого scope        |
-| GET    | `/schedule/:id`                                                   | авторизовані; з object-level перевіркою доступу       |
-| POST   | `/schedule`                                                       | admin                                                |
-| PUT    | `/schedule/:id`                                                   | admin                                                |
-| POST   | `/schedule/:id/cancel`                                            | admin; обов'язкова причина                           |
-| POST   | `/schedule/:id/reschedule`                                        | admin; новий час/аудиторія + причина                 |
-| POST   | `/schedule/:id/substitution`                                      | admin; заміна дисципліни/аудиторії/часу              |
-| POST   | `/schedule/bulk`                                                  | admin; dry-run/skipConflicts                         |
-| POST   | `/schedule/bulk/cancel`                                           | admin; масове скасування з причиною                  |
-| GET    | `/schedule/templates`                                             | admin                                                |
-| POST   | `/schedule/templates`                                             | admin                                                |
-| PUT    | `/schedule/templates/:id`                                         | admin                                                |
-| DELETE | `/schedule/templates/:id`                                         | admin; архівація шаблону                             |
-| POST   | `/schedule/templates/:id/apply`                                   | admin; генерація розкладу за шаблоном                |
-| DELETE | `/schedule/:id`                                                   | admin                                                |
+| Метод  | Шлях                                               | Доступ                                                                    |
+| ------ | --------------------------------------------------- | -------------------------------------------------------------------------- |
+| GET    | `/schedule/my?from=&to=`                            | student, teacher; особистий розклад занять із кешу                       |
+| GET    | `/schedule/session/my?from=&to=`                    | student, teacher; особистий розклад сесії (`zes_schedule: 1`)            |
+| GET    | `/schedule/today`                                   | student, teacher; `{date, lessons, session, meta}` для дашборда (§5.3a)  |
+| GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`   | student, teacher; CSV/XLSX особистого розкладу                           |
+| GET    | `/schedule/online-links/my`                         | teacher; власні онлайн-посилання поточного терму                         |
+| PUT    | `/schedule/online-links`                            | teacher; upsert посилання за `groupCode`/`subjectKey`/`date`/`startTime`  |
+| DELETE | `/schedule/online-links/:id`                        | teacher; лише власник (`createdBy == user`)                              |
+| GET    | `/schedule/groups/:groupCode`                       | admin, rector, president, dean, department_head; кеш групи без оновлення з API, білий список полів (§5.3b) |
+| POST   | `/schedule/groups/:groupCode/refresh`               | admin; примусове оновлення групи з API (ігнорує TTL)                     |
+| POST   | `/schedule/refresh`                                 | admin; примусове оновлення всіх груп поточного терму (обидва знімки)     |
 
-**Перевірка конфліктів:** при створенні, редагуванні, перенесенні, заміні,
-масовому створенні та застосуванні шаблонів перевіряється зайнятість
-викладача, аудиторії та групи. Скасовані записи не блокують часовий слот.
+Немає `POST/PUT/DELETE /schedule`, `/schedule/:id`, `/schedule/bulk*`,
+`/schedule/templates*`, `/schedule/:id/cancel|reschedule|substitution` —
+вони видалені разом із локальним CRUD-розкладом (e2e перевіряє `404`).
 
-**Безпека й scope:** звичайні користувачі бачать лише свій академічний scope;
-фільтри поза дозволеним scope відхиляються. Для вибіркових дисциплін доступ,
-розклад і сповіщення використовують фактичне enrollment scope, а не лише
-належність до групи. Експорт обмежений 5000 записами, не кешується і проходить
-через спільну spreadsheet-sanitization інфраструктуру.
+**Безпека й scope:** студент бачить лише знімок групи свого активного профілю;
+викладач — лише записи зі своїм `externalTeacherId` з усіх знімків терму.
+`GET /schedule/groups/:groupCode` і `POST .../refresh` резолвлять `groupCode`
+у `Group` (немає — `404`) і перевіряють `AcademicAccessService.canAccessGroup`
+(dean/department_head — лише групи своєї кафедри/факультету, порожній scope —
+`403`). Онлайн-посилання приймають лише `https:`, без `userinfo`, host не з
+приватних/службових діапазонів (`localhost`, `127.0.0.0/8`, `10.0.0.0/8`,
+`172.16.0.0/12`, `192.168.0.0/16`, `169.254.0.0/16`, `::1`, `fc00::/7`).
 
-**Frontend:** сторінка `SchedulePage` підтримує перегляд день/тиждень, статуси
-`scheduled`/`cancelled`/`rescheduled`/`substituted`, CSV/XLSX-експорт і
-повноцінну адміністративну UI для створення, редагування, видалення, скасування,
-перенесення, замін, шаблонів та масового скасування. Для очних і дистанційних
-занять підтримується окреме HTTPS-посилання `onlineUrl`; воно проходить
-валідацію, аудит, шаблони та CSV/XLSX-експорт і відображається як кнопка
-«Відкрити онлайн-пару».
+**Frontend:** `SchedulePage` — read-only для всіх ролей (перемикач день/тиждень,
+`←`/`→`, «Сьогодні», банер `meta.stale`, CSV/XLSX-експорт); `ScheduleSessionPage` —
+окремий розклад сесії без тижневого гортання; викладач редагує онлайн-посилання
+через `OnlineLinkModal` (кнопка «Посилання» на картці пари); `AdminScheduleGroupsPage`
+(`/admin/schedule/groups`) показує кеш обраної групи й кнопки «Оновити з API» /
+«Оновити всі групи терму». Форм створення/редагування розкладу в клієнті немає.
 
-> **Погоджений напрямок:** офіційний основний і сесійний розклад має надходити
-> з API МАУП. Для студентського `/schedule/my` і schedule export підключено
-> backend-only read-through до MAUP API: якщо `MAUP_API_ENABLED=true` і профіль
-> студента має `externalStudentId` або `recordBookNumber`, сервер читає
-> `/schedule` МАУП, нормалізує відповідь до `ScheduleEntryDto` і не передає
-> credentials у browser. Якщо інтеграція вимкнена або student lookup відсутній,
-> використовується поточний локальний scoped schedule.
+> **Міграція даних.** Колекції `scheduleEntries` і `scheduleTemplates` більше не
+> читаються й не пишуться, але **автоматично не видаляються**: план прибирає
+> лише схеми й код. Дані лишаються в БД як осиротілі; чистити їх — окремою
+> ручною командою (`db.scheduleEntries.drop()`, `db.scheduleTemplates.drop()`)
+> після підтвердження, що відкат не потрібен.
+>
+> **Регламент після активації терму.** Одразу після
+> `POST /academic-terms/:id/activate` адміністратор запускає `POST /schedule/refresh`
+> (або кнопку «Оновити всі групи терму» на `/admin/schedule/groups`): без цього
+> зріз викладача лишається порожнім, поки жоден студент групи не відкриє
+> розклад.
 
 ---
 
@@ -279,45 +293,40 @@
 
 **Файли:** `src/courses/`
 
-**Відповідальність:** дисципліни, детальна інформація про дисципліну, студенти групи, додаткові матеріали, HTTPS-посилання на зовнішні навчальні ресурси та електронний журнал занять у межах порталу. Викладач бачить закріплені дисципліни, студентів групи, веде теми занять і відвідування. Завдання, здача робіт і офіційне оцінювання не дублюються в кампусі та ведуться в Moodle окремо за посиланням `https://dist.maup.com.ua/`.
+**Відповідальність:** дисципліни (`Course`) як довідник кафедри/деканату/адміна та їхні призначення
+(`CourseAssignment`) викладачу на групу в межах навчального періоду. LMS-контуру (матеріали, завдання,
+здача робіт, оцінювання, електронний журнал) у кампусі немає — навчальний процес і оцінювання ведуться
+в Moodle окремо, кампус лише зберігає лінк на курс (`moodleUrl`) і ключ інтеграції (`externalSubjectId`).
 
-> **Поточний стан коду:** legacy API для локальних assignments/submissions/grades
-> збережено для сумісності даних, історії та звітів, але основний frontend-сценарій
-> приховує локальні вкладки завдань/оцінок і показує користувачам Moodle як
-> офіційний навчальний контур. Фізичне видалення legacy API потребує окремого
-> погодженого плану міграції даних і звітності.
+**Ендпоінти — читання:**
 
-**Ендпоінти та доступ:**
+| Метод | Шлях                                        | Доступ                                | Призначення |
+| ----- | -------------------------------------------- | -------------------------------------- | ----------- |
+| GET   | `/courses`                                   | department_head, dean, admin           | каталог дисциплін (пагінований `CourseDto`), фільтр `status` (default `active`), `departmentId` |
+| GET   | `/courses/:id`                               | teacher, department_head, dean, admin  | картка дисципліни (`CourseDto`) |
+| GET   | `/courses/my`                                | student, teacher                       | «мої дисципліни» — пагінований `CourseAssignmentDto[]` за поточним семестром; конверт `meta: { term, reason? }` (`reason` = `no_current_term` \| `no_active_profile`, коли `docs` порожній) |
+| GET   | `/courses/course-assignments`                | department_head, dean, admin           | список призначень (пагінований `CourseAssignmentDto`), той самий скоуп кафедри/факультету, що й каталог |
+| GET   | `/courses/course-assignments/:id`            | student, teacher, department_head, dean, admin | картка призначення `CourseAssignmentCardDto` (курс, група, викладач, ресурси, найближчі заняття, `canEditResources`/`canEditMoodleUrl`) |
+| GET   | `/courses/course-assignments/:id/students`   | teacher, department_head, dean, admin  | студенти групи/фіналізованого elective (`UserDto[]`) |
 
-| Метод  | Шлях                              | Доступ                                                  |
-| ------ | --------------------------------- | ------------------------------------------------------- |
-| GET    | `/courses`                        | всі авторизовані                                        |
-| GET    | `/courses/my`                     | student (свій семестр), teacher (закріплені дисципліни) |
-| GET    | `/courses/course-assignments/:id` | авторизовані (деталі призначення)                       |
-| GET    | `/courses/course-assignments/:id/students` | teacher+ (студенти групи або фіналізованого elective) |
-| GET    | `/courses/:caId/materials`        | авторизовані                                            |
-| POST   | `/courses/:caId/materials`        | teacher+                                                |
-| PUT    | `/courses/:caId/materials/:id`    | teacher+                                                |
-| DELETE | `/courses/:caId/materials/:id`    | teacher+                                                |
-| GET    | `/courses/:caId/assignments`      | legacy/internal; не основний frontend-сценарій          |
-| POST   | `/courses/:caId/assignments`      | teacher+                                                |
-| PUT    | `/courses/:caId/assignments/:id`  | teacher+                                                |
-| GET    | `/courses/:caId/grades`           | legacy/internal; не основний frontend-сценарій          |
-| GET    | `/courses/:caId/journal`          | teacher+                                                |
-| POST   | `/courses/:caId/journal`          | teacher+                                                |
-| PATCH  | `/courses/journal/:id`            | teacher+                                                |
-| DELETE | `/courses/journal/:id`            | teacher+                                                |
-| GET    | `/courses/assignments/my`         | legacy/internal; student route redirects to Moodle      |
-| GET    | `/courses/assignments/:id/submissions` | teacher+                                           |
-| GET    | `/courses/grades/my`              | legacy/internal; student route redirects to Moodle      |
-| POST   | `/courses/assignments/:id/submit` | student                                                 |
-| DELETE | `/courses/assignments/:id/submit` | student (лише неоцінена робота до дедлайну)             |
-| PATCH  | `/courses/submissions/:id/return` | teacher+ (повернення на доопрацювання до дедлайну)      |
-| POST   | `/courses/submissions/:id/grade`  | teacher                                                 |
+**Ендпоінти — запис:**
 
-Життєвий цикл студентської роботи: `submitted → returned → submitted → graded`.
-Оцінка за повернену роботу архівується без фізичного видалення, а повторна
-здача створює нову спробу в межах того самого запису роботи.
+| Метод | Шлях                                          | Доступ                       | 409 (код)                                                              |
+| ----- | ---------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| POST  | `/courses`                                     | department_head, admin        | `course_code_taken`; `course_external_subject_id_taken` (+`courseCode` власника) |
+| PATCH | `/courses/:id`                                 | department_head, admin        | те саме, якщо змінюється `externalSubjectId` |
+| POST  | `/courses/:id/archive`                         | department_head, admin        | `course_has_current_assignments` — є призначення в поточному семестрі |
+| POST  | `/courses/:id/restore`                         | department_head, admin        | — (ідемпотентно: повторний restore активного курсу — no-op) |
+| PATCH | `/courses/:id/moodle-url`                      | department_head, admin        | — (400, не 409: admin без `reason` (≥10 символів); хост поза `MOODLE_ALLOWED_HOSTS`) |
+| PUT   | `/courses/course-assignments/:id/resources`    | teacher (своє призначення), department_head (кафедра) | — (400: хост у `RESOURCE_BLOCKED_HOSTS` або не safe-https) |
+
+`department_head` створює/редагує лише в межах власної кафедри (`assertCanCreateInDepartment` /
+`loadCourseForManage`); `admin` — без обмеження кафедри, але **не** редагує ресурси призначення
+(свідоме звуження DISC-008: `canEditResources` для admin завжди `false`).
+
+**Env:** `MOODLE_ALLOWED_HOSTS` (allowlist хостів для `moodleUrl`, default `dist.maup.com.ua`),
+`RESOURCE_BLOCKED_HOSTS` (blocklist для `PUT …/resources`, default порожній) — обидва
+comma-separated, валідуються при старті (`src/config/environment.validation.ts`).
 
 ---
 
@@ -605,7 +614,7 @@ replicas потрібен Redis/NATS adapter.
 
 | Тип               | Коли генерується                         |
 | ----------------- | ---------------------------------------- |
-| `schedule_change` | Зміна / скасування / перенесення заняття |
+| `schedule_change` | Додано / скасовано / змінено заняття чи запис сесії; перший знімок сесії — окреме агреговане «Опубліковано розклад сесії» |
 | `new_assignment`  | Викладач опублікував нове завдання       |
 | `grade`           | Виставлено нову оцінку студенту          |
 | `new_survey`      | Опубліковано нове опитування             |
@@ -645,7 +654,7 @@ replicas потрібен Redis/NATS adapter.
 
 - Всі входи (успішні та невдалі) з IP та user-agent
 - Зміни ролей та блокування акаунтів із попереднім/новим станом і ознакою відкликання сесій
-- CRUD-операції над розкладом із компактними знімками `before`/`after`
+- Встановлення/видалення онлайн-посилань на пари викладачем (host посилання без повного URL) і адміністративне примусове оновлення кешу розкладу з API МАУП
 - Виставлення та редагування оцінок із прив'язкою до студента, курсу, завдання та значення
 - Публікація та закриття опитувань із назвою, аудиторією та переходом статусу
 - Завантаження та видалення файлів із безпечними метаданими без внутрішнього шляху зберігання
@@ -656,7 +665,7 @@ replicas потрібен Redis/NATS adapter.
 | Домен | Події |
 |---|---|
 | Користувачі | `user.role.change`, `user.status.change` |
-| Розклад | `schedule.create`, `schedule.update`, `schedule.delete` |
+| Розклад | `schedule.online_link.set`, `schedule.online_link.deleted`, `schedule.snapshot.refresh` |
 | Оцінки | `grade.create`, `grade.update`, `grade.submission.grade` |
 | Опитування | `survey.publish`, `survey.close` |
 | Файли | `file.upload`, `file.delete` |
@@ -877,7 +886,8 @@ src/
 │   ├── notificationsApi.ts
 │   ├── surveysApi.ts
 │   ├── electivesApi.ts
-│   └── referencesApi.ts
+│   ├── referencesApi.ts
+│   └── scheduleApi.ts       ← my/session/today/export + online-links + admin refresh
 ├── store/
 │   └── authStore.ts         ← Zustand: user, session state, login/logout
 ├── components/
@@ -890,6 +900,7 @@ src/
 │   ├── LanguageSwitcher.tsx
 │   ├── dashboard/
 │   ├── notifications/
+│   ├── schedule/            ← OnlineLinkModal, ScheduleEntryCard, StaleBanner
 │   └── references/
 └── pages/                   ← role-based pages architecture
     ├── auth/                ← authentication pages
@@ -897,7 +908,8 @@ src/
     │   └── ForgotPasswordPage.tsx
     ├── shared/              ← pages shared між декількома ролями
     │   ├── DashboardPage.tsx
-    │   ├── SchedulePage.tsx
+    │   ├── SchedulePage.tsx        ← read-only, day/week toggle
+    │   ├── ScheduleSessionPage.tsx ← read-only exam session schedule
     │   ├── NotificationsPage.tsx
     │   ├── ProfilePage.tsx
     │   └── ReferencesPage.tsx
@@ -914,7 +926,8 @@ src/
     │   └── ElectiveAdminPage.tsx
     ├── admin/               ← system administration pages
     │   ├── UsersPage.tsx
-    │   └── AuditLogPage.tsx
+    │   ├── AuditLogPage.tsx
+    │   └── AdminScheduleGroupsPage.tsx ← per-group cache view + force refresh
     └── course/              ← course-related shared modules
         ├── CoursesPage.tsx
         └── CourseDetailPage.tsx
@@ -939,7 +952,7 @@ fallback, але нові клієнтські сценарії повинні �
 | Пункт | student | teacher | dept_head | dean | rector | president | admin |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Профіль, дашборд, сповіщення | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Розклад | read | read | scoped read | scoped read | read | read | read/write |
+| Розклад | read | read + онлайн-посилання | scoped read | scoped read | read | read | read + примусове оновлення |
 | Дисципліни | scoped | scoped | scoped | scoped | — | — | global read |
 | Опитування | participate | participate | — | manage own | results | results | manage |
 | Вибіркові дисципліни | select | — | manage scoped | manage | — | — | manage |
@@ -1037,17 +1050,18 @@ CourseAssignment
 Classroom
 └── id, building, roomNumber, capacity, type: lecture|lab|seminar|online
 
-ScheduleEntry
-└── id, courseAssignmentId, classroomId, date, startTime, endTime
-    type: lecture|seminar|lab|exam|consultation
-    status: scheduled|cancelled|rescheduled|substituted
-    onlineUrl?, changeReason?, changedBy?, cancelledAt?, rescheduledAt?, substitutedAt?
-    changeHistory[]
+ScheduleSnapshot                       ← один кешований знімок API МАУП на групу/термін/сесію
+└── id, groupCode, term, isExamSession, fetchedAt, fetchedByUserId?, rawHash
+    periodFrom?, periodTo?
+    entries[]: key, date, startTime, endTime, courseTitle, subjectKey, subjectId?
+                type: lecture|seminar|lab|exam|consultation|coursework|other
+                controlType?: exam|credit|coursework|other (лише для сесії)
+                teacherName?, teacherExternalId?, classroom?, classroomExternalId?, pairIdx?
+    unique index: {groupCode, term, isExamSession}
 
-ScheduleTemplate
-└── id, title, courseAssignmentId, classroomId?, dayOfWeek, startTime, endTime
-    type: lecture|seminar|lab|exam|consultation
-    onlineUrl?, status: active|archived
+OnlineLessonLink                       ← окрема колекція, редагує лише teacher
+└── id, term, groupCode, subjectKey, date?, startTime?, url, createdBy, updatedBy?
+    date=null/startTime=null → посилання на всю дисципліну в групі (пріоритет нижче за конкретну пару)
 
 Material
 └── id, courseAssignmentId, title, description, category
@@ -1132,31 +1146,26 @@ AuditLogEntry
 
 ### Розклад `/api/schedule`
 
-| Метод  | Шлях                                                              | Доступ                                               |
-| ------ | ----------------------------------------------------------------- | ---------------------------------------------------- |
-| GET    | `/schedule?date=&startDate=&endDate=&groupId=&teacherId=&status=` | авторизовані; scoped visibility                      |
-| GET    | `/schedule/my`                                                    | авторизовані; scoped visibility                      |
-| GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`                 | авторизовані; CSV/XLSX у межах scoped visibility     |
-| GET    | `/schedule/:id`                                                   | авторизовані; object-level authorization             |
-| POST   | `/schedule`                                                       | admin                                                |
-| PUT    | `/schedule/:id`                                                   | admin                                                |
-| POST   | `/schedule/:id/cancel`                                            | admin; причина скасування                            |
-| POST   | `/schedule/:id/reschedule`                                        | admin; новий слот + причина                          |
-| POST   | `/schedule/:id/substitution`                                      | admin; заміна + причина                              |
-| POST   | `/schedule/bulk`                                                  | admin; масове створення                              |
-| POST   | `/schedule/bulk/cancel`                                           | admin; масове скасування                             |
-| GET    | `/schedule/templates`                                             | admin                                                |
-| POST   | `/schedule/templates`                                             | admin                                                |
-| PUT    | `/schedule/templates/:id`                                         | admin                                                |
-| DELETE | `/schedule/templates/:id`                                         | admin; архівація                                     |
-| POST   | `/schedule/templates/:id/apply`                                   | admin; застосування шаблону                          |
-| DELETE | `/schedule/:id`                                                   | admin                                                |
+| Метод  | Шлях                                                | Доступ                                                                    |
+| ------ | ---------------------------------------------------- | -------------------------------------------------------------------------- |
+| GET    | `/schedule/my?from=&to=`                            | student, teacher; особистий розклад занять із кешу                       |
+| GET    | `/schedule/session/my?from=&to=`                    | student, teacher; особистий розклад сесії (`zes_schedule: 1`)            |
+| GET    | `/schedule/today`                                   | student, teacher; `{date, lessons, session, meta}` для дашборда          |
+| GET    | `/schedule/export?format=csv\|xlsx&locale=uk\|en`   | student, teacher; CSV/XLSX особистого розкладу                           |
+| GET    | `/schedule/online-links/my`                         | teacher; власні онлайн-посилання поточного терму                         |
+| PUT    | `/schedule/online-links`                            | teacher; upsert посилання за `groupCode`/`subjectKey`/`date`/`startTime`  |
+| DELETE | `/schedule/online-links/:id`                        | teacher; лише власник (`createdBy == user`)                              |
+| GET    | `/schedule/groups/:groupCode`                       | admin, rector, president, dean, department_head; кеш групи без оновлення з API |
+| POST   | `/schedule/groups/:groupCode/refresh`               | admin; примусове оновлення групи з API (ігнорує TTL)                     |
+| POST   | `/schedule/refresh`                                 | admin; примусове оновлення всіх груп поточного терму (обидва знімки)     |
 
-Стани `scheduled`, `cancelled`, `rescheduled` і `substituted` зберігаються в
-MongoDB разом із причиною, actor-метаданими, HTTPS-посиланням `onlineUrl` для
-онлайн-пари та останніми 50 записами історії змін. Спеціалізовані workflow
-endpoints є основним шляхом для адміністративних операцій, а `PUT /schedule/:id`
-використовується для звичайного редагування.
+Дані розкладу не створюються й не редагуються в кампусі — джерело правди API
+МАУП, `ScheduleSnapshot` лише кешує останній знімок на групу/термін/сесію за
+`SCHEDULE_CACHE_TTL_MS`. Онлайн-посилання (`OnlineLessonLink`) — єдина
+редагована сутність модуля, пріоритет пара > дата > дисципліна. `POST/PUT/DELETE
+/schedule`, `/schedule/:id`, `/schedule/bulk*`, `/schedule/templates*`,
+`/schedule/:id/cancel|reschedule|substitution` видалені разом із локальним
+CRUD-розкладом і повертають `404`.
 
 ### Курси та навчання `/api/courses`
 
@@ -1250,7 +1259,8 @@ endpoints є основним шляхом для адміністративни
 ### Матриця можливостей
 
 Повна матриця можливостей підтримується в `docs/RBAC_MATRIX.md`. Критичні
-інваріанти: лише `admin` змінює користувачів і розклад; `rector` та
+інваріанти: лише `admin` змінює користувачів і примусово оновлює кеш розкладу
+з API МАУП; онлайн-посилання на пари редагує лише `teacher`; `rector` та
 `president` не мають операційних mutation permissions, але отримують глобальний
 read-only каталог користувачів; управлінські ролі бачать звіти у своєму scope.
 Regression tests додатково фіксують активну модель із семи ролей і не
@@ -1351,6 +1361,10 @@ parameters. These restrictions complement, but do not replace, patched Multer.
 - Phase 2: MongoDB через Mongoose — завершено для runtime-модулів
 - MongoDB запускається як single-node replica set для транзакцій і
   transactional audit outbox
+- дані MongoDB зберігаються в named volume `online_campus_mongodb-data`
+  (не в bind mount `./data/db`): на macOS/Windows Docker Desktop bind mount
+  повертає файли mongod як root-owned після перезапуску, і mongod падає з
+  `Operation not permitted`. Скидання бази: `docker compose down -v`
 - `server/src/common/mock-data` використовується тільки як fixture-source для контрольованих demo seeders, не як runtime data layer
 
 ### Нові типи сповіщень
@@ -1370,7 +1384,7 @@ parameters. These restrictions complement, but do not replace, patched Multer.
 | 3   | Demo fixtures для локального seed                        | ✅ Реалізовано; не runtime data layer       |
 | 4   | AuthModule (cookies, JWT rotation, CSRF, password reset) | ✅ Реалізовано                              |
 | 5   | RBAC Guards та академічна object-level authorization     | ✅ Реалізовано                              |
-| 6   | ScheduleModule backend/frontend workflows, conflicts, audit, CSV/XLSX | ✅ Закрито: admin-only UI, cancel/reschedule/substitution, templates, bulk; student `/schedule/my` може читати MAUP API |
+| 6   | ScheduleModule — read-only кеш із API МАУП, diff-сповіщення, онлайн-посилання, CSV/XLSX | ✅ Закрито: локальний CRUD-розклад, шаблони й bulk видалені; `/schedule/my|session/my|today|export` читають кеш `ScheduleSnapshot`, admin оновлює його з API |
 | 7   | CoursesModule і викладацько-студентський контур          | ✅ Реалізовано                              |
 | 8   | ReferencesModule                                        | ✅ CRUD, admin UI, integrity, import/export |
 | 9   | NotificationsModule                                     | ✅ In-app сценарії, SSE і фільтри за датою реалізовано |
@@ -1477,13 +1491,20 @@ online_campus/
 │       │   ├── users.service.ts
 │       │   └── users.service.spec.ts
 │       │
-│       ├── schedule/          # timetable CRUD, conflict checks, export
+│       ├── schedule/          # read-only cache of MAUP API schedule + online links
 │       │   ├── dto/
-│       │   ├── schemas/
+│       │   ├── schemas/       # schedule-snapshot.schema.ts, online-lesson-link.schema.ts
 │       │   ├── schedule.module.ts
 │       │   ├── schedule.controller.ts
-│       │   ├── schedule.service.ts
-│       │   └── schedule.service.spec.ts
+│       │   ├── schedule.service.ts           # read delegation, export, admin refresh
+│       │   ├── schedule-snapshot.service.ts  # TTL, in-memory lock, stale fallback
+│       │   ├── schedule-reader.service.ts    # student/teacher/scoped admin reads
+│       │   ├── schedule-diff.service.ts      # snapshot diff + storm protection
+│       │   ├── schedule-change-notifier.service.ts
+│       │   ├── online-lesson-links.service.ts
+│       │   ├── maup-schedule.mapper.ts       # deterministic keys, control type mapping
+│       │   ├── schedule-exporter.ts
+│       │   └── *.spec.ts                     # one spec per service above
 │       │
 │       ├── courses/           # courses domain split by bounded submodules
 │       │   ├── courses.module.ts
@@ -1667,6 +1688,7 @@ online_campus/
         │   ├── LanguageSwitcher.tsx
         │   ├── dashboard/
         │   ├── notifications/
+        │   ├── schedule/       # OnlineLinkModal.tsx, ScheduleEntryCard.tsx, StaleBanner.tsx
         │   └── references/
         └── pages/
             ├── auth/
@@ -1676,6 +1698,7 @@ online_campus/
             │   ├── DashboardPage.tsx
             │   ├── NewsPage.tsx
             │   ├── SchedulePage.tsx
+            │   ├── ScheduleSessionPage.tsx
             │   ├── NotificationsPage.tsx
             │   ├── ProfilePage.tsx
             │   ├── ReportsPage.tsx
@@ -1693,7 +1716,8 @@ online_campus/
             │   └── ElectiveAdminPage.tsx
             ├── admin/
             │   ├── UsersPage.tsx
-            │   └── AuditLogPage.tsx
+            │   ├── AuditLogPage.tsx
+            │   └── AdminScheduleGroupsPage.tsx
             └── course/
                 ├── CoursesPage.tsx
                 └── CourseDetailPage.tsx
@@ -1802,6 +1826,11 @@ MAUP_API_CIRCUIT_FAILURE_THRESHOLD=5
 MAUP_API_CIRCUIT_RESET_TIMEOUT_MS=30000
 MAUP_API_MAX_RESPONSE_BYTES=5000000
 
+# Кеш розкладу з MAUP API (ScheduleSnapshot)
+SCHEDULE_CACHE_TTL_MS=900000
+SCHEDULE_DIFF_MAX_AGE_MS=604800000
+SCHEDULE_DIFF_BULK_THRESHOLD=20
+
 # Public MAUP news RSS feed (no credentials)
 MAUP_NEWS_FEED_URL=https://maup.com.ua/ua/feed.xml
 MAUP_NEWS_FEED_ALLOWED_HOST=maup.com.ua
@@ -1878,8 +1907,12 @@ GitHub Secrets, ані до `.env` на Hetzner. Перед активацією
 та безпечно налаштувати URL, allow-listed host і credentials у цільовому
 середовищі. Після активації студентський `/schedule/my` і schedule export
 читатимуть розклад із MAUP API за `externalStudentId` або `recordBookNumber`
-як `nsb` fallback. Реальний endpoint і credentials у репозиторії не
-зберігаються.
+як `nsb` fallback; розклад викладача наповнюється тими самими запитами лише
+опосередковано (за `prepod_id` у вже отриманих групових знімках), тому одразу
+після активації нового терму (`POST /academic-terms/:id/activate`)
+адміністратор має запустити `POST /schedule/refresh` — інакше зріз викладача
+лишається порожнім, поки жоден студент групи не відкриє розклад сам. Реальний
+endpoint і credentials у репозиторії не зберігаються.
 
 У локальному `docker-compose.yml` MongoDB доступна backend-контейнеру через
 внутрішню Docker network (`mongodb:27017`) і не публікується на host-порт за

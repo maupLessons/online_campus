@@ -288,4 +288,72 @@ describe('Identity and session security (e2e)', () => {
       responseBody<{ message: string }>(wrongPassword).message,
     );
   });
+
+  it('creates a student with two study profiles and activates the first one', async () => {
+    const admin = await createUser(Role.ADMIN, 'profiles-admin');
+    const session = await login(admin).expect(201);
+    const cookies = cookieHeader(session);
+    const csrfToken = cookieValue(session, 'campus_csrf_token');
+
+    const specialtyId = new Types.ObjectId();
+    const groupA = new Types.ObjectId();
+    const groupB = new Types.ObjectId();
+    await connection.collection('specialties').insertOne({
+      _id: specialtyId,
+      code: '121',
+      name: 'Інженерія програмного забезпечення',
+    });
+    await connection.collection('groups').insertMany([
+      { _id: groupA, code: 'КН-11', specialty: specialtyId, course: 1 },
+      { _id: groupB, code: 'ІПЗ-21', specialty: specialtyId, course: 2 },
+    ]);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/users')
+      .set('Cookie', cookies)
+      .set('X-CSRF-Token', csrfToken)
+      .send({
+        login: 'student_two_profiles',
+        password: 'StudentPass1',
+        role: Role.STUDENT,
+        email: 'student.two.profiles@example.test',
+        firstName: 'Two',
+        lastName: 'Profiles',
+        studentProfiles: [
+          {
+            externalStudentId: '1001',
+            groupId: groupA.toHexString(),
+            recordBookNumber: 'КН-11/01',
+            year: 1,
+          },
+          {
+            externalStudentId: '1002',
+            groupId: groupB.toHexString(),
+            recordBookNumber: 'ІПЗ-21/07',
+            year: 2,
+          },
+        ],
+      })
+      .expect(201);
+
+    const created = responseBody<{
+      studentProfiles: Array<{
+        id: string;
+        recordBookNumber: string;
+        status: string;
+      }>;
+      activeStudentProfileId: string | null;
+    }>(response);
+
+    expect(created.studentProfiles).toHaveLength(2);
+    expect(created.studentProfiles.map((item) => item.status)).toEqual([
+      'active',
+      'active',
+    ]);
+    expect(created.studentProfiles[0].recordBookNumber).toBe('КН-11/01');
+    expect(created.activeStudentProfileId).toBe(created.studentProfiles[0].id);
+
+    const stored = await users().findOne({ login: 'student_two_profiles' });
+    expect(stored?.studentProfiles).toHaveLength(2);
+  });
 });

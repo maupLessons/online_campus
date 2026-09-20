@@ -7,28 +7,61 @@ import {
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import {
   ReportCourseBreakdownDto,
+  ReportCourseRowDto,
   ReportExportDataDto,
   ReportExportQueryDto,
   ReportOverviewDto,
   ReportQueryDto,
+  ReportSummaryDto,
 } from './dto';
-import { ReportsAnalyticsService } from './reports-analytics.service';
 import { ReportsExportService } from './reports-export.service';
 import {
+  formatTermLabel,
   parseReportDateRange,
   resolveReportTrendUnit,
 } from './reports-query.util';
 import { ReportsScopeService } from './reports-scope.service';
 import {
+  AssignmentMetadata,
   MAX_REPORT_EXPORT_ASSIGNMENTS,
   ResolvedReportScope,
 } from './reports.types';
+
+const EMPTY_SUMMARY: ReportSummaryDto = {
+  averageGrade: null,
+  gradeCount: 0,
+  attendanceRate: null,
+  attendanceRecords: 0,
+  lessonsRecorded: 0,
+  present: 0,
+  late: 0,
+  absent: 0,
+  excused: 0,
+};
+
+/** Breakdown rows without metrics: the campus no longer stores grades and attendance (Р6). */
+function toCourseRows(assignments: AssignmentMetadata[]): ReportCourseRowDto[] {
+  return assignments.map((item) => ({
+    courseAssignmentId: item.id,
+    courseName: item.courseName,
+    courseCode: item.courseCode,
+    groupCode: item.groupCode,
+    departmentName: item.departmentName,
+    facultyName: item.facultyName,
+    termId: item.term?.id ?? null,
+    termLabel: formatTermLabel(item.term),
+    averageGrade: null,
+    gradeCount: 0,
+    attendanceRate: null,
+    attendanceRecords: 0,
+    lessonsRecorded: 0,
+  }));
+}
 
 @Injectable()
 export class ReportsService {
   constructor(
     private readonly scopeService: ReportsScopeService,
-    private readonly analyticsService: ReportsAnalyticsService,
     private readonly exportService: ReportsExportService,
   ) {}
 
@@ -39,21 +72,18 @@ export class ReportsService {
     const dateRange = parseReportDateRange(query.from, query.to);
     const scope = await this.scopeService.resolve(query, user);
     const trendUnit = resolveReportTrendUnit(dateRange);
-    const [studentCount, analytics] = await Promise.all([
-      this.scopeService.countStudents(scope.selectedAssignments),
-      this.analyticsService.getOverview({
-        assignments: scope.selectedAssignments,
-        dateRange,
-        trendUnit,
-      }),
-    ]);
+    const studentCount = await this.scopeService.countStudents(
+      scope.selectedAssignments,
+    );
 
     return {
       generatedAt: new Date().toISOString(),
       trendUnit,
       scope: this.scopeService.describe(scope, user.role, studentCount),
       filters: scope.filters,
-      ...analytics,
+      summary: { ...EMPTY_SUMMARY },
+      gradeTrend: [],
+      attendanceTrend: [],
     };
   }
 
@@ -61,13 +91,10 @@ export class ReportsService {
     query: ReportQueryDto,
     user: AuthenticatedUser,
   ): Promise<ReportCourseBreakdownDto> {
-    const dateRange = parseReportDateRange(query.from, query.to);
+    parseReportDateRange(query.from, query.to);
     const scope = await this.scopeService.resolve(query, user);
     const page = paginateAssignments(scope, query.page ?? 1, query.limit ?? 10);
-    const docs = await this.analyticsService.getCourseRows(
-      page.assignments,
-      dateRange,
-    );
+    const docs = toCourseRows(page.assignments);
 
     return {
       docs,
@@ -92,21 +119,18 @@ export class ReportsService {
     this.assertExportSize(scope.selectedAssignments.length);
 
     const trendUnit = resolveReportTrendUnit(dateRange);
-    const [studentCount, analytics, courseRows] = await Promise.all([
-      this.scopeService.countStudents(scope.selectedAssignments),
-      this.analyticsService.getOverview({
-        assignments: scope.selectedAssignments,
-        dateRange,
-        trendUnit,
-      }),
-      this.analyticsService.getCourseRows(scope.selectedAssignments, dateRange),
-    ]);
+    const studentCount = await this.scopeService.countStudents(
+      scope.selectedAssignments,
+    );
+    const courseRows = toCourseRows(scope.selectedAssignments);
     const report: ReportExportDataDto = {
       generatedAt: new Date().toISOString(),
       trendUnit,
       scope: this.scopeService.describe(scope, user.role, studentCount),
       filters: scope.filters,
-      ...analytics,
+      summary: { ...EMPTY_SUMMARY },
+      gradeTrend: [],
+      attendanceTrend: [],
       courseBreakdown: {
         docs: courseRows,
         totalDocs: courseRows.length,

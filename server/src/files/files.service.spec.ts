@@ -27,11 +27,6 @@ function createService(
   options: {
     file?: Record<string, unknown> | null;
     attachedFilesCount?: number;
-    materials?: Array<Record<string, unknown>>;
-    assignments?: Array<Record<string, unknown>>;
-    submissions?: Array<Record<string, unknown>>;
-    submittedAssignment?: Record<string, unknown> | null;
-    canAccessCourseAssignment?: boolean;
   } = {},
 ) {
   const fileModel = {
@@ -42,34 +37,13 @@ function createService(
     create: jest.fn(),
     findByIdAndDelete: jest.fn(),
   };
-  const materialModel = {
-    find: jest.fn().mockReturnValue(chainResult(options.materials ?? [])),
-  };
-  const assignmentModel = {
-    find: jest.fn().mockReturnValue(chainResult(options.assignments ?? [])),
-    findById: jest
-      .fn()
-      .mockReturnValue(chainResult(options.submittedAssignment ?? null)),
-  };
-  const submissionModel = {
-    find: jest.fn().mockReturnValue(chainResult(options.submissions ?? [])),
-  };
-  const academicAccessService = {
-    canAccessCourseAssignment: jest
-      .fn()
-      .mockResolvedValue(options.canAccessCourseAssignment ?? false),
-  };
 
   return new FilesService(
     fileModel as never,
-    materialModel as never,
-    assignmentModel as never,
-    submissionModel as never,
     {
       onRollback: jest.fn().mockReturnValue(false),
       onCommit: jest.fn().mockReturnValue(false),
     } as never,
-    academicAccessService as never,
     {
       scan: jest.fn().mockResolvedValue({
         status: FileScanStatus.CLEAN,
@@ -90,84 +64,43 @@ describe('FilesService security checks', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('allows a student to download a course material file for their group', async () => {
+  it('allows the uploader to download their own file', async () => {
     const fileId = new Types.ObjectId();
     const ownerId = new Types.ObjectId();
-    const studentId = new Types.ObjectId();
-    const courseAssignmentId = new Types.ObjectId();
-
     const file = { _id: fileId, uploadedBy: ownerId };
-    const service = createService({
-      file,
-      materials: [{ courseAssignment: courseAssignmentId }],
-      canAccessCourseAssignment: true,
-    });
+    const service = createService({ file });
 
     await expect(
       service.getDownloadableFileById(
         fileId.toHexString(),
-        studentId.toHexString(),
+        ownerId.toHexString(),
         Role.STUDENT,
       ),
     ).resolves.toBe(file);
   });
 
-  it('blocks an unselected student from elective course files', async () => {
+  it('allows an admin to download any file', async () => {
     const fileId = new Types.ObjectId();
     const ownerId = new Types.ObjectId();
-    const studentId = new Types.ObjectId();
-    const courseAssignmentId = new Types.ObjectId();
-    const service = createService({
-      file: { _id: fileId, uploadedBy: ownerId },
-      materials: [{ courseAssignment: courseAssignmentId }],
-      canAccessCourseAssignment: false,
-    });
+    const adminId = new Types.ObjectId();
+    const file = { _id: fileId, uploadedBy: ownerId };
+    const service = createService({ file });
 
     await expect(
       service.getDownloadableFileById(
         fileId.toHexString(),
-        studentId.toHexString(),
-        Role.STUDENT,
+        adminId.toHexString(),
+        Role.ADMIN,
       ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    ).resolves.toBe(file);
   });
 
-  it('blocks a student from downloading another student submission file from the same group', async () => {
-    const fileId = new Types.ObjectId();
-    const ownerId = new Types.ObjectId();
-    const requesterId = new Types.ObjectId();
-    const courseAssignmentId = new Types.ObjectId();
-
-    const service = createService({
-      file: { _id: fileId, uploadedBy: ownerId },
-      submissions: [
-        {
-          student: ownerId,
-          assignment: new Types.ObjectId(),
-        },
-      ],
-      submittedAssignment: { courseAssignment: courseAssignmentId },
-      canAccessCourseAssignment: true,
-    });
-
-    await expect(
-      service.getDownloadableFileById(
-        fileId.toHexString(),
-        requesterId.toHexString(),
-        Role.STUDENT,
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('rejects downloads when the file has no allowed relation to the user', async () => {
+  it('rejects downloads when the requester neither owns the file nor is an admin', async () => {
     const fileId = new Types.ObjectId();
     const ownerId = new Types.ObjectId();
     const userId = new Types.ObjectId();
     const service = createService({
       file: { _id: fileId, uploadedBy: ownerId },
-      materials: [],
-      assignments: [],
-      submissions: [],
     });
 
     await expect(

@@ -6,6 +6,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { UsersService } from '../users/users.service';
+import { pickActiveStudentProfile } from '../users/dto/user.dto';
 import { Role } from '../common/types/roles.enum';
 import {
   CreateNotificationDto,
@@ -180,16 +181,24 @@ export class NotificationsService {
     return notifications.map((n) => this.formatNotification(n, actorObjId));
   }
 
-  async getUnreadCount(userId: string): Promise<number> {
+  async getUnreadCount(
+    userId: string,
+  ): Promise<{ count: number; importantCount: number }> {
     const userObjId = this.toObjectId(userId);
     const visibility = await this.getNotificationVisibilityContext(userId);
+    const unreadFilter = {
+      ...this.buildVisibleFilter(userObjId, userId, visibility),
+      readBy: { $nin: [userObjId, userId] },
+    };
 
-    return this.notificationModel
-      .countDocuments({
-        ...this.buildVisibleFilter(userObjId, userId, visibility),
-        readBy: { $nin: [userObjId, userId] },
-      })
-      .exec();
+    const [count, importantCount] = await Promise.all([
+      this.notificationModel.countDocuments(unreadFilter).exec(),
+      this.notificationModel
+        .countDocuments({ ...unreadFilter, important: true })
+        .exec(),
+    ]);
+
+    return { count, importantCount };
   }
 
   async markAsRead(id: string, userId: string): Promise<NotificationView> {
@@ -558,7 +567,7 @@ export class NotificationsService {
       const user = await this.usersService.findOne(userId);
       return {
         role: user.role,
-        groupId: user.studentProfile?.group ?? null,
+        groupId: pickActiveStudentProfile(user)?.group?.id ?? null,
       };
     } catch {
       return { groupId: null };

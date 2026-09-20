@@ -8,10 +8,25 @@ export type Constructor<T> = {
 export const transformToDto = <T, R>(cls: Constructor<T>, target: R): T =>
   plainToInstance(cls, target, { excludeExtraneousValues: true });
 
+export const transformToDtoForRole = <T, R>(
+  cls: Constructor<T>,
+  target: R,
+  role?: string,
+): T =>
+  plainToInstance(cls, target, {
+    excludeExtraneousValues: true,
+    groups: role === 'admin' ? ['admin'] : [],
+  });
+
 export const transformToDtoArray = <T, R>(
   cls: Constructor<T>,
   target: R[],
-): T[] => plainToInstance(cls, target, { excludeExtraneousValues: true });
+  role?: string,
+): T[] =>
+  plainToInstance(cls, target, {
+    excludeExtraneousValues: true,
+    groups: role === 'admin' ? ['admin'] : [],
+  });
 
 interface PaginatedResultSource<R> {
   docs: R[];
@@ -38,8 +53,9 @@ export const transformToPaginatedDto = <T, R>(
     hasNextPage,
     hasPrevPage,
   }: PaginatedResultSource<R>,
+  role?: string,
 ): PaginatedDto<T> => ({
-  docs: transformToDtoArray(cls, docs),
+  docs: transformToDtoArray(cls, docs, role),
   totalDocs,
   limit,
   totalPages,

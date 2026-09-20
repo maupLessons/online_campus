@@ -1,9 +1,15 @@
-import { ChevronLeft, ChevronRight, LoaderCircle } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  LoaderCircle,
+  RotateCw,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import CreateUserModal from '../../components/CreateUserModal';
 import api from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { useAutoDismissState } from '../../hooks/useAutoDismissState';
 import type { PaginatedResponse, User } from '../../types';
 import { Role, ROLE_LABEL_KEYS } from '../../types';
 
@@ -31,6 +37,8 @@ export default function UsersPage() {
   const [limit, setLimit] = useState<number>(PAGE_SIZE_OPTIONS[0]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useAutoDismissState<string | null>(null);
+  const [syncingUserId, setSyncingUserId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -92,6 +100,35 @@ export default function UsersPage() {
       }));
     } catch {
       setError(t('users.actionError'));
+    }
+  };
+
+  const handleSyncStudent = async (user: User) => {
+    setSyncingUserId(user.id);
+    setError(null);
+
+    try {
+      const { data } = await api.post<{
+        active: number;
+        inactive: number;
+        meta?: { reason: 'api_disabled' | 'api_error' | 'empty_source' };
+      }>(`/users/${user.id}/sync-student`);
+      setNotice(
+        data.meta
+          ? t('users.syncSkipped', {
+              reason: t(`users.syncReason.${data.meta.reason}`),
+            })
+          : t('users.syncSuccess', {
+              active: data.active,
+              inactive: data.inactive,
+            }),
+      );
+      setLoading(true);
+      setRefreshKey((current) => current + 1);
+    } catch {
+      setError(t('users.syncError'));
+    } finally {
+      setSyncingUserId(null);
     }
   };
 
@@ -227,6 +264,12 @@ export default function UsersPage() {
         </div>
       </div>
 
+      {notice && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          {notice}
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -361,6 +404,28 @@ export default function UsersPage() {
                           </svg>
                         )}
                       </button>
+
+                      {user.role === Role.STUDENT && (
+                        <button
+                          type="button"
+                          onClick={() => void handleSyncStudent(user)}
+                          disabled={syncingUserId === user.id}
+                          className="text-blue-600 transition-colors hover:text-blue-800 disabled:cursor-not-allowed disabled:text-gray-300"
+                          title={t('users.syncStudent')}
+                        >
+                          <RotateCw
+                            className={
+                              syncingUserId === user.id
+                                ? 'h-5 w-5 animate-spin'
+                                : 'h-5 w-5'
+                            }
+                            aria-hidden="true"
+                          />
+                          <span className="sr-only">
+                            {t('users.syncStudent')}
+                          </span>
+                        </button>
+                      )}
                     </div>
                   </td>
                 )}

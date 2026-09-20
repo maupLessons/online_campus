@@ -8,12 +8,39 @@ import { Role } from '../src/common/types/roles.enum';
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { PaginatedDto } from '../src/common/dto/paginated.dto';
-import { CourseAssignmentDto, CourseDto } from '../src/courses/courses/dto';
+import {
+  CourseAssignmentCardDto,
+  CourseAssignmentDto,
+} from '../src/courses/courses/dto';
 import { SeedService } from '../src/seed-data/seed.service';
 import { configureApp } from '../src/app.config';
 import { CoursesService } from '../src/courses/courses/courses.service';
 
 const SET_UP_TIMEOUT = 60_000;
+
+function studentProfileFields(input: {
+  group: Types.ObjectId;
+  recordBookNumber?: string;
+  year?: number;
+  externalStudentId?: string;
+}) {
+  const _id = new Types.ObjectId();
+  const recordBookNumber = input.recordBookNumber ?? _id.toHexString();
+  return {
+    studentProfiles: [
+      {
+        _id,
+        externalStudentId: input.externalStudentId ?? recordBookNumber,
+        group: input.group,
+        recordBookNumber,
+        year: input.year ?? 1,
+        status: 'active',
+        syncedAt: new Date(),
+      },
+    ],
+    activeStudentProfileId: _id,
+  };
+}
 
 describe('Courses (e2e)', () => {
   let app: NestExpressApplication;
@@ -54,6 +81,7 @@ describe('Courses (e2e)', () => {
       await connection.collection('courses').deleteMany({});
       await connection.collection('courseassignments').deleteMany({});
       await connection.collection('departments').deleteMany({});
+      await connection.collection('academicterms').deleteMany({});
     }
     if (app) {
       await app.close();
@@ -72,6 +100,7 @@ describe('Courses (e2e)', () => {
     const courseId = new Types.ObjectId();
     const deptId = new Types.ObjectId();
     const courseAssignmentId = new Types.ObjectId();
+    const termId = new Types.ObjectId();
 
     const accessToken = jwtService.sign({
       sub: studentId.toHexString(),
@@ -93,9 +122,7 @@ describe('Courses (e2e)', () => {
       lastName: 'E2E',
       status: 'active',
       passwordHash: 'hash',
-      studentProfile: {
-        group: groupId,
-      },
+      ...studentProfileFields({ group: groupId }),
     });
 
     await connection.collection('courses').insertOne({
@@ -103,8 +130,18 @@ describe('Courses (e2e)', () => {
       name: 'Test Course',
       code: 'TC001',
       department: deptId,
-      semester: 1,
       credits: 3,
+    });
+
+    await connection.collection('academicterms').insertOne({
+      _id: termId,
+      academicYear: '2026/2027',
+      termNumber: 1,
+      startsAt: new Date('2026-09-01'),
+      endsAt: new Date('2027-01-31'),
+      status: 'current',
+      maupAcademicYear: 2026,
+      maupSemester: 1,
     });
 
     await connection.collection('courseassignments').insertOne({
@@ -112,8 +149,7 @@ describe('Courses (e2e)', () => {
       course: courseId,
       teacher: new Types.ObjectId(),
       group: groupId,
-      academicYear: '2023-2024',
-      semester: 1,
+      term: termId,
     });
 
     return {
@@ -121,24 +157,21 @@ describe('Courses (e2e)', () => {
       groupId,
       courseId,
       courseAssignmentId,
+      termId,
       accessToken,
     };
   };
 
   describe('GET /courses', () => {
-    it('should return paginated courses (200)', async () => {
+    // §5 of plan 05: the discipline catalog is for department/dean's office/admin personas only;
+    // a student uses /courses/my
+    it('should return 403 for a student (catalog is staff-only)', async () => {
       const { accessToken } = await setupData();
-      const response = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .get('/api/courses')
         .set('Authorization', `Bearer ${accessToken}`)
         .query({ page: 1, limit: 10 })
-        .expect(200);
-
-      const body = response.body as PaginatedDto<CourseDto>;
-      expect(body.docs).toBeDefined();
-      expect(body.docs.length).toBeGreaterThanOrEqual(1);
-      expect(body.docs[0].name).toBe('Test Course');
-      expect(body.totalDocs).toBe(1);
+        .expect(403);
     });
   });
 
@@ -157,28 +190,76 @@ describe('Courses (e2e)', () => {
       expect(body.docs[0].courseName).toBe('Test Course');
       expect(body.totalDocs).toBe(1);
     });
+
+    it('returns only assignments of the current term', async () => {
+      const { accessToken, groupId, courseId } = await setupData(); // setupData already creates the current term termId and one assignment; it doesn't return `deptId`
+      const oldTerm = new Types.ObjectId();
+      await connection.collection('academicterms').insertOne({
+        _id: oldTerm,
+        academicYear: '2025/2026',
+        termNumber: 2,
+        status: 'closed',
+        startsAt: new Date('2026-02-01'),
+        endsAt: new Date('2026-06-30'),
+        maupAcademicYear: 2025,
+        maupSemester: 2,
+      });
+      await connection.collection('courseassignments').insertOne({
+        _id: new Types.ObjectId(),
+        course: courseId,
+        group: groupId,
+        teacher: new Types.ObjectId(),
+        term: oldTerm,
+        source: 'standard',
+        enrolledStudents: [],
+      });
+
+      const res = await request(app.getHttpServer())
+        .get('/api/courses/my')
+        .set('Authorization', `Bearer ${accessToken}`);
+      expect(res.status).toBe(200);
+      const body = res.body as PaginatedDto<CourseAssignmentDto>;
+      expect(body.totalDocs).toBe(1);
+      expect(body.docs[0].term?.academicYear).toBe('2026/2027');
+    });
+
+    it('returns an empty page with meta.reason without a current term', async () => {
+      const { accessToken } = await setupData();
+      await connection
+        .collection('academicterms')
+        .updateMany({}, { $set: { status: 'closed' } });
+      const res = await request(app.getHttpServer())
+        .get('/api/courses/my')
+        .set('Authorization', `Bearer ${accessToken}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        docs: [],
+        totalDocs: 0,
+        meta: { reason: 'no_current_term' },
+      });
+    });
   });
 
   describe('GET /courses/:id', () => {
-    it('should return course by id (200)', async () => {
+    // §5 of plan 05: the discipline catalog is for department/dean's office/admin personas only;
+    // a student uses /courses/my
+    it('should return 403 for a student (catalog is staff-only)', async () => {
       const { accessToken, courseId } = await setupData();
-      const response = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .get(`/api/courses/${courseId.toHexString()}`)
         .set('Authorization', `Bearer ${accessToken}`)
-        .expect(200);
-
-      const body = response.body as CourseDto;
-      expect(body.id).toBe(courseId.toHexString());
-      expect(body.name).toBe('Test Course');
+        .expect(403);
     });
 
-    it('should return 404 if course not found', async () => {
+    // the role guard cuts off the student before the course lookup, so the id's
+    // existence doesn't matter (404 logic for admin is covered separately in courses-access.service.spec.ts)
+    it('should return 403 for a student regardless of existence', async () => {
       const { accessToken } = await setupData();
       const fakeId = new Types.ObjectId().toHexString();
       await request(app.getHttpServer())
         .get(`/api/courses/${fakeId}`)
         .set('Authorization', `Bearer ${accessToken}`)
-        .expect(404);
+        .expect(403);
     });
   });
 
@@ -192,13 +273,13 @@ describe('Courses (e2e)', () => {
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
 
-      const body = response.body as CourseAssignmentDto;
+      const body = response.body as CourseAssignmentCardDto;
       expect(body.id).toBe(courseAssignmentId.toHexString());
-      expect(body.courseName).toBe('Test Course');
+      expect(body.course.name).toBe('Test Course');
     });
 
     it('should reject a course assignment from another group (403)', async () => {
-      const { accessToken, courseId } = await setupData();
+      const { accessToken, courseId, termId } = await setupData();
       const foreignCourseAssignmentId = new Types.ObjectId();
 
       await connection.collection('courseassignments').insertOne({
@@ -206,8 +287,7 @@ describe('Courses (e2e)', () => {
         course: courseId,
         teacher: new Types.ObjectId(),
         group: new Types.ObjectId(),
-        academicYear: '2023-2024',
-        semester: 1,
+        term: termId,
       });
 
       await request(app.getHttpServer())
@@ -219,7 +299,7 @@ describe('Courses (e2e)', () => {
     });
 
     it('should reject an elective course without enrollment (403)', async () => {
-      const { accessToken, groupId } = await setupData();
+      const { accessToken, groupId, termId } = await setupData();
       const electiveCourseAssignmentId = new Types.ObjectId();
 
       await connection.collection('courseassignments').insertOne({
@@ -227,8 +307,7 @@ describe('Courses (e2e)', () => {
         course: new Types.ObjectId(),
         teacher: new Types.ObjectId(),
         group: groupId,
-        academicYear: '2024-2025',
-        semester: 2,
+        term: termId,
         source: 'elective',
         enrolledStudents: [new Types.ObjectId()],
       });
@@ -244,7 +323,7 @@ describe('Courses (e2e)', () => {
 
   describe('Elective course targets', () => {
     it('resolves only enrolled students for access and notifications', async () => {
-      const { groupId, studentId } = await setupData();
+      const { groupId, studentId, termId } = await setupData();
       const outsiderId = new Types.ObjectId();
       const teacherId = new Types.ObjectId();
       const electiveAssignmentId = new Types.ObjectId();
@@ -259,7 +338,7 @@ describe('Courses (e2e)', () => {
           lastName: 'Student',
           status: 'active',
           passwordHash: 'hash',
-          studentProfile: { group: groupId },
+          ...studentProfileFields({ group: groupId }),
         },
         {
           _id: teacherId,
@@ -277,8 +356,7 @@ describe('Courses (e2e)', () => {
         course: new Types.ObjectId(),
         teacher: teacherId,
         group: groupId,
-        academicYear: '2026-2027',
-        semester: 1,
+        term: termId,
         source: 'elective',
         enrolledStudents: [studentId],
         finalizedAt: new Date(),

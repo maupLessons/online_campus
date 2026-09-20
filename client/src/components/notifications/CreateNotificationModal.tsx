@@ -203,13 +203,6 @@ function NotificationForm({
               {t("notifications.types.announcement")}
             </option>
             <option value="system">{t("notifications.types.system")}</option>
-            <option value="grade">{t("notifications.types.grade")}</option>
-            <option value="new_assignment">
-              {t("notifications.types.new_assignment")}
-            </option>
-            <option value="schedule_change">
-              {t("notifications.types.schedule_change")}
-            </option>
           </select>
         </div>
 

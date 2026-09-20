@@ -17,14 +17,14 @@ export function configureApp(
 
   app.setGlobalPrefix('api');
 
-  // Захист: Довіра проксі (nginx, docker) для коректного req.ip
+  // Security: trust the proxy (nginx, docker) for correct req.ip
   app.set('trust proxy', 1);
 
-  // Захист: Ліміт на розмір тіла запиту (захист від DDoS великими payload)
+  // Security: request body size limit (protection against DDoS with large payloads)
   app.use(json({ limit: '1mb' }));
   app.use(urlencoded({ extended: true, limit: '1mb' }));
 
-  // Захист: Security headers
+  // Security: security headers
   app.use(
     helmet({
       crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -46,13 +46,13 @@ export function configureApp(
   app.use(apiHealthHandler(swaggerEnabled));
   app.enableCors(buildCorsOptions());
 
-  // Захист: Сувора валідація
+  // Security: strict validation
   app.useGlobalPipes(
     new ValidationPipe({
       transform: true,
       whitelist: true,
       forbidNonWhitelisted: true,
-      validationError: { target: false, value: false }, // Не зливати дані в errors
+      validationError: { target: false, value: false }, // don't leak data into errors
     }),
   );
 

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { ROLE_LABEL_KEYS, type User } from '../../types';
+import { pickActiveStudentProfile } from '../../utils/activeStudentProfile';
 
 type Props = {
   user: User | null;
@@ -27,23 +28,14 @@ function InfoTile({ label, value }: InfoTileProps) {
 
 export default function ProfileSummaryCard({ user }: Props) {
   const { t } = useTranslation();
+  const profile = pickActiveStudentProfile(user);
+  const isStudent = user?.role === 'student';
 
   const fullName = [user?.lastName, user?.firstName, user?.middleName]
     .filter(Boolean)
     .join(' ');
 
   const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`;
-
-  const profileId =
-    user?.studentProfile?.recordBookNumber || user?.login || '—';
-
-  const groupOrPosition = user?.studentProfile
-    ? user.studentProfile.group || '—'
-    : user?.teacherProfile?.position || '—';
-
-  const year = user?.studentProfile?.year
-    ? t('dashboard.studyYearValue', { year: user.studentProfile.year })
-    : '—';
 
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
@@ -61,7 +53,9 @@ export default function ProfileSummaryCard({ user }: Props) {
             {fullName || '—'}
           </h3>
 
-          <p className="mt-1 text-sm text-slate-400">ID: {profileId}</p>
+          {isStudent && !profile && (
+            <p className="mt-1 text-sm text-amber-700">{t('dashboard.profileNotSynced')}</p>
+          )}
         </div>
       </div>
 
@@ -69,16 +63,18 @@ export default function ProfileSummaryCard({ user }: Props) {
         <InfoTile label={t('dashboard.email')} value={user?.email} />
         <InfoTile label={t('dashboard.phone')} value={user?.phone} />
 
-        <InfoTile
-          label={
-            user?.studentProfile
-              ? t('dashboard.groupId')
-              : t('dashboard.position')
-          }
-          value={groupOrPosition}
-        />
-
-        <InfoTile label={t('dashboard.studyYear')} value={year} />
+        {isStudent ? (
+          <>
+            <InfoTile label={t('dashboard.specialty')} value={profile?.specialty} />
+            <InfoTile
+              label={t('dashboard.studyYear')}
+              value={profile?.year ? t('dashboard.studyYearValue', { year: profile.year }) : undefined}
+            />
+            <InfoTile label={t('dashboard.groupCode')} value={profile?.group?.code} />
+          </>
+        ) : (
+          <InfoTile label={t('dashboard.position')} value={user?.teacherProfile?.position} />
+        )}
       </div>
     </div>
   );

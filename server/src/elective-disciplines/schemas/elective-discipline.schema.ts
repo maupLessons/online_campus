@@ -3,6 +3,7 @@ import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import * as paginate from 'mongoose-paginate-v2';
 import { Department } from '../../references/schemas';
 import { User } from '../../users/schemas';
+import type { AcademicTerm } from '../../academic-terms/schemas/academic-term.schema';
 import { ElectiveDisciplineStatus } from './elective.enums';
 
 export type ElectiveDisciplineDocument = ElectiveDiscipline & Document;
@@ -34,8 +35,13 @@ export class ElectiveDiscipline {
   })
   teacher?: User | Types.ObjectId | null;
 
-  @Prop({ type: Number, required: true, min: 1, max: 12 })
-  semester: number;
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'AcademicTerm',
+    required: true,
+    index: true,
+  })
+  term: Types.ObjectId | AcademicTerm;
 
   @Prop({ type: Number, required: true, min: 1, max: 30 })
   credits: number;
@@ -61,6 +67,15 @@ export class ElectiveDiscipline {
   })
   createdBy: User | Types.ObjectId;
 
+  @Prop({ type: Date, default: null })
+  cancelledAt?: Date | null;
+
+  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', default: null })
+  cancelledBy?: User | Types.ObjectId | null;
+
+  @Prop({ type: String, trim: true, minlength: 10, maxlength: 500 })
+  cancelReason?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,7 +84,7 @@ export const ElectiveDisciplineSchema =
   SchemaFactory.createForClass(ElectiveDiscipline);
 
 ElectiveDisciplineSchema.plugin(paginate);
-ElectiveDisciplineSchema.index({ code: 1 }, { unique: true });
-ElectiveDisciplineSchema.index({ status: 1, semester: 1 });
-ElectiveDisciplineSchema.index({ department: 1, semester: 1 });
+ElectiveDisciplineSchema.index({ code: 1, term: 1 }, { unique: true });
+ElectiveDisciplineSchema.index({ status: 1, term: 1 });
+ElectiveDisciplineSchema.index({ department: 1, term: 1 });
 ElectiveDisciplineSchema.index({ teacher: 1 }, { sparse: true });

@@ -480,6 +480,7 @@ function formatNumber(value: number): string {
 function surveyStatusLabel(status: SurveyStatus): string {
   const labels: Record<SurveyStatus, string> = {
     [SurveyStatus.DRAFT]: 'Чернетка',
+    [SurveyStatus.SCHEDULED]: 'Заплановане',
     [SurveyStatus.ACTIVE]: 'Активне',
     [SurveyStatus.CLOSED]: 'Закрите',
   };

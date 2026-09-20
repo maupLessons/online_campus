@@ -121,6 +121,26 @@ describe('validateEnvironment', () => {
     ).toThrow(/MAUP_API_BASE_URL must use HTTPS in production/);
   });
 
+  it('defaults MOODLE_ALLOWED_HOSTS to dist.maup.com.ua', () => {
+    const result = validateEnvironment({
+      NODE_ENV: 'test',
+      MONGODB_URI: 'mongodb://127.0.0.1:27017/campus-test',
+    });
+
+    expect(result.MOODLE_ALLOWED_HOSTS).toBe('dist.maup.com.ua');
+    expect(result.RESOURCE_BLOCKED_HOSTS).toBe('');
+  });
+
+  it('rejects malformed MOODLE_ALLOWED_HOSTS', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'test',
+        MONGODB_URI: 'mongodb://127.0.0.1:27017/campus-test',
+        MOODLE_ALLOWED_HOSTS: 'dist.maup.com.ua, ht tp://x',
+      }),
+    ).toThrow(/invalid hosts/);
+  });
+
   it('restricts the MAUP news feed to the approved host', () => {
     expect(() =>
       validateEnvironment({

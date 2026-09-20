@@ -13,6 +13,9 @@ export class TeacherProfile {
 
   @Prop({ required: true })
   position: string;
+
+  @Prop({ trim: true, maxlength: 64 })
+  externalTeacherId?: string;
 }
 
 export const TeacherProfileSchema =

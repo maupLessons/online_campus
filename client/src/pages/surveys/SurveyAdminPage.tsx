@@ -51,6 +51,7 @@ type SurveyFormState = {
   targetIds: string[];
   startDate: string;
   endDate: string;
+  estimatedMinutes: string;
   questions: BuilderQuestion[];
 };
 
@@ -77,6 +78,7 @@ const initialForm = (): SurveyFormState => ({
   targetIds: [],
   startDate: "",
   endDate: "",
+  estimatedMinutes: "",
   questions: [createQuestion()],
 });
 
@@ -129,6 +131,7 @@ function surveyToFormState(survey: Survey): SurveyFormState {
     targetIds: [...survey.targetIds],
     startDate: toDateTimeLocalValue(survey.startDate),
     endDate: toDateTimeLocalValue(survey.endDate),
+    estimatedMinutes: String(survey.estimatedMinutes ?? ""),
     questions: questions.length > 0 ? questions : [createQuestion()],
   };
 }
@@ -170,6 +173,9 @@ function buildSurveyPayload(form: SurveyFormState): CreateSurveyInput {
       : [],
     startDate: toIsoDateTime(form.startDate),
     endDate: toIsoDateTime(form.endDate),
+    estimatedMinutes: form.estimatedMinutes
+      ? Number(form.estimatedMinutes)
+      : undefined,
     questions,
   };
 }
@@ -225,6 +231,10 @@ function statusBadgeClass(status: SurveyStatus) {
     return "bg-green-100 text-green-700";
   }
 
+  if (status === SurveyStatus.SCHEDULED) {
+    return "bg-blue-100 text-blue-700";
+  }
+
   if (status === SurveyStatus.CLOSED) {
     return "bg-slate-200 text-slate-700";
   }
@@ -238,6 +248,7 @@ function SurveyManagementRow({
   canDelete,
   onPublish,
   onClose,
+  onUnpublish,
   onRemove,
   onEdit,
   isWorking,
@@ -247,18 +258,13 @@ function SurveyManagementRow({
   canDelete: boolean;
   onPublish: (id: string) => void;
   onClose: (id: string) => void;
+  onUnpublish: (id: string) => void;
   onRemove: (id: string) => void;
   onEdit: (survey: Survey) => void;
   isWorking: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language.startsWith("en") ? "en-US" : "uk-UA";
-  const isScheduled =
-    survey.status === SurveyStatus.ACTIVE &&
-    Boolean(survey.startDate) &&
-    Boolean(survey.publishedAt) &&
-    new Date(survey.startDate as string).getTime() >
-      new Date(survey.publishedAt as string).getTime();
 
   const formatDate = (value?: string) =>
     value
@@ -279,10 +285,13 @@ function SurveyManagementRow({
                 survey.status,
               )}`}
             >
-              {isScheduled
-                ? t("surveys.statuses.scheduled")
-                : t(`surveys.statuses.${survey.status}`)}
+              {t(`surveys.statuses.${survey.status}`)}
             </span>
+            {survey.status === SurveyStatus.SCHEDULED && (
+              <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                {t("surveys.startsAt")}: {formatDate(survey.startDate)}
+              </span>
+            )}
             <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
               {t(`surveys.targetTypes.${survey.targetType}`)}
             </span>
@@ -359,6 +368,18 @@ function SurveyManagementRow({
             >
               <XCircle className="h-4 w-4" aria-hidden="true" />
               {t("surveys.admin.close")}
+            </button>
+          )}
+
+          {canManage && survey.status === SurveyStatus.SCHEDULED && (
+            <button
+              type="button"
+              disabled={isWorking}
+              onClick={() => onUnpublish(survey.id)}
+              className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+            >
+              <XCircle className="h-4 w-4" aria-hidden="true" />
+              {t("surveys.admin.unpublish")}
             </button>
           )}
 
@@ -516,6 +537,13 @@ export default function SurveyAdminPage() {
     },
   });
 
+  const unpublishMutation = useMutation({
+    mutationFn: surveysApi.unpublish,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["surveys"] });
+    },
+  });
+
   const removeMutation = useMutation({
     mutationFn: surveysApi.remove,
     onSuccess: async () => {
@@ -525,7 +553,10 @@ export default function SurveyAdminPage() {
   });
 
   const actionError =
-    publishMutation.error || closeMutation.error || removeMutation.error;
+    publishMutation.error ||
+    closeMutation.error ||
+    unpublishMutation.error ||
+    removeMutation.error;
   const actionErrorMessage = actionError
     ? getLocalizedApiErrorMessage(
         actionError,
@@ -538,6 +569,7 @@ export default function SurveyAdminPage() {
     updateMutation.isPending ||
     publishMutation.isPending ||
     closeMutation.isPending ||
+    unpublishMutation.isPending ||
     removeMutation.isPending;
 
   useEffect(() => {
@@ -546,11 +578,18 @@ export default function SurveyAdminPage() {
     const timeoutId = window.setTimeout(() => {
       publishMutation.reset();
       closeMutation.reset();
+      unpublishMutation.reset();
       removeMutation.reset();
     }, AUTO_DISMISS_MESSAGE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [actionError, closeMutation, publishMutation, removeMutation]);
+  }, [
+    actionError,
+    closeMutation,
+    publishMutation,
+    unpublishMutation,
+    removeMutation,
+  ]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(
@@ -725,8 +764,19 @@ export default function SurveyAdminPage() {
     setFormError("");
   };
 
-  const canManage = user?.role === Role.ADMIN || user?.role === Role.DEAN;
+  const canManage =
+    user?.role === Role.ADMIN ||
+    user?.role === Role.DEAN ||
+    user?.role === Role.RECTOR;
   const canDelete = user?.role === Role.ADMIN;
+  const availableTargetTypes =
+    user?.role === Role.RECTOR
+      ? [
+          SurveyTargetType.ALL,
+          SurveyTargetType.TEACHERS,
+          SurveyTargetType.STUDENTS_TEACHERS,
+        ]
+      : Object.values(SurveyTargetType);
 
   return (
     <div className="space-y-6">
@@ -817,7 +867,7 @@ export default function SurveyAdminPage() {
                   }}
                   className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                 >
-                  {Object.values(SurveyTargetType).map((targetType) => (
+                  {availableTargetTypes.map((targetType) => (
                     <option key={targetType} value={targetType}>
                       {t(`surveys.targetTypes.${targetType}`)}
                     </option>
@@ -932,6 +982,23 @@ export default function SurveyAdminPage() {
                 />
               </label>
             </div>
+
+            <label className="space-y-1 text-sm text-slate-600">
+              <span>{t("surveys.admin.fields.estimatedMinutes")}</span>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={form.estimatedMinutes}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    estimatedMinutes: event.target.value,
+                  }))
+                }
+                className="w-full max-w-40 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              />
+            </label>
           </div>
 
           <div className="space-y-3 border-t border-slate-100 pt-5">
@@ -1255,6 +1322,7 @@ export default function SurveyAdminPage() {
                       closeMutation.mutate(surveyId);
                     }
                   }}
+                  onUnpublish={(surveyId) => unpublishMutation.mutate(surveyId)}
                   onEdit={handleEditSurvey}
                   onRemove={(surveyId) => {
                     if (window.confirm(t("surveys.admin.deleteConfirm"))) {

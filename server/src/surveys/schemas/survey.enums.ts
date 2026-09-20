@@ -1,5 +1,6 @@
 export enum SurveyStatus {
   DRAFT = 'draft',
+  SCHEDULED = 'scheduled',
   ACTIVE = 'active',
   CLOSED = 'closed',
 }

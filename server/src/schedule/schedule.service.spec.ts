@@ -1,465 +1,427 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { SpreadsheetExportFormat } from '../common/export';
+import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
+import { DomainAuditEvent } from '../audit-log/audit-context';
+import {
+  SpreadsheetExportFormat,
+  SpreadsheetExportLocale,
+} from '../common/export';
 import { AuthenticatedUser } from '../common/types/authenticated-request';
 import { Role } from '../common/types/roles.enum';
-import { NotificationType } from '../notifications/dto/create-notification.dto';
-import { ScheduleExportService } from './schedule-export.service';
-import { ScheduleMapper } from './schedule.mapper';
-import { ScheduleMutationService } from './schedule-mutation.service';
-import { ScheduleNotificationsService } from './schedule-notifications.service';
-import { ScheduleReaderService } from './schedule-reader.service';
 import { ScheduleService } from './schedule.service';
-import { ScheduleTemplatesService } from './schedule-templates.service';
-import { ScheduleValidationService } from './schedule-validation.service';
-import { ScheduleEntryStatus, ScheduleEntryType } from './schedule.enums';
-import { DomainAuditEvent } from '../audit-log/audit-context';
 
-type QueryChain<T> = {
-  populate: jest.Mock<QueryChain<T>, [unknown?]>;
-  select: jest.Mock<QueryChain<T>, [unknown?]>;
-  sort: jest.Mock<QueryChain<T>, [unknown?]>;
-  lean: jest.Mock<QueryChain<T>, []>;
-  exec: jest.Mock<Promise<T>, []>;
-};
+const termId = new Types.ObjectId();
+const term = { _id: termId, maupSemester: 1, maupAcademicYear: 2026 };
+const groupId = new Types.ObjectId();
 
-type ScheduleEntryModelMock = {
-  find: jest.Mock;
-  findById: jest.Mock;
-  create: jest.Mock;
-  countDocuments: jest.Mock;
-  deleteOne: jest.Mock;
-};
-
-type ScheduleTemplateModelMock = {
-  find: jest.Mock;
-  findById: jest.Mock;
-  create: jest.Mock;
-  updateOne: jest.Mock;
-};
-
-type CourseAssignmentModelMock = {
-  find: jest.Mock;
-  findById: jest.Mock;
-};
-
-type ClassroomModelMock = {
-  exists: jest.Mock;
-};
-
-type NotificationsServiceMock = {
-  createMany: jest.Mock;
-};
-
-type AcademicAccessServiceMock = {
-  findVisibleCourseAssignmentIds: jest.Mock;
-  canAccessCourseAssignment: jest.Mock;
-  findCourseAssignmentRecipientIds: jest.Mock;
-};
-
-function query<T>(result: T): QueryChain<T> {
-  const chain = {} as QueryChain<T>;
-  chain.populate = jest.fn<QueryChain<T>, [unknown?]>().mockReturnValue(chain);
-  chain.select = jest.fn<QueryChain<T>, [unknown?]>().mockReturnValue(chain);
-  chain.sort = jest.fn<QueryChain<T>, [unknown?]>().mockReturnValue(chain);
-  chain.lean = jest.fn<QueryChain<T>, []>().mockReturnValue(chain);
-  chain.exec = jest.fn<Promise<T>, []>().mockResolvedValue(result);
-  return chain;
+function makeService(opts: {
+  enabled?: boolean;
+  group?: unknown;
+  groups?: unknown[];
+  student?: unknown;
+  students?: unknown[];
+  getOrRefreshImpl?: jest.Mock;
+}) {
+  const reader = {
+    findMy: jest
+      .fn()
+      .mockResolvedValue({ entries: [], meta: { stale: false } }),
+    findToday: jest.fn().mockResolvedValue({
+      date: '2026-09-07',
+      lessons: [],
+      session: [],
+      meta: { stale: false },
+    }),
+    findForGroup: jest.fn().mockResolvedValue({
+      groupCode: 'КН-11',
+      isExamSession: false,
+      periodFrom: null,
+      periodTo: null,
+      fetchedAt: null,
+      stale: false,
+      entries: [],
+    }),
+    findUpcomingForAssignment: jest.fn().mockResolvedValue([]),
+  };
+  const exporter = {
+    export: jest.fn().mockResolvedValue({
+      buffer: Buffer.from(''),
+      filename: 'schedule.csv',
+      contentType: 'text/csv; charset=utf-8',
+    }),
+  };
+  const snapshots = {
+    isEnabled: jest.fn().mockReturnValue(opts.enabled ?? true),
+    getOrRefresh:
+      opts.getOrRefreshImpl ??
+      jest
+        .fn()
+        .mockResolvedValue({ snapshot: {}, stale: false, refreshed: true }),
+  };
+  const terms = { requireCurrent: jest.fn().mockResolvedValue(term) };
+  const chain = <T>(value: T) => ({
+    select: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockReturnThis(),
+    exec: jest.fn().mockResolvedValue(value),
+  });
+  // Final wave I2: refreshOne iterates candidates via find(), not findOne().
+  const userModel = {
+    find: jest
+      .fn()
+      .mockReturnValue(
+        chain(opts.students ?? (opts.student ? [opts.student] : [])),
+      ),
+  };
+  const groupModel = {
+    findOne: jest
+      .fn()
+      .mockReturnValue(
+        chain('group' in opts ? opts.group : { _id: groupId, code: 'КН-11' }),
+      ),
+    find: jest.fn().mockReturnValue(chain(opts.groups ?? [])),
+  };
+  const service = new ScheduleService(
+    reader as never,
+    exporter as never,
+    snapshots as never,
+    terms as never,
+    userModel as never,
+    groupModel as never,
+  );
+  return { service, reader, exporter, snapshots, terms, userModel, groupModel };
 }
 
-function objectId(hex: string): Types.ObjectId {
-  return new Types.ObjectId(hex);
-}
+const admin: AuthenticatedUser = {
+  sub: new Types.ObjectId().toHexString(),
+  login: 'a',
+  role: Role.ADMIN,
+};
+const teacher: AuthenticatedUser = {
+  sub: new Types.ObjectId().toHexString(),
+  login: 't',
+  role: Role.TEACHER,
+};
 
-describe('ScheduleService', () => {
-  const ids = {
-    schedule: '6622b2a00f3a22d5b625e601',
-    scheduleConflict: '6622b2a00f3a22d5b625e602',
-    assignment: '6622b2a00f3a22d5b625e401',
-    course: '6622b2a00f3a22d5b625e301',
-    group: '6622b2a00f3a22d5b625e201',
-    classroom: '6622b2a00f3a22d5b625e501',
-    teacher: '6622b2a00f3a22d5b625e111',
-    student: '6622b2a00f3a22d5b625e101',
-  };
+describe('ScheduleService — read delegation', () => {
+  it('findMy delegates to reader.findMy with isExamSession=false', async () => {
+    const { service, reader } = makeService({});
+    const query = { from: '2026-09-01' };
+    await service.findMy(admin, query);
+    expect(reader.findMy).toHaveBeenCalledWith(admin, query, false);
+  });
 
-  const assignment = {
-    _id: objectId(ids.assignment),
-    course: {
-      _id: objectId(ids.course),
-      name: 'Основи кібербезпеки',
-      code: '=SEC101',
-    },
-    group: {
-      _id: objectId(ids.group),
-      code: 'КН-11',
-    },
-    teacher: {
-      _id: objectId(ids.teacher),
-      firstName: 'Ірина',
-      lastName: 'Коваленко',
-    },
-  };
+  it('findSession delegates to reader.findMy with isExamSession=true', async () => {
+    const { service, reader } = makeService({});
+    const query = {};
+    await service.findSession(admin, query);
+    expect(reader.findMy).toHaveBeenCalledWith(admin, query, true);
+  });
 
-  const scheduleEntry = {
-    _id: objectId(ids.schedule),
-    courseAssignment: assignment,
-    classroom: {
-      _id: objectId(ids.classroom),
-      building: 'Корпус 1',
-      roomNumber: '101',
-    },
-    date: new Date('2026-09-01T00:00:00.000Z'),
-    startTime: '08:30',
-    endTime: '10:05',
-    type: ScheduleEntryType.LECTURE,
-    status: ScheduleEntryStatus.SCHEDULED,
-  };
+  it('findToday delegates to reader.findToday', async () => {
+    const { service, reader } = makeService({});
+    await service.findToday(admin);
+    expect(reader.findToday).toHaveBeenCalledWith(admin);
+  });
 
-  let scheduleEntryModel: ScheduleEntryModelMock;
-  let scheduleTemplateModel: ScheduleTemplateModelMock;
-  let courseAssignmentModel: CourseAssignmentModelMock;
-  let classroomModel: ClassroomModelMock;
-  let notificationsService: NotificationsServiceMock;
-  let academicAccessService: AcademicAccessServiceMock;
-  let mapper: ScheduleMapper;
-  let service: ScheduleService;
+  it('findForGroup delegates to reader.findForGroup', async () => {
+    const { service, reader } = makeService({});
+    await service.findForGroup(admin, 'КН-11', {}, true);
+    expect(reader.findForGroup).toHaveBeenCalledWith(admin, 'КН-11', {}, true);
+  });
 
-  beforeEach(() => {
-    scheduleEntryModel = {
-      find: jest.fn(),
-      findById: jest.fn(),
-      create: jest.fn(),
-      countDocuments: jest.fn(),
-      deleteOne: jest.fn(),
-    };
-    scheduleTemplateModel = {
-      find: jest.fn(),
-      findById: jest.fn(),
-      create: jest.fn(),
-      updateOne: jest.fn(),
-    };
-    courseAssignmentModel = {
-      find: jest.fn(),
-      findById: jest.fn(),
-    };
-    classroomModel = {
-      exists: jest.fn(),
-    };
-    notificationsService = {
-      createMany: jest.fn().mockResolvedValue([]),
-    };
-    academicAccessService = {
-      findVisibleCourseAssignmentIds: jest.fn().mockResolvedValue([]),
-      canAccessCourseAssignment: jest.fn().mockResolvedValue(false),
-      findCourseAssignmentRecipientIds: jest.fn().mockResolvedValue([]),
-    };
-    mapper = new ScheduleMapper();
-    const scheduleReader = new ScheduleReaderService(
-      scheduleEntryModel as never,
-      courseAssignmentModel as never,
-      academicAccessService as never,
-      mapper,
-    );
-    const scheduleNotifications = new ScheduleNotificationsService(
-      notificationsService as never,
-      academicAccessService as never,
-    );
-    const scheduleTemplates = new ScheduleTemplatesService(
-      scheduleTemplateModel as never,
-      courseAssignmentModel as never,
-      classroomModel as never,
-      mapper,
-    );
-    const scheduleValidation = new ScheduleValidationService(
-      scheduleEntryModel as never,
-      courseAssignmentModel as never,
-      classroomModel as never,
-      mapper,
-    );
-    const scheduleMutation = new ScheduleMutationService(
-      scheduleEntryModel as never,
-      mapper,
-      scheduleReader,
-      scheduleNotifications,
-      scheduleTemplates,
-      scheduleValidation,
-    );
-
-    service = new ScheduleService(
-      scheduleReader,
-      scheduleMutation,
-      new ScheduleExportService(),
-      scheduleTemplates,
-      {
-        findMySchedule: jest.fn().mockResolvedValue(null),
-      } as never,
+  it('findUpcomingForAssignment delegates to reader with default limit 5', async () => {
+    const { service, reader } = makeService({});
+    await service.findUpcomingForAssignment('assignment-1');
+    expect(reader.findUpcomingForAssignment).toHaveBeenCalledWith(
+      'assignment-1',
+      5,
     );
   });
 
-  it('rejects overlapping teacher, classroom, or group conflicts', async () => {
-    courseAssignmentModel.findById.mockReturnValue(query(assignment));
-    classroomModel.exists.mockReturnValue(query({ _id: ids.classroom }));
-    scheduleEntryModel.find.mockReturnValue(
-      query([
-        {
-          ...scheduleEntry,
-          _id: objectId(ids.scheduleConflict),
-        },
-      ]),
+  it('findUpcomingForAssignment forwards a custom limit', async () => {
+    const { service, reader } = makeService({});
+    await service.findUpcomingForAssignment('assignment-1', 2);
+    expect(reader.findUpcomingForAssignment).toHaveBeenCalledWith(
+      'assignment-1',
+      2,
     );
+  });
+});
 
+describe('ScheduleService.export', () => {
+  it('reads the personal schedule via the range fields and forwards entries to the exporter', async () => {
+    const { service, reader, exporter } = makeService({});
+    reader.findMy.mockResolvedValue({
+      entries: [{ id: 'a' }],
+      meta: { stale: false },
+    });
+
+    await service.export(admin, {
+      from: '2026-09-01',
+      to: '2026-09-07',
+      format: SpreadsheetExportFormat.XLSX,
+      locale: SpreadsheetExportLocale.EN,
+      session: 'true',
+    });
+
+    expect(reader.findMy).toHaveBeenCalledWith(
+      admin,
+      { from: '2026-09-01', to: '2026-09-07' },
+      true,
+    );
+    expect(exporter.export).toHaveBeenCalledWith(
+      [{ id: 'a' }],
+      SpreadsheetExportFormat.XLSX,
+      SpreadsheetExportLocale.EN,
+      true,
+    );
+  });
+
+  it('treats a missing session flag as the lesson schedule', async () => {
+    const { service, reader, exporter } = makeService({});
+    await service.export(admin, {});
+    expect(reader.findMy).toHaveBeenCalledWith(admin, {}, false);
+    expect(exporter.export).toHaveBeenCalledWith(
+      [],
+      undefined,
+      undefined,
+      false,
+    );
+  });
+});
+
+describe('ScheduleService.refreshGroup', () => {
+  it('forbids non-admin roles', async () => {
+    const { service } = makeService({});
     await expect(
-      service.create({
-        courseAssignmentId: ids.assignment,
-        classroomId: ids.classroom,
-        date: '2026-09-01',
-        startTime: '09:00',
-        endTime: '10:30',
-        type: ScheduleEntryType.SEMINAR,
-      }),
-    ).rejects.toThrow(ConflictException);
-
-    expect(scheduleEntryModel.create).not.toHaveBeenCalled();
+      service.refreshGroup(teacher, 'КН-11', undefined),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('creates targeted notifications after schedule creation', async () => {
+  it('404s for an unknown group', async () => {
+    const { service } = makeService({ group: null });
+    await expect(
+      service.refreshGroup(admin, 'НЕМА-1', undefined),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('404s when the group has no active student to source the API lookup', async () => {
+    const { service } = makeService({ student: null });
+    await expect(
+      service.refreshGroup(admin, 'КН-11', undefined),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('refreshes both snapshots when session is not specified and records the audit entry', async () => {
     const record = jest
       .fn<Promise<void>, [DomainAuditEvent]>()
       .mockResolvedValue(undefined);
-    const audit = { record };
-    courseAssignmentModel.findById.mockReturnValue(query(assignment));
-    academicAccessService.findCourseAssignmentRecipientIds.mockResolvedValue([
-      ids.teacher,
-      ids.student,
-    ]);
-    classroomModel.exists.mockReturnValue(query({ _id: ids.classroom }));
-    scheduleEntryModel.find.mockReturnValue(query([]));
-    scheduleEntryModel.findById.mockReturnValue(
-      query({ ...scheduleEntry, onlineUrl: 'https://dist.maup.com.ua/' }),
-    );
-    scheduleEntryModel.create.mockResolvedValue({
-      _id: objectId(ids.schedule),
+    const { service, snapshots, reader } = makeService({
+      student: {
+        studentProfiles: [
+          {
+            group: groupId,
+            status: 'active',
+            externalStudentId: 'ext-1',
+            recordBookNumber: 'RB-1',
+          },
+        ],
+      },
     });
 
-    await service.create(
-      {
-        courseAssignmentId: ids.assignment,
-        classroomId: ids.classroom,
-        date: '2026-09-01',
-        startTime: '08:30',
-        endTime: '10:05',
-        type: ScheduleEntryType.LECTURE,
-        onlineUrl: '  https://dist.maup.com.ua/  ',
-      },
-      audit,
-    );
+    await service.refreshGroup(admin, 'КН-11', undefined, { record });
 
-    expect(notificationsService.createMany).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          userId: ids.teacher,
-          type: NotificationType.SCHEDULE_CHANGE,
-        }),
-        expect.objectContaining({
-          userId: ids.student,
-          type: NotificationType.SCHEDULE_CHANGE,
-        }),
-      ]),
+    expect(snapshots.getOrRefresh).toHaveBeenCalledTimes(2);
+    expect(snapshots.getOrRefresh).toHaveBeenNthCalledWith(
+      1,
+      {
+        groupCode: 'КН-11',
+        termId: termId.toHexString(),
+        isExamSession: false,
+      },
+      term,
+      { studentId: 'ext-1', recordBookNumber: 'RB-1', actorUserId: admin.sub },
+      { force: true },
+    );
+    expect(snapshots.getOrRefresh).toHaveBeenNthCalledWith(
+      2,
+      { groupCode: 'КН-11', termId: termId.toHexString(), isExamSession: true },
+      term,
+      { studentId: 'ext-1', recordBookNumber: 'RB-1', actorUserId: admin.sub },
+      { force: true },
     );
     expect(record).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: 'schedule.create',
-        targetEntity: 'schedule',
-        targetId: ids.schedule,
+        action: AUDIT_ACTIONS.SCHEDULE_SNAPSHOT_REFRESH,
+        targetEntity: 'schedule-snapshot',
+        targetId: 'КН-11',
       }),
     );
     expect(record.mock.calls[0][0].details).toMatchObject({
-      after: {
-        courseAssignmentId: ids.assignment,
-        date: '2026-09-01',
-        startTime: '08:30',
-        endTime: '10:05',
+      status: 'updated',
+    });
+    expect(reader.findForGroup).toHaveBeenCalledWith(admin, 'КН-11', {}, false);
+  });
+
+  it('refreshes only the requested session when session is explicitly set', async () => {
+    const { service, snapshots } = makeService({
+      student: {
+        studentProfiles: [
+          { group: groupId, status: 'active', externalStudentId: 'ext-1' },
+        ],
       },
     });
-    expect(scheduleEntryModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        onlineUrl: 'https://dist.maup.com.ua/',
-      }),
+
+    await service.refreshGroup(admin, 'КН-11', true);
+
+    expect(snapshots.getOrRefresh).toHaveBeenCalledTimes(1);
+    expect(snapshots.getOrRefresh).toHaveBeenCalledWith(
+      expect.objectContaining({ isExamSession: true }),
+      term,
+      expect.anything(),
+      { force: true },
     );
   });
 
-  it('returns only course assignments visible to an elective student', async () => {
-    academicAccessService.findVisibleCourseAssignmentIds.mockResolvedValue([
-      objectId(ids.assignment),
-    ]);
-    scheduleEntryModel.find.mockReturnValue(query([scheduleEntry]));
+  it('skips the API call when the integration is disabled but still returns the cached view', async () => {
+    const { service, snapshots, reader } = makeService({ enabled: false });
 
-    const result = await service.findForUser(
-      {
-        sub: ids.student,
-        login: 'student1',
-        role: Role.STUDENT,
-      },
-      {},
-    );
+    const result = await service.refreshGroup(admin, 'КН-11', undefined);
 
-    expect(result).toHaveLength(1);
-    expect(scheduleEntryModel.find).toHaveBeenCalledWith({
-      courseAssignment: { $in: [objectId(ids.assignment)] },
+    expect(snapshots.getOrRefresh).not.toHaveBeenCalled();
+    expect(reader.findForGroup).toHaveBeenCalledWith(admin, 'КН-11', {}, false);
+    expect(result).toBeDefined();
+  });
+
+  // Final wave I2: findOne() returned only ONE candidate — if they had no
+  // externalStudentId, the group was wrongly marked no_source_student, even though another student in the group had an id.
+  it('proceeds with the second candidate when the first active student has no externalStudentId', async () => {
+    const { service, snapshots } = makeService({
+      students: [
+        {
+          studentProfiles: [
+            { group: groupId, status: 'active', externalStudentId: '' },
+          ],
+        },
+        {
+          studentProfiles: [
+            {
+              group: groupId,
+              status: 'active',
+              externalStudentId: 'ext-2',
+              recordBookNumber: 'RB-2',
+            },
+          ],
+        },
+      ],
     });
-  });
 
-  it('does not expose schedule entries when a student has no visible assignments', async () => {
-    academicAccessService.findVisibleCourseAssignmentIds.mockResolvedValue([]);
+    await service.refreshGroup(admin, 'КН-11', true);
 
-    await expect(
-      service.findForUser(
-        {
-          sub: ids.student,
-          login: 'student1',
-          role: Role.STUDENT,
-        },
-        {},
-      ),
-    ).resolves.toEqual([]);
-
-    expect(scheduleEntryModel.find).not.toHaveBeenCalled();
-  });
-
-  it('rejects user schedule filters outside visible academic scope', async () => {
-    academicAccessService.findVisibleCourseAssignmentIds.mockResolvedValue([
-      objectId(ids.assignment),
-    ]);
-    courseAssignmentModel.find.mockReturnValue(
-      query([{ _id: objectId(ids.scheduleConflict) }]),
+    expect(snapshots.getOrRefresh).toHaveBeenCalledWith(
+      expect.objectContaining({ isExamSession: true }),
+      term,
+      expect.objectContaining({ studentId: 'ext-2' }),
+      { force: true },
     );
-
-    await expect(
-      service.findForUser(
-        {
-          sub: ids.student,
-          login: 'student1',
-          role: Role.STUDENT,
-        },
-        { groupId: ids.group },
-      ),
-    ).rejects.toThrow(ForbiddenException);
-
-    expect(scheduleEntryModel.find).not.toHaveBeenCalled();
   });
 
-  it('cancels schedule entries with reason, notifications and audit trail', async () => {
+  it('records a failed status when the upstream refresh stays stale', async () => {
     const record = jest
       .fn<Promise<void>, [DomainAuditEvent]>()
       .mockResolvedValue(undefined);
-    const audit = { record };
-    const mutableEntry = {
-      status: ScheduleEntryStatus.SCHEDULED,
-      changeHistory: [],
-      set: jest.fn(function set(values: Record<string, unknown>) {
-        Object.assign(this, values);
-      }),
-      save: jest.fn().mockResolvedValue(undefined),
-    };
-    const cancelledEntry = {
-      ...scheduleEntry,
-      status: ScheduleEntryStatus.CANCELLED,
-      changeReason: 'Викладач захворів',
-      cancelledAt: new Date('2026-09-01T07:00:00.000Z'),
-    };
-
-    scheduleEntryModel.findById
-      .mockReturnValueOnce(query(mutableEntry))
-      .mockReturnValueOnce(query(scheduleEntry))
-      .mockReturnValueOnce(query(cancelledEntry));
-    academicAccessService.findCourseAssignmentRecipientIds.mockResolvedValue([
-      ids.teacher,
-      ids.student,
-    ]);
-
-    const result = await service.cancel(
-      ids.schedule,
-      { reason: 'Викладач захворів' },
-      audit,
-      {
-        sub: ids.teacher,
-        login: 'teacher1',
-        role: Role.ADMIN,
+    const { service } = makeService({
+      student: {
+        studentProfiles: [
+          { group: groupId, status: 'active', externalStudentId: 'ext-1' },
+        ],
       },
-    );
-
-    expect(result.status).toBe(ScheduleEntryStatus.CANCELLED);
-    expect(mutableEntry.set).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: ScheduleEntryStatus.CANCELLED,
-        changeReason: 'Викладач захворів',
-      }),
-    );
-    expect(mutableEntry.changeHistory).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          action: 'cancelled',
-          reason: 'Викладач захворів',
-          actorLogin: 'teacher1',
-        }),
-      ]),
-    );
-    expect(notificationsService.createMany).toHaveBeenCalledWith(
-      expect.arrayContaining([
-        expect.objectContaining({
-          userId: ids.student,
-          important: true,
-          entityType: 'schedule',
-          actionUrl: '/schedule',
-        }),
-      ]),
-    );
-    expect(record).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'schedule.cancel',
-        targetId: ids.schedule,
-      }),
-    );
-  });
-
-  it('exports scoped schedule CSV and neutralizes spreadsheet formulas', async () => {
-    const user: AuthenticatedUser = {
-      sub: ids.teacher,
-      login: 'teacher',
-      role: Role.ADMIN,
-    };
-
-    scheduleEntryModel.find.mockReturnValue(query([scheduleEntry]));
-
-    const exportArtifact = await service.exportCsv(user, {});
-    const csv = exportArtifact.buffer.toString('utf8');
-
-    expect(exportArtifact.filename).toBe('schedule.csv');
-    expect(exportArtifact.contentType).toBe('text/csv; charset=utf-8');
-    expect(csv).toContain('Дата;Початок;Завершення');
-    expect(csv).toContain('Онлайн-пара');
-    expect(csv).toContain("'=SEC101");
-    expect(csv).toContain('Основи кібербезпеки');
-  });
-
-  it('exports scoped schedule XLSX through the shared spreadsheet pipeline', async () => {
-    const user: AuthenticatedUser = {
-      sub: ids.teacher,
-      login: 'teacher',
-      role: Role.ADMIN,
-    };
-
-    scheduleEntryModel.find.mockReturnValue(query([scheduleEntry]));
-
-    const exportArtifact = await service.export(user, {
-      format: SpreadsheetExportFormat.XLSX,
+      getOrRefreshImpl: jest
+        .fn()
+        .mockResolvedValue({ snapshot: null, stale: true, refreshed: false }),
     });
 
-    expect(exportArtifact.filename).toBe('schedule.xlsx');
-    expect(exportArtifact.contentType).toContain(
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    await service.refreshGroup(admin, 'КН-11', undefined, { record });
+
+    expect(record.mock.calls[0][0].details).toMatchObject({
+      status: 'failed',
+      reason: 'upstream_error',
+    });
+  });
+});
+
+describe('ScheduleService.refreshAll', () => {
+  it('forbids non-admin roles', async () => {
+    const { service } = makeService({});
+    await expect(service.refreshAll(teacher)).rejects.toBeInstanceOf(
+      ForbiddenException,
     );
-    expect(exportArtifact.buffer.length).toBeGreaterThan(0);
+  });
+
+  it('walks every group of the current term and records an aggregate audit entry', async () => {
+    const record = jest
+      .fn<Promise<void>, [DomainAuditEvent]>()
+      .mockResolvedValue(undefined);
+    const groupA = new Types.ObjectId();
+    const groupB = new Types.ObjectId();
+    const { service, userModel } = makeService({
+      groups: [
+        { _id: groupA, code: 'КН-11' },
+        { _id: groupB, code: 'КН-12' },
+      ],
+    });
+    userModel.find
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([
+          {
+            studentProfiles: [
+              { group: groupA, status: 'active', externalStudentId: 'ext-a' },
+            ],
+          },
+        ]),
+      })
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([]),
+      });
+
+    const result = await service.refreshAll(admin, { record });
+
+    expect(result.groups).toEqual([
+      { groupCode: 'КН-11', status: 'updated' },
+      { groupCode: 'КН-12', status: 'skipped', reason: 'no_source_student' },
+    ]);
+    expect(record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AUDIT_ACTIONS.SCHEDULE_SNAPSHOT_REFRESH,
+        targetEntity: 'schedule-snapshot',
+        targetId: termId.toHexString(),
+        details: { updated: 1, skipped: 1, failed: 0 },
+      }),
+    );
+  });
+
+  it('does not stop the walk when one group fails to refresh', async () => {
+    const groupA = new Types.ObjectId();
+    const { service } = makeService({
+      groups: [{ _id: groupA, code: 'КН-11' }],
+      student: {
+        studentProfiles: [
+          { group: groupA, status: 'active', externalStudentId: 'ext-a' },
+        ],
+      },
+      getOrRefreshImpl: jest
+        .fn()
+        .mockResolvedValue({ snapshot: null, stale: true, refreshed: false }),
+    });
+
+    const result = await service.refreshAll(admin);
+
+    expect(result.groups).toEqual([
+      { groupCode: 'КН-11', status: 'failed', reason: 'upstream_error' },
+    ]);
   });
 });

@@ -19,6 +19,7 @@ import { ApiConsumes, ApiBody, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { FileErrorCode, fileErrorResponse } from './file-errors';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles, RolesGuard } from '../auth/roles.guard';
 import { Role } from '../common/types/roles.enum';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { createAuditContext } from '../audit-log/audit-context';
@@ -40,7 +41,7 @@ interface AuthenticatedFileRequest extends RequestWithId {
 @ApiTags('Files')
 @ApiBearerAuth()
 @Controller('files')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class FilesController {
   constructor(
     private readonly filesService: FilesService,
@@ -48,6 +49,7 @@ export class FilesController {
   ) {}
 
   @Post('upload')
+  @Roles(Role.ADMIN)
   @AuditEvent(AUDIT_ACTIONS.FILE_UPLOAD, 'file')
   @UseInterceptors(
     FileInterceptor('file', {

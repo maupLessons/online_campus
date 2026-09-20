@@ -3,6 +3,7 @@ import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import * as paginate from 'mongoose-paginate-v2';
 import { Group } from '../../references/schemas';
 import { User } from '../../users/schemas';
+import type { AcademicTerm } from '../../academic-terms/schemas/academic-term.schema';
 import { ElectiveSelectionPeriodStatus } from './elective.enums';
 
 export type ElectiveSelectionPeriodDocument = ElectiveSelectionPeriod &
@@ -15,11 +16,13 @@ export class ElectiveSelectionPeriod {
   @Prop({ required: true, trim: true, maxlength: 160 })
   title: string;
 
-  @Prop({ required: true, trim: true, maxlength: 20 })
-  academicYear: string;
-
-  @Prop({ type: Number, required: true, min: 1, max: 12 })
-  semester: number;
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'AcademicTerm',
+    required: true,
+    index: true,
+  })
+  term: Types.ObjectId | AcademicTerm;
 
   @Prop({ type: Date, required: true })
   startsAt: Date;
@@ -69,6 +72,9 @@ export class ElectiveSelectionPeriod {
   finalizedBy?: User | Types.ObjectId | null;
 
   @Prop({ type: Date, default: null })
+  reminderSentAt?: Date | null;
+
+  @Prop({ type: Date, default: null })
   finalizationStartedAt?: Date | null;
 
   @Prop({
@@ -91,6 +97,6 @@ export const ElectiveSelectionPeriodSchema = SchemaFactory.createForClass(
 
 ElectiveSelectionPeriodSchema.plugin(paginate);
 ElectiveSelectionPeriodSchema.index({ status: 1, startsAt: 1, endsAt: 1 });
-ElectiveSelectionPeriodSchema.index({ academicYear: 1, semester: 1 });
+ElectiveSelectionPeriodSchema.index({ term: 1, status: 1 });
 ElectiveSelectionPeriodSchema.index({ targetGroups: 1 });
 ElectiveSelectionPeriodSchema.index({ status: 1, finalizationStartedAt: 1 });

@@ -70,6 +70,12 @@ export function validateEnvironment(input: Environment): Environment {
   env.MAUP_API_ENABLED = String(
     readBoolean(env, 'MAUP_API_ENABLED', false, errors),
   );
+  env.SURVEY_REMINDER_HOURS = String(
+    readInteger(env, 'SURVEY_REMINDER_HOURS', 24, 1, 168, errors),
+  );
+  env.ELECTIVE_REMINDER_DAYS = String(
+    readInteger(env, 'ELECTIVE_REMINDER_DAYS', 3, 1, 30, errors),
+  );
   env.MAUP_API_REQUEST_METHOD = readEnum(
     env,
     'MAUP_API_REQUEST_METHOD',
@@ -152,6 +158,7 @@ export function validateEnvironment(input: Environment): Environment {
   validateMongoConfiguration(env, isProduction, isTest, errors);
   validateEmailDelivery(env, isProductionDeployment, errors);
   validateMaupStudentApi(env, isProduction, errors);
+  validateCourseLinks(env, errors);
   validatePositiveTuning(env, errors);
 
   if (errors.length > 0) {
@@ -262,6 +269,25 @@ function validateMaupStudentApi(
   if (/\r|\n/.test(`${username}${password}`)) {
     errors.push('MAUP API credentials must not contain line breaks');
   }
+}
+
+function validateCourseLinks(env: Environment, errors: string[]): void {
+  const moodleHosts =
+    readOptionalString(env, 'MOODLE_ALLOWED_HOSTS') ?? 'dist.maup.com.ua';
+  const blockedHosts = readOptionalString(env, 'RESOURCE_BLOCKED_HOSTS') ?? '';
+  const invalid = [...moodleHosts.split(','), ...blockedHosts.split(',')]
+    .map((host) => host.trim())
+    .filter((host) => host !== '' && !/^[a-z0-9.-]+$/i.test(host));
+  if (invalid.length > 0) {
+    errors.push(
+      `MOODLE_ALLOWED_HOSTS/RESOURCE_BLOCKED_HOSTS contain invalid hosts: ${invalid.join(', ')}`,
+    );
+  }
+  if (moodleHosts.split(',').every((host) => host.trim() === '')) {
+    errors.push('MOODLE_ALLOWED_HOSTS must contain at least one host');
+  }
+  env.MOODLE_ALLOWED_HOSTS = moodleHosts;
+  env.RESOURCE_BLOCKED_HOSTS = blockedHosts;
 }
 
 function validateEmailDelivery(
@@ -400,6 +426,10 @@ function validatePositiveTuning(env: Environment, errors: string[]): void {
     ['MAUP_NEWS_FEED_TIMEOUT_MS', 5_000, 500, 60_000],
     ['MAUP_NEWS_FEED_MAX_ITEMS', 12, 1, 20],
     ['MAUP_NEWS_FEED_MAX_RESPONSE_BYTES', 1_000_000, 1_024, 5_000_000],
+    ['SCHEDULE_CACHE_TTL_MS', 900_000, 0, 86_400_000],
+    ['SCHEDULE_DIFF_MAX_AGE_MS', 604_800_000, 60_000, 2_592_000_000],
+    ['SCHEDULE_DIFF_BULK_THRESHOLD', 20, 1, 1_000],
+    ['STUDENT_PROFILE_SYNC_TTL_HOURS', 24, 1, 720],
   ];
 
   for (const [key, fallback, min, max] of definitions) {

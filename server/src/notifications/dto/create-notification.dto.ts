@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -12,13 +13,21 @@ import {
 
 export enum NotificationType {
   SCHEDULE_CHANGE = 'schedule_change',
-  NEW_ASSIGNMENT = 'new_assignment',
-  ASSIGNMENT_SUBMITTED = 'assignment_submitted',
-  ASSIGNMENT_RETURNED = 'assignment_returned',
+  ELECTIVE = 'elective',
   NEW_SURVEY = 'new_survey',
-  GRADE = 'grade',
   ANNOUNCEMENT = 'announcement',
   SYSTEM = 'system',
+}
+
+export const ADMIN_CREATABLE_NOTIFICATION_TYPES: ReadonlySet<NotificationType> =
+  new Set([NotificationType.ANNOUNCEMENT, NotificationType.SYSTEM]);
+
+export function assertAdminCreatableType(type: NotificationType): void {
+  if (!ADMIN_CREATABLE_NOTIFICATION_TYPES.has(type)) {
+    throw new BadRequestException(
+      'Адміністратор може створювати лише оголошення або системні сповіщення',
+    );
+  }
 }
 
 export const NotificationTargetTypes = [
@@ -74,28 +83,10 @@ export class CreateNotificationDto {
   actionUrl?: string;
 
   @ApiPropertyOptional({
-    enum: [
-      'survey',
-      'elective',
-      'course',
-      'assignment',
-      'submission',
-      'grade',
-      'schedule',
-      'system',
-    ],
+    enum: ['survey', 'elective', 'course', 'schedule', 'system'],
   })
   @IsOptional()
-  @IsIn([
-    'survey',
-    'elective',
-    'course',
-    'assignment',
-    'submission',
-    'grade',
-    'schedule',
-    'system',
-  ])
+  @IsIn(['survey', 'elective', 'course', 'schedule', 'system'])
   entityType?: string;
 
   @ApiPropertyOptional()

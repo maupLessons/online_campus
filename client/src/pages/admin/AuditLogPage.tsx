@@ -38,6 +38,7 @@ type AuditLogFilters = {
 
 type AuditLogDomain =
   | "identity"
+  | "academic"
   | "schedule"
   | "learning"
   | "surveys"
@@ -50,6 +51,7 @@ type AuditLogDomain =
 
 const AUDIT_DOMAINS: AuditLogDomain[] = [
   "identity",
+  "academic",
   "schedule",
   "learning",
   "surveys",

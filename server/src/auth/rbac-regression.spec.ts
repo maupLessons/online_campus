@@ -49,25 +49,14 @@ describe('critical RBAC regression policy', () => {
     },
   );
 
-  const scheduleMutations = [
-    'createTemplate',
-    'updateTemplate',
-    'deleteTemplate',
-    'applyTemplate',
-    'bulkCreate',
-    'bulkCancel',
-    'create',
-    'update',
-    'cancel',
-    'reschedule',
-    'substitute',
-    'delete',
-  ].map((methodName) =>
+  // The schedule editor was removed (spec 02): the remaining admin mutations are only
+  // force-refreshing snapshots from the MAUP API (refreshGroup/refreshAll), not CRUD on records.
+  const scheduleMutations = ['refreshGroup', 'refreshAll'].map((methodName) =>
     controllerMethod(ScheduleController.prototype, methodName),
   );
 
   it.each(scheduleMutations)(
-    'keeps every schedule mutation restricted to administrators',
+    'keeps every schedule snapshot refresh restricted to administrators',
     (mutation) => {
       expect(rolesFor(mutation)).toEqual([Role.ADMIN]);
     },

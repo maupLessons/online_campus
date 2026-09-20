@@ -37,12 +37,12 @@ export class CreateElectiveDisciplineDto {
   @IsMongoId()
   teacherId?: string;
 
-  @ApiProperty({ minimum: 1, maximum: 12 })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(12)
-  semester: number;
+  @ApiPropertyOptional({
+    description: 'Id навчального періоду; за замовчуванням — поточний',
+  })
+  @IsOptional()
+  @IsMongoId()
+  termId?: string;
 
   @ApiProperty({ minimum: 1, maximum: 30 })
   @Type(() => Number)

@@ -1,3 +1,3 @@
 export * from '../schedule.enums';
-export * from './schedule-entry.schema';
-export * from './schedule-template.schema';
+export * from './schedule-snapshot.schema';
+export * from './online-lesson-link.schema';

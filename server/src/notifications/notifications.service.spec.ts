@@ -72,11 +72,17 @@ describe('NotificationsService', () => {
         firstName: 'Test',
         lastName: 'Student',
         status: 'active',
-        studentProfile: {
-          group: groupId,
-          recordBookNumber: 'RB-1',
-          year: 1,
-        },
+        studentProfiles: [
+          {
+            id: '6622b2a00f3a22d5b625d176',
+            group: { id: groupId, code: 'GR-1' },
+            recordBookNumber: 'RB-1',
+            year: 1,
+            status: 'active',
+            syncedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+        activeStudentProfileId: '6622b2a00f3a22d5b625d176',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       }),
@@ -165,6 +171,8 @@ describe('NotificationsService', () => {
       firstName: 'Test',
       lastName: 'Teacher',
       status: 'active',
+      studentProfiles: [],
+      activeStudentProfileId: null,
       teacherProfile: {
         department: '6622b2a00f3a22d5b625d177',
         position: 'Lecturer',
@@ -202,16 +210,20 @@ describe('NotificationsService', () => {
 
   it('counts unread notifications across ObjectId and legacy string read markers', async () => {
     notificationModel.countDocuments.mockReturnValueOnce(execQuery(2));
+    notificationModel.countDocuments.mockReturnValueOnce(execQuery(1));
 
-    const count = await service.getUnreadCount(userId);
+    const result = await service.getUnreadCount(userId);
 
-    expect(count).toBe(2);
+    expect(result).toEqual({ count: 2, importantCount: 1 });
     const [countFilter] = notificationModel.countDocuments.mock.calls[0];
     const readByFilter = countFilter.readBy as { $nin?: unknown[] };
     expect(
       readByFilter.$nin?.some((value) => value instanceof Types.ObjectId),
     ).toBe(true);
     expect(readByFilter.$nin).toContain(userId);
+    const [importantCountFilter] =
+      notificationModel.countDocuments.mock.calls[1];
+    expect(importantCountFilter.important).toBe(true);
   });
 
   it('counts only personal notifications for admins', async () => {
@@ -223,14 +235,17 @@ describe('NotificationsService', () => {
       firstName: 'System',
       lastName: 'Admin',
       status: 'active',
+      studentProfiles: [],
+      activeStudentProfileId: null,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
     notificationModel.countDocuments.mockReturnValueOnce(execQuery(0));
+    notificationModel.countDocuments.mockReturnValueOnce(execQuery(0));
 
-    const count = await service.getUnreadCount(userId);
+    const result = await service.getUnreadCount(userId);
 
-    expect(count).toBe(0);
+    expect(result).toEqual({ count: 0, importantCount: 0 });
     const [countFilter] = notificationModel.countDocuments.mock.calls[0];
     const visibleTargets = countFilter.$or as Array<{ userId: unknown }>;
     expect(visibleTargets).toHaveLength(2);

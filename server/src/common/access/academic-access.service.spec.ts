@@ -64,8 +64,12 @@ describe('AcademicAccessService', () => {
   );
 
   it('limits students to standard courses and explicitly enrolled electives', async () => {
+    const profileId = new Types.ObjectId();
     userModel.findById.mockReturnValue(
-      query({ studentProfile: { group: groupId } }),
+      query({
+        studentProfiles: [{ _id: profileId, group: groupId, status: 'active' }],
+        activeStudentProfileId: profileId,
+      }),
     );
 
     const filter = await service.buildCourseAssignmentFilter({
@@ -127,7 +131,7 @@ describe('AcademicAccessService', () => {
       $or: [
         {
           _id: { $in: [enrolledStudentId] },
-          'studentProfile.group': groupId,
+          studentProfiles: { $elemMatch: { group: groupId, status: 'active' } },
         },
       ],
     });

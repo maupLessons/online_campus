@@ -231,8 +231,14 @@ function validateMaupStudentApi(
   errors: string[],
 ): void {
   if (env.MAUP_API_MOCK === 'true') {
-    if (isProduction || isProductionDeployment) {
-      errors.push('MAUP_API_MOCK must not be enabled in production');
+    // The ban is tied to DEPLOYMENT_ENV, not NODE_ENV: a demo stand runs with
+    // full production hardening (NODE_ENV=production) yet legitimately serves
+    // fixtures. DEPLOYMENT_ENV defaults to 'production' when unset, so a host
+    // that never declares itself stays protected.
+    if (isProductionDeployment) {
+      errors.push(
+        'MAUP_API_MOCK must not be enabled when DEPLOYMENT_ENV=production',
+      );
       return;
     }
     // The mock replaces the transport, so real credentials are neither

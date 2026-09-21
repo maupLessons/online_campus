@@ -48,6 +48,8 @@ const ElectivesPage = lazy(() => import('./pages/electives/ElectivesPage'));
 const ElectiveAdminPage = lazy(
   () => import('./pages/electives/ElectiveAdminPage'),
 );
+const GradebookPage = lazy(() => import('./pages/student/GradebookPage'));
+const FinancePage = lazy(() => import('./pages/student/FinancePage'));
 
 function RouteLoader() {
   return (
@@ -215,6 +217,26 @@ export default function App() {
                 ]}>
                 <LazyPage>
                   <ElectiveAdminPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="gradebook"
+            element={
+              <ProtectedRoute allowedRoles={[Role.STUDENT]}>
+                <LazyPage>
+                  <GradebookPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="finance"
+            element={
+              <ProtectedRoute allowedRoles={[Role.STUDENT]}>
+                <LazyPage>
+                  <FinancePage />
                 </LazyPage>
               </ProtectedRoute>
             }

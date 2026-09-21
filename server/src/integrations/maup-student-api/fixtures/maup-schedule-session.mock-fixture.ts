@@ -1,0 +1,46 @@
+import { MaupWireArray } from '../maup-student-api.types';
+
+export const MAUP_MOCK_SCHEDULE_SESSION: MaupWireArray = [
+  {
+    student_id: 'seed-1001',
+    semestr: 1,
+    zes_schedule: 1,
+    from_date: '2027-01-15',
+    to_date: '2027-01-30',
+    group: 'КН-11',
+    schedule: [
+      {
+        pair_idx: 2,
+        day_of_week: 'Понеділок',
+        day_of_week_raw: 0,
+        pair_weeks: 'Всі тижні',
+        from_time: '10:10',
+        to_time: '11:40',
+        pair_kind: 'Екзамен',
+        pair_kind_id: 4,
+        pair_subject: 'Основи програмування',
+        pair_auditorium: '201',
+        pair_prepod: 'Мельник Віктор Олегович',
+        subject_id: 1001,
+        auditorium_id: 502,
+        day_date: '2027-01-18',
+      },
+      {
+        pair_idx: 2,
+        day_of_week: 'Середа',
+        day_of_week_raw: 2,
+        pair_weeks: 'Всі тижні',
+        from_time: '10:10',
+        to_time: '11:40',
+        pair_kind: 'Залік',
+        pair_kind_id: 5,
+        pair_subject: 'Вища математика',
+        pair_auditorium: '201',
+        pair_prepod: 'Ковальчук Ольга Петрівна',
+        subject_id: 1002,
+        auditorium_id: 502,
+        day_date: '2027-01-20',
+      },
+    ],
+  },
+];

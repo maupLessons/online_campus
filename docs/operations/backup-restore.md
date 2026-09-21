@@ -12,6 +12,7 @@
 1. MongoDB database з `MONGO_DATABASE`.
 2. `server/uploads` до переходу на private object storage.
 3. Production `.env` і GitHub secrets — в окремому secret manager, а не в backup-архіві застосунку.
+4. `externaldatacaches` (кеш залікової книжки і фінансів) **не** резервується: це персональні дані з retention 15 хв + 24 год (спека 04 §8.1), а втрата кешу нічого не ламає — наступне читання відновлює його з MAUP API.
 
 ## Створення backup
 
@@ -22,7 +23,7 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "/var/backups/online-campus/$timestamp"
 
 docker compose exec -T mongodb sh -lc \
-  'mongodump --host localhost --port 27017 --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --db "$MONGO_INITDB_DATABASE" --archive --gzip' \
+  'mongodump --host localhost --port 27017 --username "$MONGO_INITDB_ROOT_USERNAME" --password "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --db "$MONGO_INITDB_DATABASE" --excludeCollection=externaldatacaches --archive --gzip' \
   > "/var/backups/online-campus/$timestamp/mongodb.archive.gz"
 
 tar -C /opt/online_campus/server -czf \
@@ -54,10 +55,11 @@ docker compose exec -T mongodb sh -lc \
 2. Перевірити checksum і дату backup.
 3. Зробити аварійний dump поточного стану, якщо MongoDB доступна.
 4. Виконати `mongorestore --drop --archive --gzip` у цільову БД.
-5. Відновити `uploads` зі збереженням власника та прав контейнера.
-6. Запустити server; автоматичні versioned migrations мають завершитися до readiness.
-7. Перевірити `/api/health/ready`, вхід тестового адміністратора, розклад, завантаження файла й audit outbox.
-8. Зафіксувати incident ID, backup timestamp, фактичні RPO/RTO та результати smoke-перевірок.
+5. Очистити `externaldatacaches` у відновленій БД (`db.externaldatacaches.deleteMany({})`) — дамп, знятий до правила виключення `externaldatacaches` (розділ «Що резервувати», п. 4; `--excludeCollection` у «Створенні backup»), міг містити прострочені персональні дані.
+6. Відновити `uploads` зі збереженням власника та прав контейнера.
+7. Запустити server; автоматичні versioned migrations мають завершитися до readiness.
+8. Перевірити `/api/health/ready`, вхід тестового адміністратора, розклад, завантаження файла й audit outbox.
+9. Зафіксувати incident ID, backup timestamp, фактичні RPO/RTO та результати smoke-перевірок.
 
 ## Обов'язкові alerts
 

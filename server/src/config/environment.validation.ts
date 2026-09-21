@@ -70,6 +70,7 @@ export function validateEnvironment(input: Environment): Environment {
   env.MAUP_API_ENABLED = String(
     readBoolean(env, 'MAUP_API_ENABLED', false, errors),
   );
+  env.MAUP_API_MOCK = String(readBoolean(env, 'MAUP_API_MOCK', false, errors));
   env.SURVEY_REMINDER_HOURS = String(
     readInteger(env, 'SURVEY_REMINDER_HOURS', 24, 1, 168, errors),
   );
@@ -84,6 +85,7 @@ export function validateEnvironment(input: Environment): Environment {
     errors,
   );
   validateMaupNewsFeed(env, isProduction, errors);
+  validateExternalCache(env, errors);
 
   const jwtSecret = readSecret(
     env,
@@ -157,7 +159,7 @@ export function validateEnvironment(input: Environment): Environment {
 
   validateMongoConfiguration(env, isProduction, isTest, errors);
   validateEmailDelivery(env, isProductionDeployment, errors);
-  validateMaupStudentApi(env, isProduction, errors);
+  validateMaupStudentApi(env, isProduction, isProductionDeployment, errors);
   validateCourseLinks(env, errors);
   validatePositiveTuning(env, errors);
 
@@ -208,11 +210,47 @@ function validateMaupNewsFeed(
   }
 }
 
+function validateExternalCache(env: Environment, errors: string[]): void {
+  for (const [key, fallback] of [
+    ['EXTERNAL_CACHE_TTL_SECONDS', '900'],
+    ['EXTERNAL_CACHE_STALE_SECONDS', '86400'],
+  ] as const) {
+    const raw = readOptionalString(env, key) ?? fallback;
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0) {
+      errors.push(`${key} must be a positive integer number of seconds`);
+    }
+    env[key] = String(value);
+  }
+}
+
 function validateMaupStudentApi(
   env: Environment,
   isProduction: boolean,
+  isProductionDeployment: boolean,
   errors: string[],
 ): void {
+  if (env.MAUP_API_MOCK === 'true') {
+    // The ban is tied to DEPLOYMENT_ENV, not NODE_ENV: a demo stand runs with
+    // full production hardening (NODE_ENV=production) yet legitimately serves
+    // fixtures. DEPLOYMENT_ENV defaults to 'production' when unset, so a host
+    // that never declares itself stays protected.
+    if (isProductionDeployment) {
+      errors.push(
+        'MAUP_API_MOCK must not be enabled when DEPLOYMENT_ENV=production',
+      );
+      return;
+    }
+    // The mock replaces the transport, so real credentials are neither
+    // required nor used; the client still needs a syntactically valid config.
+    env.MAUP_API_ENABLED = 'true';
+    env.MAUP_API_BASE_URL = 'https://mock.invalid/api';
+    env.MAUP_API_ALLOWED_HOST = 'mock.invalid';
+    env.MAUP_API_USERNAME = 'mock';
+    env.MAUP_API_PASSWORD = 'mock';
+    return;
+  }
+
   const rawBaseUrl = readOptionalString(env, 'MAUP_API_BASE_URL') ?? '';
   const allowedHost = readOptionalString(env, 'MAUP_API_ALLOWED_HOST') ?? '';
   env.MAUP_API_BASE_URL = rawBaseUrl;

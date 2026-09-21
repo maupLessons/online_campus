@@ -28,6 +28,9 @@ import { DatabaseMigrationsModule } from './database-migrations/database-migrati
 import { HealthController } from './health.controller';
 import { MaupStudentApiModule } from './integrations/maup-student-api/maup-student-api.module';
 import { NewsModule } from './news/news.module';
+import { ExternalDataCacheModule } from './external-data-cache/external-data-cache.module';
+import { GradebookModule } from './gradebook/gradebook.module';
+import { FinanceModule } from './finance/finance.module';
 
 mongoose.set('transactionAsyncLocalStorage', true);
 
@@ -117,6 +120,9 @@ function buildMongoUri(config: ConfigService): string {
     ReportsModule,
     MaupStudentApiModule,
     NewsModule,
+    ExternalDataCacheModule,
+    GradebookModule,
+    FinanceModule,
   ],
   controllers: [HealthController],
   providers: [

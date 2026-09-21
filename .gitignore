@@ -14,3 +14,7 @@ server/dist/
 client/dist/
 
 *.tsbuildinfo
+
+# superpowers SDD scratch (не комітимо)
+.superpowers/
+.DS_Store

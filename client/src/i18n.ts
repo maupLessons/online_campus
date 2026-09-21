@@ -31,6 +31,7 @@ const resources = {
 
       'layout.logout': 'Вийти',
       'layout.language': 'Мова',
+      'layout.contacts': 'Контакти',
 
       'errors.boundary.title': 'Щось пішло не так',
       'errors.boundary.description':
@@ -1073,6 +1074,10 @@ const resources = {
       'resources.items.repository.description': 'Інституційний репозиторій наукових праць.',
       'resources.items.library.title': 'Бібліотека',
       'resources.items.library.description': 'Електронний каталог і ресурси бібліотеки.',
+      'resources.items.uosvitaAndroid.title': 'U.Освіта для Android',
+      'resources.items.uosvitaAndroid.description': 'Мобільний застосунок U.Освіта для Android.',
+      'resources.items.uosvitaIos.title': 'U.Освіта для iOS',
+      'resources.items.uosvitaIos.description': 'Мобільний застосунок U.Освіта для iOS.',
 
       'academicTerms.title': 'Навчальні періоди',
       'academicTerms.description':
@@ -1153,6 +1158,7 @@ const resources = {
 
       'layout.logout': 'Log out',
       'layout.language': 'Language',
+      'layout.contacts': 'Contacts',
 
       'errors.boundary.title': 'Something went wrong',
       'errors.boundary.description':
@@ -2186,6 +2192,10 @@ const resources = {
       'resources.items.repository.description': 'Institutional repository of research papers.',
       'resources.items.library.title': 'Library',
       'resources.items.library.description': 'Electronic catalogue and library resources.',
+      'resources.items.uosvitaAndroid.title': 'U.Osvita for Android',
+      'resources.items.uosvitaAndroid.description': 'U.Osvita mobile app for Android.',
+      'resources.items.uosvitaIos.title': 'U.Osvita for iOS',
+      'resources.items.uosvitaIos.description': 'U.Osvita mobile app for iOS.',
 
       'academicTerms.title': 'Academic terms',
       'academicTerms.description':

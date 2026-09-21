@@ -1,7 +1,6 @@
 # Електронний Кампус МАУП — Технічна документація
 
-> Версія документа: 3.3
-> Статус: актуальний
+> Версія документа: 3.4 Статус: актуальний
 
 ---
 
@@ -31,7 +30,7 @@
 
 ### Призначення
 
-Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, розклад, дисципліни, додаткові матеріали, опитування, вибіркові дисципліни, сповіщення, новини МАУП, довідники та аудит. Moodle не інтегрується і не вбудовується в портал: завдання, здача робіт та офіційне оцінювання живуть окремо в Moodle за посиланням `https://dist.maup.com.ua/`. Кампус може показувати зовнішній перехід у Moodle та зберігати HTTPS-посилання як додаткові матеріали дисципліни або посилання на онлайн-пари.
+Система є **самостійним порталом** з власною базою даних і власними критичними процесами: кабінети користувачів, розклад і розклад сесії, курси, Finance, Gradebook, додаткові матеріали, опитування, вибіркові дисципліни, сповіщення, новини МАУП, інформаційні ресурси, довідники та аудит. Moodle не інтегрується і не вбудовується в портал: завдання, здача робіт та офіційне оцінювання живуть окремо в Moodle за посиланням `https://dist.maup.com.ua/`. Кампус показує зовнішній перехід у Moodle та зберігає HTTPS-посилання як додаткові матеріали дисципліни або посилання на онлайн-пари.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -41,9 +40,9 @@
                            ▼
 ┌─────────────────────────────────────────────────────────┐
 │                    Кампус — єдина система                │
-│  Auth · Users · Schedule · Courses · Surveys            │
-│  Notifications · News · References · AuditLog           │
-│  Elective disciplines                                   │
+│  Auth · Users · Schedule · Courses · Finance · Gradebook│
+│  Surveys · Electives · Notifications · News             │
+│  Resources · References · Reports · AuditLog             │
 │                 Власна БД (MongoDB)                      │
 └─────────────────────────────────────────────────────────┘
                            │ external link only
@@ -56,15 +55,43 @@
 ### Ключові можливості
 
 - Особисті кабінети для **7 ролей** з різними наборами функцій
-- Перегляд розкладу занять і сесії (день / тиждень) із кешу API МАУП, з онлайн-посиланнями на пари
+- Перегляд розкладу занять і сесії (день / тиждень) із кешу API МАУП, з CSV/XLSX-експортом; викладач може керувати онлайн-посиланнями на пари
+- Студентські **Finance** (навчання/гуртожиток, баланс, платежі та перехід до оплати) і **Gradebook** (семестри, оцінки, статуси та оновлення)
 - Перегляд дисциплін поточного навчального контексту, додаткових матеріалів і зовнішніх HTTPS-посилань
 - Перехід до Moodle для завдань, здачі робіт та офіційного оцінювання
+- **Інформаційні ресурси** — 6 зовнішніх посилань: сайт МАУП, Moodle, репозиторій, бібліотека та U.Освіта для Android/iOS
 - **Система опитувань** — створення, проходження студентами та викладачами, аналіз результатів
 - **Вибіркові дисципліни** — критичний модуль: вибір студентом із запропонованого переліку та фіксація результату в кабінеті
 - Система сповіщень: зміни розкладу, опитування, оголошення
 - Новини МАУП з офіційної RSS-стрічки через backend proxy з cache/fallback
 - Відновлення пароля через одноразовий reset token без розкриття існування акаунта
 - Повний RBAC з явною матрицею дозволів без успадкування ролей та аудит-логом дій
+
+### Клієнтська навігація
+
+`Layout` будує меню за роллю користувача. Студент бачить 11 основних пунктів:
+`Головна`, `Профіль`, `Розклад`, `Розклад сесії`, `Дисципліни`, `Фінанси`,
+`Залікова книжка`, `Інформаційні ресурси`, `Вибір дисциплін`, `Опитування`,
+`Новини`; `Сповіщення` додаються окремим пунктом. Staff-меню формується з
+профілю ролі та містить тільки дозволені пункти: профіль, дашборд, новини,
+розклад, курси/каталог, опитування або адміністрування опитувань, вибіркові
+дисципліни, звіти, користувачі, аудит, навчальні терміни, групи розкладу та
+довідники.
+
+На desktop і mobile навігація sidebar прокручується незалежно від нижнього
+footer. Footer залишається видимим і містить повноширинну кнопку **Контакти**
+з посиланням
+`https://maup.com.ua/ua/kontakti/kontaktna-informaciya.html`
+(`target="_blank"`, `rel="noopener noreferrer"`), а також вихід і перемикач
+UA/EN. Scroll-area має окремий тонкий scrollbar, плавну прокрутку,
+`overscroll`-ізоляцію та focus-visible стани посилань.
+
+Для `admin` фактичний порядок меню такий: `Профіль`, `Головна`, `Новини`,
+`Розклад`, `Адміністрування опитувань`, `Адміністрування вибіркових
+дисциплін`, `Звіти`, `Користувачі`, `Аудит`, `Навчальні терміни`,
+`Групи розкладу`, `Довідники`, а `Сповіщення` додаються окремим пунктом.
+Інші staff-ролі отримують підмножину цього списку за явними role guards; це
+не означає, що кожен staff-користувач бачить усі admin-пункти.
 
 ---
 
@@ -866,6 +893,31 @@ migrations. У production `DB_MIGRATIONS_ENABLED=true` є обов'язкови�
 runtime counters і circuit state без URL, username, password або
 `Authorization`.
 
+### 4.14 FinanceModule і GradebookModule
+
+Finance та Gradebook — готові студентські read-only розділи. Вони працюють
+через backend-only MAUP Student API та спільний `ExternalDataCacheModule`;
+кеш має fresh TTL і stale window, а відповідь повертає `meta.fetchedAt`,
+`meta.stale` або причину недоступності. При вимкненій інтеграції API явно
+повертає стан `maup_disabled`, а не вигадує порожні фінансові чи академічні
+дані.
+
+- `/finance` показує баланс і поточну вартість навчання, історію платежів,
+  платежі за гуртожиток та безпечний зовнішній перехід до оплати.
+- `/gradebook` показує семестри, дисципліни, оцінки й статуси (`passed`,
+  `not passed`, `absent`, `not admitted`), а також поточний стан кешу.
+- Студент може виконати обмежене примусове оновлення кожного розділу; перегляд
+  і refresh записуються до audit log.
+- Контролери доступні лише ролі `student`; дані scoped за активним
+  `StudentProfile`, без копіювання credentials або ІПН у браузер.
+
+У репозиторії є MAUP contract/mock fixtures для student info, розкладу занять
+і сесії, оцінок, балансу (`saldo`), платежів та довідників. Mock transport
+використовується тестами або non-production demo-конфігурацією через
+`MAUP_API_MOCK=true`; production забороняє цей режим. Реальний MAUP endpoint і
+credentials у репозиторії не зберігаються, а `MAUP_API_ENABLED=false` є
+безпечним default.
+
 ---
 
 ## 5. Компоненти фронтенду
@@ -887,7 +939,9 @@ src/
 │   ├── surveysApi.ts
 │   ├── electivesApi.ts
 │   ├── referencesApi.ts
-│   └── scheduleApi.ts       ← my/session/today/export + online-links + admin refresh
+│   ├── scheduleApi.ts       ← my/session/today/export + online-links + admin refresh
+│   ├── financeApi.ts        ← student finance + external cache metadata
+│   └── gradebookApi.ts      ← student gradebook + external cache metadata
 ├── store/
 │   └── authStore.ts         ← Zustand: user, session state, login/logout
 ├── components/
@@ -912,10 +966,13 @@ src/
     │   ├── ScheduleSessionPage.tsx ← read-only exam session schedule
     │   ├── NotificationsPage.tsx
     │   ├── ProfilePage.tsx
-    │   └── ReferencesPage.tsx
+    │   ├── ReferencesPage.tsx
+    │   └── ResourcesPage.tsx       ← 6 external information links
     ├── student/             ← student-specific pages
-    │   ├── AssignmentsPage.tsx
-    │   └── GradesPage.tsx
+    │   ├── AssignmentsPage.tsx     ← legacy/internal; student UI uses Moodle
+    │   ├── GradesPage.tsx          ← legacy/internal; student UI uses Moodle
+    │   ├── FinancePage.tsx
+    │   └── GradebookPage.tsx
     ├── surveys/             ← SurveysModule frontend
     │   ├── SurveysPage.tsx
     │   ├── SurveyPlayerPage.tsx
@@ -927,9 +984,11 @@ src/
     ├── admin/               ← system administration pages
     │   ├── UsersPage.tsx
     │   ├── AuditLogPage.tsx
+    │   ├── AcademicTermsPage.tsx
     │   └── AdminScheduleGroupsPage.tsx ← per-group cache view + force refresh
     └── course/              ← course-related shared modules
         ├── CoursesPage.tsx
+        ├── CourseCatalogPage.tsx
         └── CourseDetailPage.tsx
 ```
 
@@ -953,7 +1012,10 @@ fallback, але нові клієнтські сценарії повинні �
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Профіль, дашборд, сповіщення | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Розклад | read | read + онлайн-посилання | scoped read | scoped read | read | read | read + примусове оновлення |
+| Розклад сесії | read | read + онлайн-посилання | — | — | — | — | — |
 | Дисципліни | scoped | scoped | scoped | scoped | — | — | global read |
+| Фінанси, залікова книжка | read | — | — | — | — | — | — |
+| Інформаційні ресурси | read | read | read | read | read | read | read |
 | Опитування | participate | participate | — | manage own | results | results | manage |
 | Вибіркові дисципліни | select | — | manage scoped | manage | — | — | manage |
 | Аналітичні звіти | — | — | scoped | scoped | global | global | global |
@@ -963,6 +1025,22 @@ fallback, але нові клієнтські сценарії повинні �
 
 Повна нормативна матриця з object-level правилами наведена в
 `docs/RBAC_MATRIX.md`.
+
+Усі ролі також бачать `/references` і `/resources` за frontend route guard.
+`/resources` містить шість зовнішніх карток і відкриває посилання в новій
+вкладці з `noopener noreferrer`. `Finance` і `Gradebook` доступні лише
+студенту та не є заглушками: frontend відображає отримані MAUP дані або
+локалізований стан недоступності/вимкненої інтеграції.
+
+### 5.2.1 Sidebar і footer
+
+Верхня частина sidebar — незалежна scroll-area для role-based navigation;
+footer не прокручується разом із меню (`sticky bottom-0 shrink-0`). У footer
+зберігаються поточні розміри й відступи, кнопка **Контакти**, вихід і
+перемикач UA/EN. Контакти відкривають
+`https://maup.com.ua/ua/kontakti/kontaktna-informaciya.html` у новій вкладці з
+`rel="noopener noreferrer"`. На вузьких екранах sidebar відкривається поверх
+контенту, а scroll-area та footer залишаються доступними.
 
 ---
 
@@ -1166,6 +1244,21 @@ AuditLogEntry
 /schedule`, `/schedule/:id`, `/schedule/bulk*`, `/schedule/templates*`,
 `/schedule/:id/cancel|reschedule|substitution` видалені разом із локальним
 CRUD-розкладом і повертають `404`.
+
+### Finance і Gradebook `/api/finance`, `/api/gradebook`
+
+| Метод | Шлях | Доступ | Опис |
+| --- | --- | --- | --- |
+| GET | `/finance/my` | student | Власні баланс, вартість і платежі |
+| POST | `/finance/my/refresh` | student | Примусовий refresh власного finance cache |
+| GET | `/gradebook/my` | student | Власна залікова книжка за семестрами |
+| POST | `/gradebook/my/refresh` | student | Примусовий refresh власного gradebook cache |
+
+Обидва модулі використовують спільний зовнішній кеш із fresh/stale metadata,
+не повертають дані іншого student profile і не зберігають credentials у
+frontend. При `MAUP_API_ENABLED=false` endpoints повертають явну помилку
+вимкненої інтеграції; fixtures доступні лише через mock transport для
+тестів/non-production demo.
 
 ### Курси та навчання `/api/courses`
 
@@ -1392,7 +1485,7 @@ parameters. These restrictions complement, but do not replace, patched Multer.
 | 11  | NewsModule                                              | ✅ MAUP RSS feed, backend cache/fallback, `/news` UI |
 | 12  | React auth flow (Zustand, cookies, interceptors)         | ✅ Реалізовано                              |
 | 13  | React layout, lazy routes, RBAC navigation, i18n         | ✅ Реалізовано                              |
-| 14  | Role-based frontend pages                               | ✅ 21 page components                       |
+| 14  | Role-based frontend pages                               | ✅ 26 page components                       |
 | 15  | Docker Compose + MongoDB replica set                    | ✅ Реалізовано                              |
 
 ### Фаза 2 — База даних + File Upload + Опитування
@@ -1675,7 +1768,9 @@ online_campus/
         │   ├── electivesApi.ts
         │   ├── reportsApi.ts
         │   ├── referencesApi.ts
-        │   └── scheduleApi.ts
+        │   ├── scheduleApi.ts
+        │   ├── financeApi.ts
+        │   └── gradebookApi.ts
         ├── store/
         │   └── authStore.ts
         ├── components/
@@ -1702,10 +1797,13 @@ online_campus/
             │   ├── NotificationsPage.tsx
             │   ├── ProfilePage.tsx
             │   ├── ReportsPage.tsx
-            │   └── ReferencesPage.tsx
+            │   ├── ReferencesPage.tsx
+            │   └── ResourcesPage.tsx
             ├── student/
             │   ├── AssignmentsPage.tsx
-            │   └── GradesPage.tsx
+            │   ├── GradesPage.tsx
+            │   ├── FinancePage.tsx
+            │   └── GradebookPage.tsx
             ├── surveys/
             │   ├── SurveysPage.tsx
             │   ├── SurveyPlayerPage.tsx
@@ -1717,9 +1815,11 @@ online_campus/
             ├── admin/
             │   ├── UsersPage.tsx
             │   ├── AuditLogPage.tsx
+            │   ├── AcademicTermsPage.tsx
             │   └── AdminScheduleGroupsPage.tsx
             └── course/
                 ├── CoursesPage.tsx
+                ├── CourseCatalogPage.tsx
                 └── CourseDetailPage.tsx
 ```
 
@@ -1755,8 +1855,13 @@ staging або production: demo-користувачі мають відомий
 контейнерів:
 
 ```bash
-docker compose exec server npm run seed:demo
+docker compose exec -e SEED_DEMO_DATA=true server npm run seed:demo
 ```
+
+Явний `-e` важливий, якщо `.env` містить `SEED_DEMO_DATA=false`: у Docker
+Compose значення `env_file` інакше перекриває прапорець, який встановлює
+seed-команда. Після seed можна увійти на `http://localhost:5173/login`,
+наприклад `student1` / `password123` або `admin` / `password123`.
 
 ### Локально
 
@@ -2190,4 +2295,4 @@ mkdir -p /opt/online_campus && cd /opt/online_campus
 
 ---
 
-_Документ актуальний станом на червень 2026._
+_Документ актуальний станом на вересень 2026 року._

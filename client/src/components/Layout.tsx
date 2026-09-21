@@ -102,8 +102,8 @@ export default function Layout() {
             </div>
           </div>
 
-          <nav className="flex-1 px-4 py-6">
-            <div className="space-y-2">
+          <nav className="sidebar-scroll-area min-h-0 flex-1 overflow-y-auto border-y border-white/[0.06] px-3 py-5 sm:px-4 sm:py-6">
+            <div className="space-y-1.5">
               {visibleNavItems.map((item) => {
                 const isActive =
                   location.pathname === item.path ||
@@ -124,8 +124,8 @@ export default function Layout() {
                     onClick={() => setSidebarOpen(false)}
                     className={
                       isActive
-                        ? 'flex items-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-[0_12px_30px_rgba(37,99,235,0.35)]'
-                        : 'flex items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white'
+                        ? 'flex items-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-[0_12px_30px_rgba(37,99,235,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#16233b]'
+                        : 'flex items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 transition-colors duration-200 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#16233b]'
                     }>
                     {t(item.labelKey)}
                   </Link>
@@ -137,25 +137,24 @@ export default function Layout() {
                 onClick={() => setSidebarOpen(false)}
                 className={
                   location.pathname === '/notifications'
-                    ? 'flex items-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-[0_12px_30px_rgba(37,99,235,0.35)]'
-                    : 'flex items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white'
+                  ? 'flex items-center rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white shadow-[0_12px_30px_rgba(37,99,235,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#16233b]'
+                  : 'flex items-center rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 transition-colors duration-200 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-[#16233b]'
                 }>
                 {t('nav.notifications')}
               </Link>
             </div>
           </nav>
 
-          <div className="border-t border-white/10 px-4 py-5">
-            <div className="mb-4 rounded-2xl bg-white/5 px-4 py-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {t('layout.supportTitle')}
-              </p>
-              <p className="mt-2 text-xs leading-5 text-slate-300">
-                {t('layout.supportText')}
-              </p>
-            </div>
+          <div className="sticky bottom-0 shrink-0 border-t border-white/10 bg-[#16233b] px-4 py-5">
+            <a
+              href="https://maup.com.ua/ua/kontakti/kontaktna-informaciya.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-11 w-full items-center justify-center rounded-xl bg-white/5 px-4 py-3 text-sm font-semibold text-slate-100 shadow-sm transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#16233b]">
+              {t('layout.contacts')}
+            </a>
 
-            <div className="flex items-center gap-2">
+            <div className="mt-4 flex min-h-10 items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={handleLogout}
@@ -163,7 +162,10 @@ export default function Layout() {
                 {t('layout.logout')}
               </button>
 
-              <LanguageSwitcher showLabel={false} className="shrink-0" />
+              <LanguageSwitcher
+                showLabel={false}
+                className="shrink-0"
+              />
             </div>
           </div>
         </div>

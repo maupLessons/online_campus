@@ -31,6 +31,7 @@ const resources = {
 
       'layout.logout': 'Вийти',
       'layout.language': 'Мова',
+      'layout.contacts': 'Контакти',
 
       'errors.boundary.title': 'Щось пішло не так',
       'errors.boundary.description':
@@ -1157,6 +1158,7 @@ const resources = {
 
       'layout.logout': 'Log out',
       'layout.language': 'Language',
+      'layout.contacts': 'Contacts',
 
       'errors.boundary.title': 'Something went wrong',
       'errors.boundary.description':

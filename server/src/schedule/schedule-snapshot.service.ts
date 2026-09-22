@@ -247,7 +247,7 @@ export class ScheduleSnapshotService {
             { $set: patch },
             {
               upsert: true,
-              new: true,
+              returnDocument: 'after',
               setDefaultsOnInsert: true,
               runValidators: true,
             },
@@ -258,7 +258,7 @@ export class ScheduleSnapshotService {
         .findOneAndUpdate(
           { ...this.filter(key), fetchedAt: existing.fetchedAt },
           { $set: patch },
-          { new: true, upsert: false, runValidators: true },
+          { returnDocument: 'after', upsert: false, runValidators: true },
         )
         .exec();
     } catch (error: unknown) {

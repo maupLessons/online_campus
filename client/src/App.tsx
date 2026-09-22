@@ -7,6 +7,8 @@ import { Role } from './types';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import { lazy, Suspense } from 'react';
 import type { ReactNode } from 'react';
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const ALL_ROLES = Object.values(Role) as Role[];
 
@@ -67,9 +69,20 @@ function LazyPage({ children }: { children: ReactNode }) {
   );
 }
 
+function DocumentTitle() {
+  const { t, i18n } = useTranslation();
+
+  useEffect(() => {
+    document.title = t('app.title');
+  }, [i18n.language, t]);
+
+  return null;
+}
+
 export default function App() {
   return (
       <RouteErrorBoundary>
+        <DocumentTitle />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />

@@ -113,7 +113,7 @@ export class ExternalDataCacheService {
               purgeAt: new Date(freshUntil.getTime() + this.staleMs),
             },
           },
-          { upsert: true, new: true },
+          { upsert: true, returnDocument: 'after' },
         )
         .exec();
       this.logger.log(

@@ -143,7 +143,11 @@ export class OnlineLessonLinksService {
           $set: { url: dto.url, updatedBy: new Types.ObjectId(user.sub) },
           $setOnInsert: { createdBy: new Types.ObjectId(user.sub) },
         },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        {
+          upsert: true,
+          returnDocument: 'after',
+          setDefaultsOnInsert: true,
+        },
       )
       .exec();
     await audit?.record({

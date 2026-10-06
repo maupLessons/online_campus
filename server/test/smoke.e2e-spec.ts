@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, Module, Post } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import * as request from 'supertest';
+import request from 'supertest';
 import { IsString } from 'class-validator';
 import { configureApp } from '../src/app.config';
 

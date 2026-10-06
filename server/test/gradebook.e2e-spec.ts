@@ -1,5 +1,5 @@
 import { StartedTestContainer } from 'testcontainers';
-import * as request from 'supertest';
+import request from 'supertest';
 import { Types } from 'mongoose';
 import { Role } from '../src/common/types/roles.enum';
 import { MAUP_MARKS_FIXTURE } from '../src/gradebook/fixtures/maup-marks.contract-fixture';

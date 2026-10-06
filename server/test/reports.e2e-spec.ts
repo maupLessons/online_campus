@@ -4,7 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Connection, Types } from 'mongoose';
-import * as request from 'supertest';
+import request from 'supertest';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.config';

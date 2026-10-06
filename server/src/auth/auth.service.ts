@@ -8,7 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { Types } from 'mongoose';
-import * as bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { UsersService } from '../users/users.service';
 import { UserDto } from '../users/dto/user.dto';

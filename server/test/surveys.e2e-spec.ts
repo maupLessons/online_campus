@@ -6,7 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import * as ExcelJS from 'exceljs';
 import { Connection, Types } from 'mongoose';
 import type { Response as SuperAgentResponse } from 'superagent';
-import * as request from 'supertest';
+import request from 'supertest';
 import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.config';

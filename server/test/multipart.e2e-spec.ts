@@ -2,7 +2,7 @@ import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import type { Request } from 'express';
-import * as request from 'supertest';
+import request from 'supertest';
 import { JwtAuthGuard } from '../src/auth/jwt-auth.guard';
 import { Role } from '../src/common/types/roles.enum';
 import { FilesController } from '../src/files/files.controller';
@@ -67,6 +67,7 @@ describe('Single-file multipart boundaries (e2e)', () => {
       filename: 'document.pdf',
       contentType: 'application/pdf',
       maxSize: 10 * 1024 * 1024,
+      exactSizeStatus: 400,
       handler: saveFile,
     },
     {
@@ -75,6 +76,7 @@ describe('Single-file multipart boundaries (e2e)', () => {
       filename: 'groups.csv',
       contentType: 'text/csv',
       maxSize: 2 * 1024 * 1024,
+      exactSizeStatus: 201,
       handler: importFile,
     },
   ];
@@ -123,6 +125,38 @@ describe('Single-file multipart boundaries (e2e)', () => {
         .attach('file', endpoint.file, endpoint.filename)
         .expect(401);
       expectNoDomainCalls();
+    });
+
+    it('accepts a file just below the endpoint size limit', async () => {
+      const file = Buffer.alloc(endpoint.maxSize - 1);
+      endpoint.file.copy(file);
+
+      await upload()
+        .attach('file', file, {
+          filename: endpoint.filename,
+          contentType: endpoint.contentType,
+        })
+        .expect(201);
+      expect(endpoint.handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('preserves the endpoint validator policy at the exact size limit', async () => {
+      const file = Buffer.alloc(endpoint.maxSize);
+      endpoint.file.copy(file);
+
+      await upload()
+        .attach('file', file, {
+          filename: endpoint.filename,
+          contentType: endpoint.contentType,
+        })
+        .expect(endpoint.exactSizeStatus);
+
+      // Nest's MaxFileSizeValidator is exclusive; the import parser is inclusive.
+      if (endpoint.exactSizeStatus === 201) {
+        expect(endpoint.handler).toHaveBeenCalledTimes(1);
+      } else {
+        expectNoDomainCalls();
+      }
     });
 
     it.each([

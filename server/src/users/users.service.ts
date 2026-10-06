@@ -5,7 +5,7 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import * as bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { InjectModel } from '@nestjs/mongoose';
 import { isValidObjectId, PaginateModel, Types } from 'mongoose';
 import { StudentProfile, User, UserDocument } from './schemas';

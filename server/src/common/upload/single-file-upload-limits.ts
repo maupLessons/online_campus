@@ -8,8 +8,8 @@ export function singleFileUploadLimits(
     files: 1,
     fields: 0,
     fieldNameSize: 100,
-    // Busboy emits partsLimit when it reaches the threshold, not after it.
-    // Allow one valid part; the second part must terminate the request.
-    parts: 2,
+    // Multer 2.4 adds one to Busboy's threshold so this is the maximum allowed.
+    // Count ignored dispositions too: a second part must terminate the request.
+    parts: 1,
   };
 }

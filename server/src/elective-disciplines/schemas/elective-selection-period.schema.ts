@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
-import * as paginate from 'mongoose-paginate-v2';
+import paginate from 'mongoose-paginate-v2';
 import { Group } from '../../references/schemas';
 import { User } from '../../users/schemas';
 import type { AcademicTerm } from '../../academic-terms/schemas/academic-term.schema';

@@ -60,7 +60,6 @@ export class ScheduleChangeNotifierService {
       Date.now() - event.previousFetchedAt.getTime() > this.maxAgeMs;
 
     // Spec §7.2, storm protection, rules 1–2 + exception for the session.
-    let items: ScheduleDiffItem[] = [];
     let messages: Array<{ title: string; message: string; actionUrl: string }>;
     let sourceEntries: ScheduleSnapshotEntry[];
 
@@ -70,7 +69,7 @@ export class ScheduleChangeNotifierService {
       sourceEntries = event.nextEntries;
     } else {
       const today = todayKyiv();
-      items = this.diffService.diff(
+      const items = this.diffService.diff(
         event.previousEntries as ScheduleSnapshotEntry[],
         event.nextEntries,
         today,

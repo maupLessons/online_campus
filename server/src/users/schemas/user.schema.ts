@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import mongoose, { Document, Types } from 'mongoose';
-import * as paginate from 'mongoose-paginate-v2';
+import paginate from 'mongoose-paginate-v2';
 import { Role } from '../../common/types/roles.enum';
 import { StudentProfile, StudentProfileSchema } from './student-profile.schema';
 import { TeacherProfile, TeacherProfileSchema } from './teacher-profile.schema';

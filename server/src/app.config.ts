@@ -2,7 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
-import * as compression from 'compression';
+import compression from 'compression';
 import { json, urlencoded, Request, Response, NextFunction } from 'express';
 
 type AppConfigOptions = {

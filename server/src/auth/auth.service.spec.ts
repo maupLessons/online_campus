@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import { createHash } from 'crypto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { Role } from '../common/types/roles.enum';

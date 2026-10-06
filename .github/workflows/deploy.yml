@@ -5,13 +5,16 @@ on:
     branches:
       - master
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Deploy to server
-        uses: appleboy/ssh-action@v1
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
@@ -19,7 +22,7 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           envs: MONGO_ROOT_USERNAME,MONGO_ROOT_PASSWORD,MONGO_DATABASE,MONGO_HOST,MONGO_PORT,MONGO_REPLICA_SET_NAME,MONGO_REPLICA_SET_KEY,JWT_SECRET,PORT,CLIENT_URL,DEPLOYMENT_ENV,SWAGGER_ENABLED,AUTH_ACCESS_COOKIE_NAME,AUTH_REFRESH_COOKIE_NAME,AUTH_ACCESS_COOKIE_PATH,AUTH_REFRESH_COOKIE_PATH,AUTH_CSRF_SECRET,AUTH_CSRF_COOKIE_NAME,AUTH_CSRF_COOKIE_PATH,AUTH_CSRF_BINDING_COOKIE_NAME,AUTH_CSRF_BINDING_COOKIE_PATH,AUTH_CSRF_HEADER_NAME,AUTH_COOKIE_SAMESITE,AUTH_COOKIE_SECURE,PASSWORD_RESET_EXPOSE_TOKEN,PASSWORD_RESET_EMAIL_ENABLED,EMAIL_FROM,SMTP_HOST,SMTP_PORT,SMTP_SECURE,SMTP_USER,SMTP_PASSWORD,SMTP_CONNECTION_TIMEOUT_MS,AUDIT_TRANSACTIONAL_OUTBOX,AUDIT_OUTBOX_POLL_INTERVAL_MS,AUDIT_OUTBOX_LOCK_TIMEOUT_MS,AUDIT_OUTBOX_MAX_ATTEMPTS,DB_MIGRATIONS_ENABLED,DB_MIGRATION_LOCK_TTL_MS,DB_MIGRATION_WAIT_TIMEOUT_MS,DB_MIGRATION_POLL_INTERVAL_MS,MAUP_API_MOCK
           script: |
-            # appleboy/ssh-action@v1 has no script_stop input any more; `set -e`
+            # appleboy/ssh-action has no script_stop input any more; `set -e`
             # is the documented replacement. Without it a failing git command
             # leaves the checkout stale and the job still reports success.
             set -e

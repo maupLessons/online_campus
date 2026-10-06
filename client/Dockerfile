@@ -1,4 +1,6 @@
-FROM node:24.17.0-alpine AS build
+FROM node:24.21.0-alpine AS build
+
+RUN npm install --global npm@11.21.0
 
 WORKDIR /app
 

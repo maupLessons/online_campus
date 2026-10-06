@@ -2296,6 +2296,57 @@ install script ще не погоджено. GitHub Actions зафіксован
 script has not been reviewed. GitHub Actions are pinned to full commit SHAs;
 workflow tokens have only `contents: read`, and checkout does not persist credentials.
 
+### ExcelJS і бюджет frontend chunks / ExcelJS and frontend chunk budget
+
+**Українською:** ExcelJS `4.4.0` збережено для сумісності XLSX-форматування та
+наявних імпортів/експортів. Точкові overrides оновлюють його `fast-csv` до
+`5.0.8`, `unzipper` до `0.12.5`, а `glob` у `archiver-utils` до `13.0.6`.
+`test-exclude` `8.0.0` прибирає deprecated `glob` із coverage-інструментів.
+Це усуває ланцюжки `inflight`, `fstream`, старих `rimraf` / `glob` і
+`lodash.isequal` без зміни формату файлів. Archiver для ExcelJS залишається
+в сумісній гілці `5.x`: його новіші major-версії несумісні з внутрішнім
+`StreamBuf` ExcelJS. Регресійний набір
+`server/src/common/export/spreadsheet-dependencies.spec.ts` перевіряє
+lockfile, XLSX-стилі, Unicode, нейтралізацію формул, CSV із BOM і багаторядковими
+полями, відмову для некоректного CSV, glob-фільтри, потоковий запис XLSX та
+розбір ZIP-частин. Кожна зміна overrides потребує повторного запуску цих
+тестів, повного dependency audit і coverage-перевірки.
+
+**English:** ExcelJS `4.4.0` is retained to preserve XLSX formatting and existing
+imports/exports. Targeted overrides update its `fast-csv` to `5.0.8`, `unzipper`
+to `0.12.5`, and `glob` under `archiver-utils` to `13.0.6`. `test-exclude`
+`8.0.0` removes deprecated `glob` from coverage tooling. This eliminates
+`inflight`, `fstream`, obsolete `rimraf` / `glob`, and `lodash.isequal` chains
+without changing file formats. ExcelJS retains compatible Archiver `5.x`:
+newer major versions do not support its internal `StreamBuf`. The regression
+suite in `server/src/common/export/spreadsheet-dependencies.spec.ts` checks
+the lockfile, XLSX styles, Unicode, formula neutralization, CSV BOM and
+multiline cells, malformed CSV rejection, glob filters, streaming XLSX output,
+and ZIP-part parsing. Override changes require rerunning these tests, full
+dependency audits, and coverage validation.
+
+**Українською:** Vite використовує native Rolldown `codeSplitting.groups` для
+React / Router, i18n, форм і TanStack Query замість одного загального vendor
+chunk. `strictExecutionOrder: true` зберігає порядок виконання модулів;
+сторінки залишаються lazy-loaded. `npm --prefix client run build` також запускає
+`client/scripts/check-build-budget.mjs`: кожен мінімізований JavaScript chunk
+має бути не більшим за `500000` байтів без стиснення. Стандартний warning limit
+Vite не підвищено, попередження не вимкнено. Перевищення бюджету або відсутність
+JavaScript-файлів зупиняє збірку, зокрема в CI і Docker.
+`npm --prefix client test` запускає як Vitest, так і Node.js-тести бюджетного gate.
+Manifest у `client/dist/.vite/manifest.json` дає змогу перевірити import graph.
+
+**English:** Vite uses native Rolldown `codeSplitting.groups` for React / Router,
+i18n, forms, and TanStack Query instead of a single vendor chunk.
+`strictExecutionOrder: true` preserves module execution order; pages remain
+lazy-loaded. `npm --prefix client run build` also runs
+`client/scripts/check-build-budget.mjs`: each minified JavaScript chunk must
+not exceed `500000` uncompressed bytes. Vite's default warning limit is not
+raised, and warnings remain enabled. Exceeding the budget or producing no
+JavaScript files fails the build, including CI and Docker.
+`npm --prefix client test` runs both Vitest and Node.js budget-gate tests.
+The manifest in `client/dist/.vite/manifest.json` exposes the import graph.
+
 ### Husky hooks
 
 Husky встановлюється з root `package.json` через `prepare` після `npm ci`.

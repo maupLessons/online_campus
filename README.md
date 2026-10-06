@@ -147,10 +147,10 @@ UA/EN. Scroll-area має окремий тонкий scrollbar, плавну п
 
 | Технологія      | Версія | Призначення                           |
 | --------------- | ------ | ------------------------------------- |
-| Node.js         | 24.17  | Runtime                               |
-| npm             | 11.13  | Package manager                       |
+| Node.js         | 24.21  | Runtime                               |
+| npm             | 11.21  | Package manager                       |
 | NestJS          | 11     | Framework (модулі, DI, guards, pipes) |
-| TypeScript      | 5      | Типізація                             |
+| TypeScript      | 6      | Типізація                             |
 | Passport.js     | —      | Стратегія JWT-аутентифікації          |
 | `@nestjs/jwt`   | —      | JWT access/refresh tokens             |
 | bcryptjs        | —      | Хешування паролів                     |
@@ -164,12 +164,12 @@ UA/EN. Scroll-area має окремий тонкий scrollbar, плавну п
 | Технологія          | Версія | Призначення                       |
 | ------------------- | ------ | --------------------------------- |
 | React               | 19     | UI framework                      |
-| TypeScript          | 5      | Типізація                         |
+| TypeScript          | 6      | Типізація                         |
 | Vite                | 8      | Bundler / dev-сервер              |
 | Tailwind CSS        | 4      | Утилітарні стилі                  |
 | Zustand             | 5      | State management (auth, UI state) |
 | Axios               | —      | HTTP-клієнт з interceptors        |
-| React Router        | 7      | Клієнтський роутинг               |
+| React Router        | 8      | Клієнтський роутинг               |
 | React Hook Form     | 7      | Form state management             |
 | Zod                 | 4      | Schema validation                 |
 | @hookform/resolvers | —      | React Hook Form + Zod integration |
@@ -1534,7 +1534,7 @@ parameters. These restrictions complement, but do not replace, patched Multer.
 online_campus/
 ├── docker-compose.yml
 ├── README.md
-├── .nvmrc                    # Node.js 24.17.0 LTS для локальної розробки та CI
+├── .nvmrc                    # Node.js 24.21.0 LTS для локальної розробки та CI
 ├── .npmrc                    # npm policy: engine-strict, save-exact, lockfile
 ├── package.json              # root tooling: Husky Git hooks
 ├── package-lock.json
@@ -1868,7 +1868,7 @@ seed-команда. Після seed можна увійти на `http://localh
 ```bash
 # один раз після clone / pull
 nvm use
-npm --version # підтримується npm 11.13.x
+npm --version # підтримується npm >=11.21.0 <12; baseline 11.21.0
 npm ci
 cd server && npm ci
 cd ../client && npm ci
@@ -2068,17 +2068,24 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: read
+
 jobs:
   repository:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
+      - run: npm install --global npm@11.21.0
       - run: npm ci --ignore-scripts
+      - run: npm audit --include=dev --audit-level=moderate
 
   server:
     runs-on: ubuntu-latest
@@ -2086,14 +2093,18 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: server/package-lock.json
+      - run: npm install --global npm@11.21.0
       - run: npm ci
-      - run: npm audit --audit-level=moderate
+      - run: npm audit --include=dev --audit-level=moderate
+      - run: npm audit --omit=dev --audit-level=moderate
       - run: npm run lint:check
       - run: npm run build
       - run: npm test
@@ -2106,14 +2117,18 @@ jobs:
       run:
         working-directory: client
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: client/package-lock.json
+      - run: npm install --global npm@11.21.0
       - run: npm ci
-      - run: npm audit --audit-level=moderate
+      - run: npm audit --include=dev --audit-level=moderate
+      - run: npm audit --omit=dev --audit-level=moderate
       - run: npm run lint:check
       - run: npm test
       - run: npm run build
@@ -2124,14 +2139,26 @@ jobs:
 Backend `npm run test:e2e` запускає швидкі smoke-перевірки без MongoDB, щоб CI мав детермінований e2e-сигнал. Повний DB-backed набір із Testcontainers запускається окремо командою `npm run test:e2e:db` у `server/` і потребує доступного Docker daemon.
 
 **Українською:** smoke-набір також перевіряє реальний multipart parser і
-сигнатури файлів. Команда сама вмикає `--experimental-vm-modules` лише для
-Jest, оскільки перевірка сигнатур завантажує ESM-пакет `file-type`.
-Production-команда цього прапорця не використовує.
+сигнатури файлів. Обидві E2E-команди вмикають `--experimental-vm-modules`
+лише для Jest: `file-type` є ESM-пакетом, а MongoDB driver 7.7 використовує
+динамічний `import()` для системного адаптера. Без цього прапорця driver
+може створити порожні handshake metadata. Production-команда не потребує прапорця.
 
 **English:** the smoke suite also exercises the real multipart parser and file
-signatures. Its command enables `--experimental-vm-modules` for Jest only,
-because signature validation dynamically loads the ESM `file-type` package.
-The production start command does not use this flag.
+signatures. Both E2E commands enable `--experimental-vm-modules` for Jest only:
+`file-type` is ESM, and MongoDB driver 7.7 dynamically imports its system adapter.
+Without this flag, the driver may produce empty handshake metadata.
+The production start command does not require the flag.
+
+**Українською:** у Multer 2.4 `limits.parts` означає максимальну дозволену
+кількість частин. Для single-file upload значення дорівнює `1`, включно з
+ігнорованими dispositions. Регресійні E2E-тести перевіряють зайві частини та
+граничні розміри файлів без зміни політики endpoint validators.
+
+**English:** Multer 2.4 treats `limits.parts` as the maximum permitted number
+of parts. Single-file uploads use `1`, including ignored dispositions.
+Regression E2E tests cover extra parts and file-size boundaries without changing
+the endpoint validators' existing policies.
 
 CI окремо запускає `academic-access.e2e-spec.ts`, який блокує регресії
 об'єктної авторизації для elective files/schedule/notifications та
@@ -2139,7 +2166,7 @@ CI окремо запускає `academic-access.e2e-spec.ts`, який бло�
 
 ### Deploy workflow (`.github/workflows/deploy.yml`)
 
-Запускається після push у `master`. Workflow підключається до VPS через SSH, виконує `git pull origin master`, записує `.env` із GitHub Secrets і запускає `docker compose up --build -d`.
+Запускається після push у `master`. Workflow підключається до VPS через SSH, синхронізує deployment-checkout із `origin/master` через `git fetch` та `git reset --hard FETCH_HEAD`, записує `.env` із GitHub Secrets і запускає `docker compose up --build -d`.
 
 Deploy workflow передає обов'язкові `MONGO_*`, `JWT_SECRET`, `PORT`,
 `CLIENT_URL`, `AUTH_CSRF_SECRET` та optional `AUTH_*`, `AUDIT_*`, SMTP і
@@ -2219,16 +2246,55 @@ reset-token exposure та вимагає authenticated SMTP.
 
 ### Правила роботи із залежностями
 
-- Рекомендована відтворювана версія з `.nvmrc`: Node.js `24.17.0` LTS із npm `11.13.0`.
-- Підтримуваний діапазон: Node.js `>=24.17.0 <25` і npm `>=11.13.0 <12`; patch-релізи в межах Node.js 24 не блокуються.
-- Якщо після `nvm use` npm застарілий, виконайте `npm install -g npm@11.13.0`.
+- Рекомендована відтворювана версія з `.nvmrc`: Node.js `24.21.0` LTS із npm `11.21.0`; CI та Docker встановлюють цю версію npm явно.
+- Підтримуваний діапазон: Node.js `>=24.21.0 <25` і npm `>=11.21.0 <12`; нові випуски Node.js 24 залишаються дозволеними.
+- Якщо після `nvm use` npm застарілий, виконайте `npm install -g npm@11.21.0`.
 - Для встановлення після `pull`, `rebase` або checkout гілки використовуйте тільки `npm ci` окремо в `server` і `client`.
 - `npm install` використовуйте лише коли додаєте, видаляєте або оновлюєте залежність.
 - Якщо змінюється `package.json`, у той самий commit має потрапити відповідний `package-lock.json`.
 - Не запускайте `npm audit fix --force` без окремого review: він може підняти major versions із breaking changes.
 - `.nvmrc` і Docker фіксують перевірений baseline, а `engines` задає підтримуваний безпечний діапазон без блокувального `devEngines`.
-- Dependabot щотижня перевіряє залежності в `/`, `/server`, `/client` і GitHub Actions.
+- Dependabot щомісяця перевіряє залежності в `/`, `/server`, `/client` і GitHub Actions; security updates не потрібно відкладати до планового version update.
 - У GitHub Settings для `master` потрібно увімкнути branch protection і зробити checks `Repository`, `Server` та `Client` обов'язковими перед merge.
+
+**Українською:** runtime NestJS залишається на актуальному випуску 11.x.
+Інструменти розробки використовують Nest CLI / schematics 12, TypeScript 6,
+Jest 30 і ESLint 10. Jest 30 та нова CLI-цепочка усувають залежність від
+`braces`, для якої [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+не має виправленого npm-релізу. Невикористовувані SWC / webpack-інструменти
+видалені; стандартна збірка backend використовує TypeScript compiler та
+Swagger plugin. `bcryptjs` і Nodemailer 10 містять власні типи, тому окремі
+`@types/bcryptjs` і `@types/nodemailer` не потрібні. Override `multer` посилається
+на його пряму залежність через `$multer`, щоб версії не розходилися.
+Після зміни lockfile потрібно перевіряти повне дерево і production-залежності
+окремо: результат `npm audit` залежить від актуальної бази advisories.
+Політика `allowScripts` дозволяє лише перевірені версії install scripts;
+телеметрію `@scarf/scarf` та необов'язкові нативні модулі `ssh2` / `cpu-features` вимкнено.
+Після оновлення пакета з install script перевірте `npm install-scripts ls`
+і перегляньте новий скрипт перед зміною його version-specific approval.
+
+**English:** the NestJS runtime stays on the current 11.x release. Development
+tools use Nest CLI / schematics 12, TypeScript 6, Jest 30, and ESLint 10.
+Jest 30 and the updated CLI dependency chain remove `braces`, which has no
+patched npm release for [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
+Unused SWC / webpack tooling has been removed; the backend builds with the
+TypeScript compiler and Swagger plugin. `bcryptjs` and Nodemailer 10 provide
+their own types, so their separate `@types` packages are unnecessary.
+The `multer` override uses `$multer` to follow the direct dependency.
+After lockfile changes, audit both the full dependency tree and production
+dependencies; audit results depend on the current advisory database.
+The `allowScripts` policy permits only reviewed versions of install scripts;
+`@scarf/scarf` telemetry and the optional `ssh2` / `cpu-features` native builds are disabled.
+After updating a package with an install script, run `npm install-scripts ls`
+and review its new script before changing the version-specific approval.
+
+**Українською:** `strict-allow-scripts=true` зупиняє встановлення, якщо новий
+install script ще не погоджено. GitHub Actions зафіксовані повними commit SHA;
+токен workflow має лише `contents: read`, а checkout не зберігає credentials.
+
+**English:** `strict-allow-scripts=true` fails installation when a new install
+script has not been reviewed. GitHub Actions are pinned to full commit SHAs;
+workflow tokens have only `contents: read`, and checkout does not persist credentials.
 
 ### Husky hooks
 
@@ -2295,4 +2361,4 @@ mkdir -p /opt/online_campus && cd /opt/online_campus
 
 ---
 
-_Документ актуальний станом на вересень 2026 року._
+_Документ актуальний станом на жовтень 2026 року._

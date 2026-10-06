@@ -206,11 +206,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
       } catch (err: unknown) {
         if (axios.isAxiosError(err)) {
           if (err.response?.status === 400) {
-            throw new Error("profile.changePasswordInvalidOldPassword");
+            throw new Error("profile.changePasswordInvalidOldPassword", {
+              cause: err,
+            });
           }
         }
 
-        throw new Error("profile.changePasswordError");
+        throw new Error("profile.changePasswordError", { cause: err });
       }
     },
 

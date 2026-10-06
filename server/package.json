@@ -97,7 +97,13 @@
     "js-yaml": "4.3.2",
     "multer": "$multer",
     "tmp": "0.2.7",
+    "archiver-utils": {
+      "glob": "13.0.6"
+    },
+    "test-exclude": "8.0.0",
     "exceljs": {
+      "fast-csv": "5.0.8",
+      "unzipper": "0.12.5",
       "uuid": "11.1.1"
     }
   },

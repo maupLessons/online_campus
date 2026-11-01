@@ -28,7 +28,7 @@
     "react-dom": "^19.3.0",
     "react-hook-form": "^7.89.0",
     "react-i18next": "^17.0.15",
-    "react-router": "8.4.0",
+    "react-router": "8.5.0",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"
   },
@@ -47,8 +47,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.71.1",
-    "vite": "8.3.3",
-    "vitest": "5.0.3"
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
   },
   "allowScripts": {
     "esbuild@0.28.2": true

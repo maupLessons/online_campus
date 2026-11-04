@@ -3,10 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "npm@11.21.0",
+  "packageManager": "npm@11.21.1",
   "engines": {
-    "node": ">=24.21.0 <25",
-    "npm": ">=11.21.0 <12"
+    "node": ">=24.22.2 <25",
+    "npm": ">=11.21.1 <12"
   },
   "scripts": {
     "prepare": "husky",

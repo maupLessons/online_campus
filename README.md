@@ -1534,7 +1534,7 @@ parameters. These restrictions complement, but do not replace, patched Multer.
 online_campus/
 ├── docker-compose.yml
 ├── README.md
-├── .nvmrc                    # Node.js 24.21.0 LTS для локальної розробки та CI
+├── .nvmrc                    # Node.js 24.22.2 LTS для локальної розробки та CI
 ├── .npmrc                    # npm policy: engine-strict, save-exact, lockfile
 ├── package.json              # root tooling: Husky Git hooks
 ├── package-lock.json
@@ -1868,7 +1868,7 @@ seed-команда. Після seed можна увійти на `http://localh
 ```bash
 # один раз після clone / pull
 nvm use
-npm --version # підтримується npm >=11.21.0 <12; baseline 11.21.0
+npm --version # підтримується npm >=11.21.1 <12; baseline 11.21.1
 npm ci
 cd server && npm ci
 cd ../client && npm ci
@@ -2078,12 +2078,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm install --global npm@11.21.0
+      - run: npm install --global npm@11.21.1
       - run: npm ci --ignore-scripts
       - run: npm audit --include=dev --audit-level=moderate
 
@@ -2096,12 +2096,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: server/package-lock.json
-      - run: npm install --global npm@11.21.0
+      - run: npm install --global npm@11.21.1
       - run: npm ci
       - run: npm audit --include=dev --audit-level=moderate
       - run: npm audit --omit=dev --audit-level=moderate
@@ -2120,12 +2120,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: client/package-lock.json
-      - run: npm install --global npm@11.21.0
+      - run: npm install --global npm@11.21.1
       - run: npm ci
       - run: npm audit --include=dev --audit-level=moderate
       - run: npm audit --omit=dev --audit-level=moderate
@@ -2246,9 +2246,9 @@ reset-token exposure та вимагає authenticated SMTP.
 
 ### Правила роботи із залежностями
 
-- Рекомендована відтворювана версія з `.nvmrc`: Node.js `24.21.0` LTS із npm `11.21.0`; CI та Docker встановлюють цю версію npm явно.
-- Підтримуваний діапазон: Node.js `>=24.21.0 <25` і npm `>=11.21.0 <12`; нові випуски Node.js 24 залишаються дозволеними.
-- Якщо після `nvm use` npm застарілий, виконайте `npm install -g npm@11.21.0`.
+- Рекомендована відтворювана версія з `.nvmrc`: Node.js `24.22.2` LTS із npm `11.21.1`; CI та Docker встановлюють цю версію npm явно.
+- Підтримуваний діапазон: Node.js `>=24.22.2 <25` і npm `>=11.21.1 <12`; нові випуски Node.js 24 залишаються дозволеними.
+- Якщо після `nvm use` npm застарілий, виконайте `npm install -g npm@11.21.1`.
 - Для встановлення після `pull`, `rebase` або checkout гілки використовуйте тільки `npm ci` окремо в `server` і `client`.
 - `npm install` використовуйте лише коли додаєте, видаляєте або оновлюєте залежність.
 - Якщо змінюється `package.json`, у той самий commit має потрапити відповідний `package-lock.json`.
@@ -2257,7 +2257,7 @@ reset-token exposure та вимагає authenticated SMTP.
 - Dependabot щомісяця перевіряє залежності в `/`, `/server`, `/client` і GitHub Actions; security updates не потрібно відкладати до планового version update.
 - У GitHub Settings для `master` потрібно увімкнути branch protection і зробити checks `Repository`, `Server` та `Client` обов'язковими перед merge.
 
-**Українською:** runtime NestJS залишається на актуальному випуску 11.x.
+**Українською:** runtime NestJS залишається на гілці 11.x.
 Інструменти розробки використовують Nest CLI / schematics 12, TypeScript 6,
 Jest 30 і ESLint 10. Jest 30 та нова CLI-цепочка усувають залежність від
 `braces`, для якої [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
@@ -2273,7 +2273,7 @@ Swagger plugin. `bcryptjs` і Nodemailer 10 містять власні типи
 Після оновлення пакета з install script перевірте `npm install-scripts ls`
 і перегляньте новий скрипт перед зміною його version-specific approval.
 
-**English:** the NestJS runtime stays on the current 11.x release. Development
+**English:** the NestJS runtime stays on the 11.x release line. Development
 tools use Nest CLI / schematics 12, TypeScript 6, Jest 30, and ESLint 10.
 Jest 30 and the updated CLI dependency chain remove `braces`, which has no
 patched npm release for [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm).
@@ -2296,11 +2296,33 @@ install script ще не погоджено. GitHub Actions зафіксован
 script has not been reviewed. GitHub Actions are pinned to full commit SHAs;
 workflow tokens have only `contents: read`, and checkout does not persist credentials.
 
+**Українською:** NestJS 11 використовує `multer` через `$multer` і
+виправлений `body-parser` через override, доки батьківські пакети не
+підтягнуть виправлення. `glob` та `minimatch` зафіксовано на виправлених
+версіях для серверних та інструментальних ланцюжків. Невикористовуваний
+`@eslint/eslintrc` видалено: обидві частини проєкту використовують flat config.
+NestJS 12, TypeScript 7 і npm 12 не входять до цього оновлення.
+Відомий залишковий ризик: [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4)
+має рівень low і стосується лише `deepmerge` у конфігурації Jest. Виправленого
+релізу наразі немає. Ця залежність не потрапляє до production; не передавайте
+недовірені конфігурації Jest. Поріг CI залишається `moderate`.
+
+**English:** NestJS 11 uses the patched `multer` via `$multer` and
+the patched `body-parser` via an override until their parent packages
+adopt the fixes. `glob` and `minimatch` are pinned to patched versions
+for server and tooling dependency chains. The unused `@eslint/eslintrc`
+was removed because both applications use flat config. This update does
+not migrate to NestJS 12, TypeScript 7, or npm 12.
+Known residual risk: [GHSA-gcqx-w48m-w2h4](https://github.com/advisories/GHSA-gcqx-w48m-w2h4)
+is a low-severity advisory for `deepmerge` in Jest configuration. No
+patched release is available yet. It is not a production dependency;
+do not pass untrusted Jest configuration. The CI threshold stays at `moderate`.
+
 ### ExcelJS і бюджет frontend chunks / ExcelJS and frontend chunk budget
 
 **Українською:** ExcelJS `4.4.0` збережено для сумісності XLSX-форматування та
 наявних імпортів/експортів. Точкові overrides оновлюють його `fast-csv` до
-`5.0.8`, `unzipper` до `0.12.5`, а `glob` у `archiver-utils` до `13.0.6`.
+`5.0.8`, `unzipper` до `0.12.5`, а `glob`, зокрема для `archiver-utils`, до `14.0.3`.
 `test-exclude` `8.0.0` прибирає deprecated `glob` із coverage-інструментів.
 Це усуває ланцюжки `inflight`, `fstream`, старих `rimraf` / `glob` і
 `lodash.isequal` без зміни формату файлів. Archiver для ExcelJS залишається
@@ -2314,7 +2336,7 @@ lockfile, XLSX-стилі, Unicode, нейтралізацію формул, CSV
 
 **English:** ExcelJS `4.4.0` is retained to preserve XLSX formatting and existing
 imports/exports. Targeted overrides update its `fast-csv` to `5.0.8`, `unzipper`
-to `0.12.5`, and `glob` under `archiver-utils` to `13.0.6`. `test-exclude`
+to `0.12.5`, and `glob`, including the `archiver-utils` chain, to `14.0.3`. `test-exclude`
 `8.0.0` removes deprecated `glob` from coverage tooling. This eliminates
 `inflight`, `fstream`, obsolete `rimraf` / `glob`, and `lodash.isequal` chains
 without changing file formats. ExcelJS retains compatible Archiver `5.x`:

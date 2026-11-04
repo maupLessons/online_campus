@@ -1,6 +1,6 @@
-FROM node:24.21.0-alpine AS build
+FROM node:24.22.2-alpine AS build
 
-RUN npm install --global npm@11.21.0
+RUN npm install --global npm@11.21.1
 
 WORKDIR /app
 
@@ -12,9 +12,9 @@ COPY . .
 
 RUN npm run build
 
-FROM node:24.21.0-alpine AS production
+FROM node:24.22.2-alpine AS production
 
-RUN npm install --global npm@11.21.0
+RUN npm install --global npm@11.21.1
 
 WORKDIR /app
 

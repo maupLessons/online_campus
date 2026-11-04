@@ -212,7 +212,8 @@ describe('Schedule (e2e)', () => {
     app.useLogger(['error']);
     useContainer(app.select(AppModule), { fallbackOnErrors: true });
     configureApp(app, { swaggerEnabled: false });
-    await app.init();
+    // Start once so concurrent SuperTest requests do not wait on server startup.
+    await app.listen(0, '127.0.0.1');
 
     connection = app.get(getConnectionToken());
     jwtService = app.get(JwtService);

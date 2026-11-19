@@ -42,10 +42,10 @@ export class CreateElectivePeriodDto {
   @IsMongoId({ each: true })
   targetGroupIds: string[];
 
-  @ApiProperty({ minimum: 1, maximum: 5, default: 1 })
+  @ApiProperty({ minimum: 1, maximum: 10, default: 1 })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(5)
+  @Max(10)
   requiredChoices: number = 1;
 }

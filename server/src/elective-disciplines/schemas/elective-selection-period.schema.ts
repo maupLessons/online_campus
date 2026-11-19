@@ -45,7 +45,7 @@ export class ElectiveSelectionPeriod {
   })
   targetGroups: Array<Group | Types.ObjectId>;
 
-  @Prop({ type: Number, required: true, min: 1, max: 5, default: 1 })
+  @Prop({ type: Number, required: true, min: 1, max: 10, default: 1 })
   requiredChoices: number;
 
   @Prop({

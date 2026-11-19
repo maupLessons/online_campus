@@ -13,6 +13,7 @@ import {
   type ElectivePeriodFinalization,
   type ElectivePeriodResults,
   type ElectiveSelection,
+  type GroupReference,
   type ReferenceView,
   type User,
 } from "../types";
@@ -63,17 +64,10 @@ export const electivesApi = {
     return data;
   },
 
-  select: async (periodId: string, disciplineId: string) => {
-    const { data } = await api.post<ElectiveSelection>(
-      `/electives/periods/${periodId}/select`,
-      { disciplineId },
-    );
-    return data;
-  },
-
-  cancelSelection: async (periodId: string, selectionId: string) => {
-    const { data } = await api.delete<{ success: true }>(
-      `/electives/periods/${periodId}/selections/${selectionId}`,
+  replaceSelections: async (periodId: string, disciplineIds: string[]) => {
+    const { data } = await api.put<ActiveElectivePeriod>(
+      `/electives/periods/${periodId}/selections`,
+      { disciplineIds },
     );
     return data;
   },
@@ -182,7 +176,7 @@ export const electiveReferencesApi = {
   },
 
   listGroups: async () => {
-    const { data } = await api.get<ReferenceView[]>("/references/groups");
+    const { data } = await api.get<GroupReference[]>("/references/groups");
     return data;
   },
 

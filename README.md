@@ -502,8 +502,7 @@ interface ElectiveSelection {
 | ----- | ---- | ------ | ---- |
 | GET | `/electives/active` | student | Доступні періоди та дисципліни для поточного студента |
 | GET | `/electives/my` | student | Мій поточний/історичний вибір |
-| POST | `/electives/periods/:periodId/select` | student | Зафіксувати вибір дисципліни |
-| DELETE | `/electives/periods/:periodId/selections/:selectionId` | student | Скасувати свій вибір у відкритому періоді |
+| PUT | `/electives/periods/:periodId/selections` | student | Замінити весь набір вибраних дисциплін у відкритому періоді (рівно `requiredChoices`; той самий набір — без змін і без запису в аудит) |
 | GET | `/electives/disciplines` | admin, department_head, dean | Список дисциплін |
 | POST | `/electives/disciplines` | admin, department_head, dean | Створити дисципліну-чернетку |
 | PUT | `/electives/disciplines/:id` | admin, department_head, dean | Оновити дисципліну |

@@ -534,11 +534,19 @@ export interface ReferenceView {
   code?: string;
 }
 
+export interface GroupReference {
+  id: string;
+  code: string;
+  course: number;
+  specialty?: { id: string; name?: string; code?: string };
+}
+
 export interface ElectiveDiscipline {
   id: string;
   code: string;
   title: string;
   description?: string;
+  syllabusUrl?: string;
   department: ReferenceView;
   teacher?: ReferenceView | null;
   term: AcademicTermRef;
@@ -606,9 +614,8 @@ export interface ActiveElectivePeriod {
 }
 
 export interface CreateElectiveDisciplineInput {
-  code: string;
   title: string;
-  description?: string;
+  syllabusUrl?: string;
   departmentId: string;
   teacherId?: string;
   termId?: string;

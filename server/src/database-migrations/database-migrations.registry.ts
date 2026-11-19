@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+import { upsertPublicAdministrationCatalog } from '../seed-data/catalogs/public-administration-electives';
 import { DatabaseMigration } from './database-migration.types';
 
 export const DATABASE_MIGRATIONS_TOKEN = Symbol('DATABASE_MIGRATIONS_TOKEN');
@@ -41,6 +43,25 @@ export const DATABASE_MIGRATIONS: readonly DatabaseMigration[] = [
           await collection.dropIndex(index.name);
         }
       }
+    },
+  },
+  {
+    id: '202611180001-public-administration-electives',
+    description:
+      'Add the public administration department and its 26 elective disciplines for the current term',
+    fingerprint: 'public-administration-electives-v1',
+    async up(database): Promise<void> {
+      const logger = new Logger('PublicAdministrationCatalogMigration');
+      // An empty database is a fresh install: the demo seeder adds the catalog
+      // after the reference data, so creating the faculty here would make the
+      // faculty/department seeders skip their mock data.
+      if ((await database.collection('users').estimatedDocumentCount()) === 0) {
+        logger.log(
+          'Public administration catalog skipped: empty database (fresh install)',
+        );
+        return;
+      }
+      await upsertPublicAdministrationCatalog(database, logger);
     },
   },
 ];

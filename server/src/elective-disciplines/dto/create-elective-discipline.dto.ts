@@ -4,18 +4,21 @@ import {
   IsMongoId,
   IsOptional,
   IsString,
+  IsUrl,
   Length,
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class CreateElectiveDisciplineDto {
-  @ApiProperty({ example: 'EL-CYB-01' })
+  @ApiPropertyOptional({ example: 'EL-CYB-01' })
+  @IsOptional()
   @IsString()
   @Length(2, 24)
-  code: string;
+  code?: string;
 
   @ApiProperty({ example: 'Основи кібербезпеки' })
   @IsString()
@@ -27,6 +30,17 @@ export class CreateElectiveDisciplineDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @ApiPropertyOptional({ example: 'https://maup.com.ua/assets/files/....pdf' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @ValidateIf((_, value) => value !== '')
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  syllabusUrl?: string;
 
   @ApiProperty()
   @IsMongoId()

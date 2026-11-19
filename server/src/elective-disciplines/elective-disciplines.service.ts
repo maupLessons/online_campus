@@ -28,6 +28,7 @@ import {
 import { NotificationType } from '../notifications/dto/create-notification.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AcademicTermsService } from '../academic-terms/academic-terms.service';
+import { AcademicTermDocument } from '../academic-terms/schemas/academic-term.schema';
 import { Department, Group } from '../references/schemas';
 import { User, UserDocument } from '../users/schemas';
 import { UsersService } from '../users/users.service';
@@ -38,7 +39,7 @@ import {
   CreateElectivePeriodDto,
   ElectiveDisciplineQueryDto,
   ElectivePeriodQueryDto,
-  SelectElectiveDto,
+  ReplaceElectiveSelectionsDto,
   SetElectiveDisciplineStatusDto,
   SetElectivePeriodStatusDto,
   UpdateElectiveDisciplineDto,
@@ -66,6 +67,11 @@ import { DomainAuditContext } from '../audit-log/audit-context';
 import { AUDIT_ACTIONS } from '../audit-log/audit-actions';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { computeElectivePhase, ElectivePhase } from './elective-phase';
+import { pluralizeDisciplines } from './pluralize-disciplines';
+import {
+  GENERATED_ELECTIVE_CODE,
+  insertWithGeneratedCode,
+} from './elective-code';
 
 type ReferenceView = {
   id: string;
@@ -80,6 +86,7 @@ export type ElectiveDisciplineView = {
   code: string;
   title: string;
   description?: string;
+  syllabusUrl?: string;
   department: ReferenceView;
   teacher?: ReferenceView | null;
   term: TermView;
@@ -188,9 +195,12 @@ type FinalizationBucket = {
 };
 
 type ExistingSelectionQuota = {
+  _id?: Types.ObjectId;
   discipline?: Types.ObjectId | string;
   choiceSlot?: number;
 };
+
+class SelectionConflictError extends Error {}
 
 const FINALIZATION_LOCK_TIMEOUT_MS = 15 * 60 * 1000;
 
@@ -222,12 +232,13 @@ export class ElectiveDisciplinesService {
     private readonly auditLogService?: AuditLogService,
   ) {}
 
+  private async resolveTerm(termId?: string): Promise<AcademicTermDocument> {
+    if (termId) return this.academicTerms.findById(termId);
+    return this.academicTerms.requireCurrent();
+  }
+
   private async resolveTermId(termId?: string): Promise<Types.ObjectId> {
-    if (termId) {
-      const term = await this.academicTerms.findById(termId);
-      return term._id;
-    }
-    return (await this.academicTerms.requireCurrent())._id;
+    return (await this.resolveTerm(termId))._id;
   }
 
   async createDiscipline(
@@ -244,19 +255,36 @@ export class ElectiveDisciplinesService {
       departmentId,
     );
 
-    const discipline = await this.disciplineModel.create({
-      code: this.normalizeCode(dto.code),
+    const term = await this.resolveTerm(dto.termId);
+    const fields = {
       title: this.trimRequired(dto.title, 'Назва дисципліни обовʼязкова'),
       description: this.trimOptional(dto.description),
+      syllabusUrl: this.trimOptional(dto.syllabusUrl),
       department: departmentId,
       teacher: teacherId,
-      term: await this.resolveTermId(dto.termId),
+      term: term._id,
       credits: dto.credits,
       capacity: dto.capacity,
       enrolledCount: 0,
       status: ElectiveDisciplineStatus.DRAFT,
       createdBy: this.toObjectId(user.sub),
-    });
+    };
+
+    const discipline = dto.code
+      ? await this.disciplineModel.create({
+          ...fields,
+          code: this.normalizeCode(dto.code),
+        })
+      : await insertWithGeneratedCode({
+          academicYear: term.academicYear,
+          termNumber: term.termNumber,
+          loadCodes: () =>
+            this.disciplineModel
+              .find({ term: term._id, code: GENERATED_ELECTIVE_CODE })
+              .distinct('code')
+              .exec(),
+          insert: (code) => this.disciplineModel.create({ ...fields, code }),
+        });
 
     return this.findDisciplineView(discipline._id);
   }
@@ -322,7 +350,6 @@ export class ElectiveDisciplinesService {
       discipline.teacher = null;
     }
 
-    if (dto.code !== undefined) discipline.code = this.normalizeCode(dto.code);
     if (dto.title !== undefined) {
       discipline.title = this.trimRequired(
         dto.title,
@@ -331,6 +358,9 @@ export class ElectiveDisciplinesService {
     }
     if (dto.description !== undefined) {
       discipline.description = this.trimOptional(dto.description);
+    }
+    if (dto.syllabusUrl !== undefined) {
+      discipline.syllabusUrl = this.trimOptional(dto.syllabusUrl);
     }
     if (dto.termId !== undefined) {
       discipline.term = await this.resolveTermId(dto.termId);
@@ -1203,12 +1233,12 @@ export class ElectiveDisciplinesService {
     return selections.map((selection) => this.formatSelection(selection));
   }
 
-  async selectDiscipline(
+  async replaceSelections(
     periodId: string,
-    dto: SelectElectiveDto,
+    dto: ReplaceElectiveSelectionsDto,
     user: AuthenticatedUser,
     audit?: DomainAuditContext,
-  ): Promise<ElectiveSelectionView> {
+  ): Promise<ActiveElectivePeriodView> {
     if (user.role !== Role.STUDENT) {
       throw new ForbiddenException('Вибір дисциплін доступний лише студентам');
     }
@@ -1229,178 +1259,218 @@ export class ElectiveDisciplinesService {
       throw new ForbiddenException('Період вибору недоступний для вашої групи');
     }
 
-    const studentId = this.toObjectId(user.sub);
-    const disciplineId = this.toObjectId(dto.disciplineId);
-    const groupObjectId = this.toObjectId(groupId);
+    const requiredChoices = period.requiredChoices;
+    // Normalise first: IsMongoId/ArrayUnique work on raw strings, so ids that
+    // differ only in hex case would otherwise pass as distinct.
+    const wanted = [
+      ...new Set(
+        dto.disciplineIds.map((id) => this.toObjectId(id).toHexString()),
+      ),
+    ].map((id) => this.toObjectId(id));
+    if (wanted.length !== requiredChoices) {
+      throw new BadRequestException({
+        code: 'elective_choice_count_mismatch',
+        message: `Потрібно обрати рівно ${requiredChoices} ${pluralizeDisciplines(requiredChoices)}`,
+        requiredChoices,
+      });
+    }
 
-    const [existingSelections, discipline] = await Promise.all([
-      this.selectionModel
+    const studentId = this.toObjectId(user.sub);
+    const groupObjectId = this.toObjectId(groupId);
+    const found = await this.disciplineModel
+      .find({
+        _id: { $in: wanted },
+        status: ElectiveDisciplineStatus.ACTIVE,
+        term: period.term,
+      })
+      .select('_id')
+      .lean<Array<{ _id: Types.ObjectId }>>()
+      .exec();
+    const foundIds = new Set(found.map((item) => this.idToString(item._id)));
+    const unavailable = wanted
+      .map((id) => id.toHexString())
+      .filter((id) => !foundIds.has(id));
+    if (unavailable.length > 0) {
+      throw new BadRequestException({
+        code: 'elective_discipline_unavailable',
+        message: 'Деякі дисципліни недоступні для вибору',
+        disciplineIds: unavailable,
+      });
+    }
+
+    const current = await this.selectionModel
+      .find({
+        period: period._id,
+        student: studentId,
+        status: { $in: ACTIVE_SELECTION_STATUSES },
+      })
+      .select('_id discipline choiceSlot')
+      .lean<ExistingSelectionQuota[]>()
+      .exec();
+    const currentIds = new Set(
+      current.map((selection) => this.idToString(selection.discipline)),
+    );
+    const wantedIds = new Set(wanted.map((id) => id.toHexString()));
+    const added = wanted.filter((id) => !currentIds.has(id.toHexString()));
+    const removed = current.filter(
+      (selection) => !wantedIds.has(this.idToString(selection.discipline)),
+    );
+    if (added.length === 0 && removed.length === 0) {
+      // No-op save: no audit record, and no interceptor fallback either.
+      audit?.skip?.();
+      return this.getActivePeriodViewForStudent(user, period._id);
+    }
+
+    const reserved: Types.ObjectId[] = [];
+    const cancelled: ExistingSelectionQuota[] = [];
+    const created: Types.ObjectId[] = [];
+    try {
+      // 1. Reserve seats for added disciplines; the old set is untouched
+      // until every seat is secured.
+      const full: string[] = [];
+      for (const id of added) {
+        const reservedDiscipline = await this.disciplineModel
+          .findOneAndUpdate(
+            {
+              _id: id,
+              status: ElectiveDisciplineStatus.ACTIVE,
+              term: period.term,
+              $expr: { $lt: ['$enrolledCount', '$capacity'] },
+            },
+            { $inc: { enrolledCount: 1 } },
+          )
+          .select('_id')
+          .exec();
+        if (reservedDiscipline) {
+          reserved.push(id);
+        } else {
+          full.push(id.toHexString());
+        }
+      }
+      if (full.length > 0) {
+        throw new ConflictException({
+          code: 'elective_capacity_full',
+          message: 'На деякі дисципліни закінчилися місця',
+          disciplineIds: full,
+        });
+      }
+
+      // 2. Cancel removed selections (frees their slots).
+      for (const selection of removed) {
+        const result = await this.selectionModel
+          .updateOne(
+            { _id: selection._id, status: ElectiveSelectionStatus.SELECTED },
+            {
+              $set: {
+                status: ElectiveSelectionStatus.CANCELLED,
+                cancelReason: 'student',
+                cancelledAt: new Date(),
+              },
+            },
+          )
+          .exec();
+        if (result.modifiedCount !== 1) {
+          throw new SelectionConflictError();
+        }
+        cancelled.push(selection);
+      }
+
+      // 3. Create added selections in the free slots.
+      const keptSlots = new Set(
+        current
+          .filter((selection) => !removed.includes(selection))
+          .map((selection) => selection.choiceSlot),
+      );
+      const freeSlots = Array.from(
+        { length: requiredChoices },
+        (_, slot) => slot,
+      ).filter((slot) => !keptSlots.has(slot));
+      for (const [index, id] of added.entries()) {
+        const selection = await this.selectionModel.create({
+          period: period._id,
+          discipline: id,
+          student: studentId,
+          group: groupObjectId,
+          choiceSlot: freeSlots[index],
+          selectedAt: new Date(),
+        });
+        created.push(selection._id);
+      }
+
+      // 4. A parallel save of the same student with a disjoint removed set
+      // can succeed on its own; the final set must be exactly the requested
+      // one, otherwise this request loses.
+      const finalSelections = await this.selectionModel
         .find({
           period: period._id,
           student: studentId,
           status: { $in: ACTIVE_SELECTION_STATUSES },
         })
-        .select('discipline choiceSlot')
+        .select('discipline')
         .lean<ExistingSelectionQuota[]>()
-        .exec(),
-      this.disciplineModel.findById(disciplineId).exec(),
-    ]);
-
-    if (!discipline) {
-      throw new NotFoundException('Вибіркова дисципліна не знайдена');
-    }
-    if (discipline.status !== ElectiveDisciplineStatus.ACTIVE) {
-      throw new BadRequestException('Дисципліна недоступна для вибору');
-    }
-    if (this.idToString(discipline.term) !== this.idToString(period.term)) {
-      throw new BadRequestException(
-        'Дисципліна не належить до навчального періоду цього періоду вибору',
-      );
-    }
-    if (
-      existingSelections.some(
-        (selection) =>
-          this.idToString(selection.discipline) === disciplineId.toHexString(),
-      )
-    ) {
-      throw new ConflictException('Цю дисципліну вже обрано');
-    }
-    if (existingSelections.length >= period.requiredChoices) {
-      throw new ConflictException(
-        'Ліміт вибору дисциплін для періоду вичерпано',
-      );
-    }
-
-    const reserved = await this.disciplineModel
-      .findOneAndUpdate(
-        {
-          _id: disciplineId,
-          status: ElectiveDisciplineStatus.ACTIVE,
-          term: period.term,
-          $expr: { $lt: ['$enrolledCount', '$capacity'] },
-        },
-        { $inc: { enrolledCount: 1 } },
-        { returnDocument: 'after' },
-      )
-      .exec();
-
-    if (!reserved) {
-      throw new ConflictException('Вільних місць на дисципліні вже немає');
-    }
-
-    let selection: ElectiveSelectionDocument;
-    try {
-      selection = await this.createSelectionInAvailableSlot({
-        period,
-        disciplineId,
-        studentId,
-        groupId: groupObjectId,
-        existingSelections,
-      });
-    } catch (error) {
-      await this.disciplineModel
-        .updateOne(
-          { _id: disciplineId, enrolledCount: { $gt: 0 } },
-          { $inc: { enrolledCount: -1 } },
-        )
         .exec();
-
+      if (
+        finalSelections.length !== wantedIds.size ||
+        finalSelections.some(
+          (selection) => !wantedIds.has(this.idToString(selection.discipline)),
+        )
+      ) {
+        throw new SelectionConflictError();
+      }
+    } catch (error) {
+      try {
+        await this.compensateReplace({
+          created,
+          cancelled,
+          reserved,
+          periodId: period._id,
+          studentId,
+        });
+      } catch (compensationError) {
+        this.logger.error(
+          `Elective selection compensation failed: periodId=${period._id.toHexString()} studentId=${studentId.toHexString()}`,
+          compensationError instanceof Error
+            ? compensationError.stack
+            : String(compensationError),
+        );
+      }
+      if (
+        error instanceof SelectionConflictError ||
+        this.isDuplicateKeyError(error)
+      ) {
+        throw new ConflictException({
+          code: 'elective_selection_conflict',
+          message: 'Вибір змінено в іншій вкладці. Оновіть сторінку',
+        });
+      }
       throw error;
     }
 
-    const populated = await this.selectionModel
-      .findById(selection._id)
-      .populate({
-        path: 'discipline',
-        populate: [
-          { path: 'department' },
-          { path: 'teacher' },
-          { path: 'term' },
-        ],
-      })
-      .populate('group')
-      .exec();
-
-    if (!populated) {
-      throw new NotFoundException('Вибір не знайдено після створення');
-    }
-
-    const view = this.formatSelection(populated);
-    await audit?.record({
-      action: AUDIT_ACTIONS.ELECTIVE_SELECTION_SELECT,
-      targetEntity: 'elective_selection',
-      targetId: view.id,
-      details: {
-        periodId: view.periodId,
-        periodTitle: period.title,
-        disciplineId: view.discipline.id,
-        disciplineCode: view.discipline.code,
-        disciplineTitle: view.discipline.title,
-        groupId: view.group.id,
-        choiceSlot: selection.choiceSlot,
-      },
-    });
-    return view;
-  }
-
-  async cancelSelection(
-    periodId: string,
-    selectionId: string,
-    user: AuthenticatedUser,
-    audit?: DomainAuditContext,
-  ): Promise<{ success: true }> {
-    if (user.role !== Role.STUDENT) {
-      throw new ForbiddenException('Вибір дисциплін доступний лише студентам');
-    }
-
-    const period = await this.getPeriodOrThrow(periodId);
-    this.ensurePeriodIsOpen(period);
-
-    const selection = await this.selectionModel
-      .findOneAndUpdate(
-        {
-          _id: this.toObjectId(selectionId),
-          period: period._id,
-          student: this.toObjectId(user.sub),
-          status: ElectiveSelectionStatus.SELECTED,
-        },
-        {
-          $set: {
-            status: ElectiveSelectionStatus.CANCELLED,
-            cancelReason: 'student',
-            cancelledAt: new Date(),
-          },
-        },
-        { returnDocument: 'after' },
-      )
-      .exec();
-
-    if (!selection) {
-      throw new NotFoundException('Вибір дисципліни не знайдено');
-    }
-
-    const disciplineId = this.toObjectId(this.idToString(selection.discipline));
-    await this.disciplineModel
-      .updateOne(
-        { _id: disciplineId, enrolledCount: { $gt: 0 } },
-        { $inc: { enrolledCount: -1 } },
-      )
-      .exec();
+    // Seats of removed disciplines are released only after the whole
+    // replacement succeeded, so a rollback never has to take a seat back.
+    await this.releaseSeats(
+      cancelled.map((selection) =>
+        this.toObjectId(this.idToString(selection.discipline)),
+      ),
+    );
 
     await audit?.record({
-      action: AUDIT_ACTIONS.ELECTIVE_SELECTION_CANCEL,
-      targetEntity: 'elective_selection',
-      targetId: selectionId,
+      action: AUDIT_ACTIONS.ELECTIVE_SELECTION_REPLACE,
+      targetEntity: 'elective_period',
+      targetId: period._id.toHexString(),
       details: {
-        periodId,
         periodTitle: period.title,
-        disciplineId: this.idToString(selection.discipline),
-        groupId: this.idToString(selection.group),
-        choiceSlot: selection.choiceSlot,
+        groupId,
+        before: [...currentIds],
+        after: [...wantedIds],
+        added: added.map((id) => id.toHexString()),
+        removed: removed.map((selection) =>
+          this.idToString(selection.discipline),
+        ),
       },
     });
 
-    return { success: true };
+    return this.getActivePeriodViewForStudent(user, period._id);
   }
 
   async getPeriodResults(
@@ -1553,92 +1623,74 @@ export class ElectiveDisciplinesService {
     });
   }
 
-  private async createSelectionInAvailableSlot(params: {
-    period: ElectiveSelectionPeriodDocument;
-    disciplineId: Types.ObjectId;
-    studentId: Types.ObjectId;
-    groupId: Types.ObjectId;
-    existingSelections: ExistingSelectionQuota[];
-  }): Promise<ElectiveSelectionDocument> {
-    const occupiedSlots = this.getOccupiedChoiceSlots(
-      params.existingSelections,
-      params.period.requiredChoices,
+  private async getActivePeriodViewForStudent(
+    user: AuthenticatedUser,
+    periodId: Types.ObjectId,
+  ): Promise<ActiveElectivePeriodView> {
+    const view = (await this.findActiveForStudent(user)).find(
+      (item) => item.period.id === periodId.toHexString(),
     );
+    if (!view) {
+      throw new NotFoundException('Період вибору не знайдено');
+    }
+    return view;
+  }
 
-    for (
-      let choiceSlot = 0;
-      choiceSlot < params.period.requiredChoices;
-      choiceSlot += 1
-    ) {
-      if (occupiedSlots.has(choiceSlot)) {
-        continue;
-      }
+  private async releaseSeats(ids: Types.ObjectId[]): Promise<void> {
+    for (const id of ids) {
+      await this.disciplineModel
+        .updateOne(
+          { _id: id, enrolledCount: { $gt: 0 } },
+          { $inc: { enrolledCount: -1 } },
+        )
+        .exec();
+    }
+  }
 
+  private async compensateReplace(params: {
+    created: Types.ObjectId[];
+    cancelled: ExistingSelectionQuota[];
+    reserved: Types.ObjectId[];
+    periodId: Types.ObjectId;
+    studentId: Types.ObjectId;
+  }): Promise<void> {
+    if (params.created.length > 0) {
+      await this.selectionModel
+        .deleteMany({ _id: { $in: params.created } })
+        .exec();
+    }
+    await this.releaseSeats(params.reserved);
+
+    // The seats of cancelled selections were never released, so a restored
+    // selection needs no counter change. One that cannot be restored stays
+    // cancelled and gives its seat back.
+    for (const selection of params.cancelled) {
+      let restoredSelection = false;
       try {
-        return await this.selectionModel.create({
-          period: params.period._id,
-          discipline: params.disciplineId,
-          student: params.studentId,
-          group: params.groupId,
-          choiceSlot,
-          selectedAt: new Date(),
-        });
+        const restored = await this.selectionModel
+          .updateOne(
+            { _id: selection._id, status: ElectiveSelectionStatus.CANCELLED },
+            {
+              $set: { status: ElectiveSelectionStatus.SELECTED },
+              $unset: { cancelReason: 1, cancelledAt: 1 },
+            },
+          )
+          .exec();
+        restoredSelection = restored.modifiedCount === 1;
       } catch (error) {
         if (!this.isDuplicateKeyError(error)) {
           throw error;
         }
+        this.logger.warn(
+          `Elective selection could not be restored after a conflict: periodId=${params.periodId.toHexString()} studentId=${params.studentId.toHexString()} selectionId=${this.idToString(selection._id)}`,
+        );
+      }
+      if (!restoredSelection) {
+        await this.releaseSeats([
+          this.toObjectId(this.idToString(selection.discipline)),
+        ]);
       }
     }
-
-    const duplicate = await this.selectionModel
-      .findOne({
-        period: params.period._id,
-        student: params.studentId,
-        discipline: params.disciplineId,
-        status: { $in: ACTIVE_SELECTION_STATUSES },
-      })
-      .select('_id')
-      .lean()
-      .exec();
-
-    if (duplicate) {
-      throw new ConflictException('Цю дисципліну вже обрано');
-    }
-
-    throw new ConflictException('Ліміт вибору дисциплін для періоду вичерпано');
-  }
-
-  private getOccupiedChoiceSlots(
-    selections: ExistingSelectionQuota[],
-    requiredChoices: number,
-  ): Set<number> {
-    const occupied = new Set(
-      selections
-        .map((selection) => selection.choiceSlot)
-        .filter(
-          (slot): slot is number =>
-            typeof slot === 'number' &&
-            Number.isInteger(slot) &&
-            slot >= 0 &&
-            slot < requiredChoices,
-        ),
-    );
-    const legacySelections = selections.filter(
-      (selection) => !Number.isInteger(selection.choiceSlot),
-    ).length;
-
-    for (
-      let slot = 0, assigned = 0;
-      slot < requiredChoices && assigned < legacySelections;
-      slot += 1
-    ) {
-      if (!occupied.has(slot)) {
-        occupied.add(slot);
-        assigned += 1;
-      }
-    }
-
-    return occupied;
   }
 
   private ensureDisciplineManager(user: AuthenticatedUser): void {
@@ -1931,7 +1983,7 @@ export class ElectiveDisciplinesService {
         await this.notificationsService.createMany(
           pending.map((student) => ({
             title: 'Завершується вибір дисциплін',
-            message: `Період «${period.title}» триває до ${period.endsAt.toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' })}. Оберіть ${period.requiredChoices} дисципліни.`,
+            message: `Період «${period.title}» триває до ${period.endsAt.toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv' })}. Оберіть ${period.requiredChoices} ${pluralizeDisciplines(period.requiredChoices)}.`,
             type: NotificationType.ELECTIVE,
             targetType: 'all' as const,
             userId: this.idToString(student._id),
@@ -2022,7 +2074,7 @@ export class ElectiveDisciplinesService {
       return;
     }
 
-    // Defensive re-check: selectDiscipline() already rejects a discipline
+    // Defensive re-check: replaceSelections() already rejects a discipline
     // whose term differs from the period's term, so this should never
     // trigger in practice. Kept here in case a discipline's term changes
     // (or data drifts) between selection and finalization.
@@ -2459,6 +2511,9 @@ export class ElectiveDisciplinesService {
       code: discipline.code,
       title: discipline.title,
       ...(description ? { description } : {}),
+      ...(discipline.syllabusUrl
+        ? { syllabusUrl: discipline.syllabusUrl }
+        : {}),
       department: this.referenceView(discipline.department, 'name'),
       teacher: this.teacherView(discipline.teacher),
       term: this.termView(discipline.term),

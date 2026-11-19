@@ -68,7 +68,7 @@ export class ElectiveSelection {
   @Prop({ type: Date, default: null })
   cancelledAt?: Date | null;
 
-  @Prop({ type: Number, min: 0, max: 4 })
+  @Prop({ type: Number, min: 0, max: 9 })
   choiceSlot?: number;
 
   @Prop({

@@ -41,11 +41,12 @@ import { useCurrentTerm } from "../../hooks/useCurrentTerm";
 import { downloadBlob } from "../../utils/spreadsheetExport";
 import { getLocalizedApiErrorMessage } from "../../utils/apiErrorMessage";
 import { formatTerm } from "../../utils/formatTerm";
+import SyllabusLink from "./SyllabusLink";
+import TargetGroupsPicker from "./TargetGroupsPicker";
 
 type DisciplineFormState = {
-  code: string;
   title: string;
-  description: string;
+  syllabusUrl: string;
   departmentId: string;
   teacherId: string;
   credits: string;
@@ -62,9 +63,8 @@ type PeriodFormState = {
 
 function initialDisciplineForm(): DisciplineFormState {
   return {
-    code: "",
     title: "",
-    description: "",
+    syllabusUrl: "",
     departmentId: "",
     teacherId: "",
     credits: "3",
@@ -104,9 +104,8 @@ function buildDisciplinePayload(
   form: DisciplineFormState,
 ): CreateElectiveDisciplineInput {
   return {
-    code: form.code.trim(),
     title: form.title.trim(),
-    description: form.description.trim() || undefined,
+    syllabusUrl: form.syllabusUrl.trim(),
     departmentId: form.departmentId,
     teacherId: form.teacherId || undefined,
     credits: Number(form.credits),
@@ -126,9 +125,8 @@ function buildPeriodPayload(form: PeriodFormState): CreateElectivePeriodInput {
 
 function disciplineToForm(discipline: ElectiveDiscipline): DisciplineFormState {
   return {
-    code: discipline.code,
     title: discipline.title,
-    description: discipline.description ?? "",
+    syllabusUrl: discipline.syllabusUrl ?? "",
     departmentId: discipline.department.id,
     teacherId: discipline.teacher?.id ?? "",
     credits: String(discipline.credits),
@@ -446,7 +444,7 @@ export default function ElectiveAdminPage() {
     event.preventDefault();
     const payload = buildDisciplinePayload(disciplineForm);
 
-    if (!payload.code || !payload.title || !payload.departmentId) {
+    if (!payload.title || !payload.departmentId) {
       setFormError(t("electives.admin.requiredError"));
       return;
     }
@@ -544,22 +542,6 @@ export default function ElectiveAdminPage() {
               )}
             </div>
 
-            <label className="space-y-1 text-sm text-slate-600">
-              <span>{t("electives.admin.fields.code")}</span>
-              <input
-                value={disciplineForm.code}
-                onChange={(event) => {
-                  const code = event.target.value;
-                  setDisciplineForm((current) => ({
-                    ...current,
-                    code,
-                  }));
-                }}
-                maxLength={24}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-              />
-            </label>
-
             <p className="text-sm text-slate-500">
               {t("electives.termHint", { term: formatTerm(currentTerm, t) })}
             </p>
@@ -581,20 +563,26 @@ export default function ElectiveAdminPage() {
             </label>
 
             <label className="space-y-1 text-sm text-slate-600">
-              <span>{t("electives.admin.fields.description")}</span>
-              <textarea
-                value={disciplineForm.description}
+              <span>{t("electives.admin.fields.syllabusUrl")}</span>
+              <input
+                type="url"
+                pattern="https://.+"
+                title={t("electives.admin.syllabusHint")}
+                value={disciplineForm.syllabusUrl}
                 onChange={(event) => {
-                  const description = event.target.value;
+                  const syllabusUrl = event.target.value;
                   setDisciplineForm((current) => ({
                     ...current,
-                    description,
+                    syllabusUrl,
                   }));
                 }}
-                rows={3}
-                maxLength={2000}
+                placeholder="https://…"
+                maxLength={2048}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               />
+              <p className="text-xs text-slate-500">
+                {t("electives.admin.syllabusHint")}
+              </p>
             </label>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -750,7 +738,7 @@ export default function ElectiveAdminPage() {
                 <input
                   type="number"
                   min={1}
-                  max={5}
+                  max={10}
                   value={periodForm.requiredChoices}
                   onChange={(event) => {
                     const requiredChoices = event.target.value;
@@ -796,30 +784,14 @@ export default function ElectiveAdminPage() {
                 </label>
               </div>
 
-              <label className="space-y-1 text-sm text-slate-600">
-                <span>{t("electives.groups")}</span>
-                <select
-                  multiple
-                  value={periodForm.targetGroupIds}
-                  onChange={(event) => {
-                    const targetGroupIds = Array.from(
-                      event.currentTarget.selectedOptions,
-                      (option) => option.value,
-                    );
-                    setPeriodForm((current) => ({
-                      ...current,
-                      targetGroupIds,
-                    }));
-                  }}
-                  className="min-h-32 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                >
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.code ?? group.name ?? group.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <TargetGroupsPicker
+                groups={groups}
+                value={periodForm.targetGroupIds}
+                onChange={(targetGroupIds) =>
+                  setPeriodForm((current) => ({ ...current, targetGroupIds }))
+                }
+                disabled={isWorking}
+              />
 
               <button
                 type="submit"
@@ -928,6 +900,11 @@ export default function ElectiveAdminPage() {
                           {discipline.department.name ??
                             discipline.department.id}
                         </p>
+                        {discipline.syllabusUrl ? (
+                          <div className="mt-2">
+                            <SyllabusLink url={discipline.syllabusUrl} />
+                          </div>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2 sm:justify-end">
                         <button

@@ -30,6 +30,7 @@ export const AUDIT_ACTIONS = {
   ELECTIVE_PERIOD_FINALIZE: 'elective.period.finalize',
   ELECTIVE_SELECTION_SELECT: 'elective.selection.select',
   ELECTIVE_SELECTION_CANCEL: 'elective.selection.cancel',
+  ELECTIVE_SELECTION_REPLACE: 'elective.selection.replace',
   REPORT_VIEW: 'report.view',
   REPORT_EXPORT: 'report.export',
   GRADEBOOK_VIEW: 'gradebook.viewed',

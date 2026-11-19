@@ -47,6 +47,9 @@ const SurveyResultsPage = lazy(
   () => import('./pages/surveys/SurveyResultsPage'),
 );
 const ElectivesPage = lazy(() => import('./pages/electives/ElectivesPage'));
+const ElectiveSelectionPage = lazy(
+  () => import('./pages/electives/ElectiveSelectionPage'),
+);
 const ElectiveAdminPage = lazy(
   () => import('./pages/electives/ElectiveAdminPage'),
 );
@@ -215,6 +218,16 @@ export default function App() {
               <ProtectedRoute allowedRoles={[Role.STUDENT]}>
                 <LazyPage>
                   <ElectivesPage />
+                </LazyPage>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="electives/periods/:periodId"
+            element={
+              <ProtectedRoute allowedRoles={[Role.STUDENT]}>
+                <LazyPage>
+                  <ElectiveSelectionPage />
                 </LazyPage>
               </ProtectedRoute>
             }

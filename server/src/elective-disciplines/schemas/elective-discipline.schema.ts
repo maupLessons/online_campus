@@ -21,6 +21,9 @@ export class ElectiveDiscipline {
   @Prop({ trim: true, maxlength: 2000 })
   description?: string;
 
+  @Prop({ type: String, trim: true, maxlength: 2048 })
+  syllabusUrl?: string;
+
   @Prop({
     type: MongooseSchema.Types.ObjectId,
     ref: 'Department',

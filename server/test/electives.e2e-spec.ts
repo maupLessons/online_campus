@@ -15,6 +15,8 @@ import {
   ElectiveDisciplineStatus,
   ElectiveSelectionPeriodStatus,
 } from '../src/elective-disciplines/schemas';
+import { DATABASE_MIGRATIONS } from '../src/database-migrations/database-migrations.registry';
+import { upsertPublicAdministrationCatalog } from '../src/seed-data/catalogs/public-administration-electives';
 import { SeedService } from '../src/seed-data/seed.service';
 
 const SETUP_TIMEOUT = 120_000;
@@ -88,8 +90,15 @@ type ActivePeriodBody = {
   disciplines: Array<{ id: string }>;
 };
 
-type SelectionBody = {
-  id: string;
+type ReplaceBody = {
+  period: { id: string };
+  selectedCount: number;
+  remainingChoices: number;
+};
+
+type ErrorBody = {
+  code: string;
+  disciplineIds?: string[];
 };
 
 type FinalizationBody = {
@@ -360,15 +369,39 @@ describe('Elective disciplines (e2e)', () => {
     return id;
   };
 
-  const select = (
+  const saveSelections = (
     actor: Actor,
     periodId: Types.ObjectId,
-    disciplineId: Types.ObjectId,
+    disciplineIds: Types.ObjectId[],
   ) =>
     request(app.getHttpServer())
-      .post(`/api/electives/periods/${periodId.toHexString()}/select`)
+      .put(`/api/electives/periods/${periodId.toHexString()}/selections`)
       .set('Authorization', `Bearer ${actor.token}`)
-      .send({ disciplineId: disciplineId.toHexString() });
+      .send({ disciplineIds: disciplineIds.map(String) });
+
+  const activeSelections = (periodId: Types.ObjectId, student: Actor) =>
+    collection('ElectiveSelection')
+      .find({
+        period: periodId,
+        student: student.id,
+        status: { $in: ['selected', 'enrolled'] },
+      })
+      .toArray();
+
+  const enrolled = async (id: Types.ObjectId) =>
+    Number(
+      (await collection('ElectiveDiscipline').findOne({ _id: id }))
+        ?.enrolledCount ?? 0,
+    );
+
+  const seedDisciplines = (
+    fixture: BaseFixture,
+    count: number,
+    overrides: Record<string, unknown> = {},
+  ) =>
+    Promise.all(
+      Array.from({ length: count }, () => seedDiscipline(fixture, overrides)),
+    );
 
   it('enforces authentication, role boundaries and department scoping', async () => {
     const fixture = await seedBase();
@@ -445,6 +478,86 @@ describe('Elective disciplines (e2e)', () => {
     await expectAuditEntry('electives-rbac-success', 'success');
   });
 
+  it('stores, validates and clears the syllabus link', async () => {
+    const fixture = await seedBase();
+    const base = {
+      code: 'EL-SYL-01',
+      title: 'Електронне врядування',
+      departmentId: fixture.departmentAId.toHexString(),
+      credits: 3,
+      capacity: 30,
+    };
+    const post = (body: Record<string, unknown>) =>
+      request(app.getHttpServer())
+        .post('/api/electives/disciplines')
+        .set('Authorization', `Bearer ${fixture.admin.token}`)
+        .send(body);
+
+    for (const bad of [
+      'http://maup.com.ua/x.pdf',
+      'javascript:alert(1)',
+      'maup.com.ua/x.pdf',
+      `https://maup.com.ua/${'a'.repeat(2050)}.pdf`,
+    ]) {
+      await post({ ...base, syllabusUrl: bad }).expect(400);
+    }
+
+    const created = await post({
+      ...base,
+      syllabusUrl: '  https://maup.com.ua/x.pdf  ',
+    }).expect(201);
+    const createdBody = created.body as DisciplineBody & {
+      syllabusUrl?: string;
+    };
+    expect(createdBody.syllabusUrl).toBe('https://maup.com.ua/x.pdf');
+
+    const cleared = await request(app.getHttpServer())
+      .put(`/api/electives/disciplines/${createdBody.id}`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ syllabusUrl: '' })
+      .expect(200);
+    expect(
+      (cleared.body as { syllabusUrl?: string }).syllabusUrl,
+    ).toBeUndefined();
+    const stored = await collection('ElectiveDiscipline').findOne({
+      _id: new Types.ObjectId(createdBody.id),
+    });
+    expect(stored).not.toHaveProperty('syllabusUrl');
+  });
+
+  it('generates discipline codes and keeps them immutable', async () => {
+    const fixture = await seedBase();
+    const term = await collection('AcademicTerm').findOne({
+      _id: fixture.termId,
+    });
+    const prefix = `EL-${String(term?.academicYear).slice(0, 4)}-${term?.termNumber}-`;
+    const create = (title: string, extra: Record<string, unknown> = {}) =>
+      request(app.getHttpServer())
+        .post('/api/electives/disciplines')
+        .set('Authorization', `Bearer ${fixture.admin.token}`)
+        .send({
+          title,
+          departmentId: fixture.departmentAId.toHexString(),
+          credits: 3,
+          capacity: 30,
+          ...extra,
+        });
+
+    await create('Ручна', { code: 'el-ai-01' }).expect(201);
+    const [a, b] = await Promise.all([create('Перша'), create('Друга')]);
+    expect([a.status, b.status]).toEqual([201, 201]);
+    const codes = [a.body, b.body]
+      .map((body) => (body as DisciplineBody).code)
+      .sort();
+    expect(codes).toEqual([`${prefix}001`, `${prefix}002`]);
+
+    await request(app.getHttpServer())
+      .put(`/api/electives/disciplines/${(a.body as DisciplineBody).id}`)
+      .set('Authorization', `Bearer ${fixture.admin.token}`)
+      .send({ code: 'EL-NEW' })
+      .expect(400);
+  });
+
   it('shows periods only to targeted students and rejects foreign groups', async () => {
     const fixture = await seedBase();
     const disciplineId = await seedDiscipline(fixture);
@@ -464,7 +577,9 @@ describe('Elective disciplines (e2e)', () => {
       .expect(200);
     expect(hidden.body).toEqual([]);
 
-    await select(fixture.outsiderStudent, periodId, disciplineId).expect(403);
+    await saveSelections(fixture.outsiderStudent, periodId, [
+      disciplineId,
+    ]).expect(403);
     await request(app.getHttpServer())
       .get('/api/electives/active')
       .set('Authorization', `Bearer ${fixture.teacherA.token}`)
@@ -487,154 +602,371 @@ describe('Elective disciplines (e2e)', () => {
     expect(res.body).toEqual([]);
   });
 
-  it('atomically assigns the last available seat to only one student', async () => {
+  it('accepts up to 10 required choices and fills slots up to 9', async () => {
     const fixture = await seedBase();
-    const disciplineId = await seedDiscipline(fixture, { capacity: 1 });
-    const periodId = await seedPeriod(fixture);
+    const create = (requiredChoices: number) =>
+      request(app.getHttpServer())
+        .post('/api/electives/periods')
+        .set('Authorization', `Bearer ${fixture.admin.token}`)
+        .send({
+          title: `Ліміт ${requiredChoices}`,
+          startsAt: new Date(Date.now() - 60_000).toISOString(),
+          endsAt: new Date(Date.now() + 86_400_000).toISOString(),
+          targetGroupIds: [fixture.groupAId.toHexString()],
+          requiredChoices,
+        });
+    await create(10).expect(201);
+    await create(11).expect(400);
 
-    const responses = await Promise.all([
-      select(fixture.studentA, periodId, disciplineId),
-      select(fixture.studentB, periodId, disciplineId),
-    ]);
-
-    expect(responses.map((response) => response.status).sort()).toEqual([
-      201, 409,
-    ]);
-    expect(
-      await collection('ElectiveSelection').countDocuments({
-        period: periodId,
-        discipline: disciplineId,
-      }),
-    ).toBe(1);
-    const discipline = await collection('ElectiveDiscipline').findOne({
-      _id: disciplineId,
-    });
-    expect(discipline?.enrolledCount).toBe(1);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 10 });
+    const disciplineIds = await Promise.all(
+      Array.from({ length: 10 }, () => seedDiscipline(fixture)),
+    );
+    await saveSelections(fixture.studentA, periodId, disciplineIds).expect(200);
+    const slots = await collection('ElectiveSelection')
+      .find({ period: periodId, student: fixture.studentA.id })
+      .map((doc) => doc.choiceSlot as number)
+      .toArray();
+    expect(slots.sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
   });
 
-  it('prevents concurrent requests from exceeding requiredChoices', async () => {
+  it('saves a full set and fills slots', async () => {
     const fixture = await seedBase();
-    const firstDisciplineId = await seedDiscipline(fixture);
-    const secondDisciplineId = await seedDiscipline(fixture);
-    const periodId = await seedPeriod(fixture, { requiredChoices: 1 });
+    const ids = await seedDisciplines(fixture, 6);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 6 });
 
-    const responses = await Promise.all([
-      select(fixture.studentA, periodId, firstDisciplineId),
-      select(fixture.studentA, periodId, secondDisciplineId),
-    ]);
+    const res = await saveSelections(fixture.studentA, periodId, ids).expect(
+      200,
+    );
 
-    expect(responses.map((response) => response.status).sort()).toEqual([
-      201, 409,
+    const body = res.body as ReplaceBody;
+    expect(body.period.id).toBe(periodId.toHexString());
+    expect(body.selectedCount).toBe(6);
+    expect(body.remainingChoices).toBe(0);
+    const selections = await activeSelections(periodId, fixture.studentA);
+    expect(selections.map((s) => s.choiceSlot as number).sort()).toEqual([
+      0, 1, 2, 3, 4, 5,
     ]);
-    expect(
-      await collection('ElectiveSelection').countDocuments({
+    for (const id of ids) {
+      expect(await enrolled(id)).toBe(1);
+    }
+  });
+
+  it('replaces part of the set and adjusts only changed counters', async () => {
+    const fixture = await seedBase();
+    const ids = await seedDisciplines(fixture, 8);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 6 });
+    await saveSelections(fixture.studentA, periodId, ids.slice(0, 6)).expect(
+      200,
+    );
+    const before = await activeSelections(periodId, fixture.studentA);
+    const slotOf = new Map(
+      before.map((s) => [
+        (s.discipline as Types.ObjectId).toHexString(),
+        s.choiceSlot as number,
+      ]),
+    );
+
+    await saveSelections(fixture.studentA, periodId, [
+      ...ids.slice(0, 4),
+      ids[6],
+      ids[7],
+    ])
+      .set('X-Request-Id', 'electives-replace-partial')
+      .expect(200);
+
+    for (const removed of ids.slice(4, 6)) {
+      const doc = await collection('ElectiveSelection').findOne({
         period: periodId,
         student: fixture.studentA.id,
+        discipline: removed,
+      });
+      expect(doc?.status).toBe('cancelled');
+      expect(doc?.cancelReason).toBe('student');
+      expect(await enrolled(removed)).toBe(0);
+    }
+    const freedSlots = ids
+      .slice(4, 6)
+      .map((id) => slotOf.get(id.toHexString()) as number)
+      .sort((a, b) => a - b);
+    const addedSlots = (
+      await Promise.all(
+        ids.slice(6).map((id) =>
+          collection('ElectiveSelection').findOne({
+            period: periodId,
+            student: fixture.studentA.id,
+            discipline: id,
+            status: 'selected',
+          }),
+        ),
+      )
+    )
+      .map((doc) => doc?.choiceSlot as number)
+      .sort((a, b) => a - b);
+    expect(addedSlots).toEqual(freedSlots);
+    for (const id of [...ids.slice(0, 4), ...ids.slice(6)]) {
+      expect(await enrolled(id)).toBe(1);
+    }
+    expect(await activeSelections(periodId, fixture.studentA)).toHaveLength(6);
+    await expectAuditEntry(
+      'electives-replace-partial',
+      'success',
+      'elective_period',
+      'elective.selection.replace',
+    );
+  });
+
+  it('treats the same set in another order as a no-op', async () => {
+    const fixture = await seedBase();
+    const ids = await seedDisciplines(fixture, 6);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 6 });
+    await saveSelections(fixture.studentA, periodId, ids)
+      .set('X-Request-Id', 'electives-replace-first')
+      .expect(200);
+    await expectAuditEntry(
+      'electives-replace-first',
+      'success',
+      'elective_period',
+      'elective.selection.replace',
+    );
+    const snapshot = async () => ({
+      selections: await collection('ElectiveSelection')
+        .find({ period: periodId })
+        .sort({ _id: 1 })
+        .toArray(),
+      disciplines: await collection('ElectiveDiscipline')
+        .find({})
+        .sort({ _id: 1 })
+        .toArray(),
+    });
+    const before = await snapshot();
+
+    const res = await saveSelections(
+      fixture.studentA,
+      periodId,
+      [...ids].reverse(),
+    )
+      .set('X-Request-Id', 'electives-replace-noop')
+      .expect(200);
+
+    expect((res.body as ReplaceBody).selectedCount).toBe(6);
+    expect(await snapshot()).toEqual(before);
+    // Audit records go through an async outbox: wait for it to drain, then
+    // check that the no-op request left no record (not even a fallback).
+    for (let attempt = 0; attempt < 80; attempt += 1) {
+      const open = await connection.collection('audit_outbox').countDocuments({
+        status: { $in: ['pending', 'processing'] },
+      });
+      if (open === 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(
+      await connection.collection('audit_outbox').countDocuments({
+        'payload.requestId': 'electives-replace-noop',
+      }),
+    ).toBe(0);
+    expect(
+      await collection('AuditLog').countDocuments({
+        requestId: 'electives-replace-noop',
+        action: 'elective.selection.replace',
+      }),
+    ).toBe(0);
+  });
+
+  it('rejects wrong count and unavailable disciplines', async () => {
+    const fixture = await seedBase();
+    const ids = await seedDisciplines(fixture, 6);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 6 });
+
+    const mismatch = await saveSelections(
+      fixture.studentA,
+      periodId,
+      ids.slice(0, 5),
+    ).expect(400);
+    expect((mismatch.body as ErrorBody).code).toBe(
+      'elective_choice_count_mismatch',
+    );
+
+    const draftId = await seedDiscipline(fixture, {
+      status: ElectiveDisciplineStatus.DRAFT,
+    });
+    const otherTermId = new Types.ObjectId();
+    const foreignTermId = await seedDiscipline(fixture, { term: otherTermId });
+    for (const bad of [draftId, foreignTermId]) {
+      const res = await saveSelections(fixture.studentA, periodId, [
+        ...ids.slice(0, 5),
+        bad,
+      ]).expect(400);
+      const body = res.body as ErrorBody;
+      expect(body.code).toBe('elective_discipline_unavailable');
+      expect(body.disciplineIds).toContain(bad.toHexString());
+    }
+
+    await saveSelections(
+      fixture.studentA,
+      periodId,
+      Array.from({ length: 11 }, () => new Types.ObjectId()),
+    ).expect(400);
+    expect(await activeSelections(periodId, fixture.studentA)).toHaveLength(0);
+  });
+
+  it('gives the last seat to one student and keeps the other set intact', async () => {
+    const fixture = await seedBase();
+    const [x, y] = await seedDisciplines(fixture, 2);
+    await collection('ElectiveDiscipline').updateOne(
+      { _id: y },
+      { $set: { capacity: 1 } },
+    );
+    const periodId = await seedPeriod(fixture, { requiredChoices: 1 });
+    await saveSelections(fixture.studentB, periodId, [x]).expect(200);
+
+    const responses = await Promise.all([
+      saveSelections(fixture.studentA, periodId, [y]),
+      saveSelections(fixture.studentB, periodId, [y]),
+    ]);
+
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+    const loserIndex = responses.findIndex((r) => r.status === 409);
+    const loserBody = responses[loserIndex].body as ErrorBody;
+    expect(loserBody.code).toBe('elective_capacity_full');
+    expect(loserBody.disciplineIds).toEqual([y.toHexString()]);
+    if (loserIndex === 1) {
+      const kept = await activeSelections(periodId, fixture.studentB);
+      expect(kept.map((s) => String(s.discipline))).toEqual([x.toHexString()]);
+    }
+    expect(await enrolled(y)).toBe(1);
+    expect(
+      await collection('ElectiveSelection').countDocuments({
+        period: periodId,
+        discipline: y,
+        status: { $in: ['selected', 'enrolled'] },
       }),
     ).toBe(1);
-
-    const disciplines = await collection('ElectiveDiscipline')
-      .find({ _id: { $in: [firstDisciplineId, secondDisciplineId] } })
-      .toArray();
-    expect(
-      disciplines.reduce(
-        (total, discipline) => total + Number(discipline.enrolledCount ?? 0),
-        0,
-      ),
-    ).toBe(1);
   });
 
-  it('decrements capacity only once for concurrent cancellation attempts', async () => {
+  it('keeps counters consistent under concurrent saves of one student', async () => {
     const fixture = await seedBase();
-    const disciplineId = await seedDiscipline(fixture, { capacity: 1 });
-    const periodId = await seedPeriod(fixture);
-    const selected = await select(
-      fixture.studentA,
-      periodId,
-      disciplineId,
-    ).expect(201);
-    const selectedBody = selected.body as SelectionBody;
-    const selectionId = selectedBody.id;
+    const [a, b, c, d] = await seedDisciplines(fixture, 4);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 2 });
 
-    const cancel = () =>
-      request(app.getHttpServer())
-        .delete(
-          `/api/electives/periods/${periodId.toHexString()}/selections/${selectionId}`,
-        )
-        .set('Authorization', `Bearer ${fixture.studentA.token}`);
-    const responses = await Promise.all([cancel(), cancel()]);
-
-    expect(responses.map((response) => response.status).sort()).toEqual([
-      200, 404,
+    const responses = await Promise.all([
+      saveSelections(fixture.studentA, periodId, [a, b]),
+      saveSelections(fixture.studentA, periodId, [c, d]),
     ]);
-    // Cancellation is now soft (status: 'cancelled'), not document deletion —
-    // selection history is preserved (Task 2/3 model and cancellation cascade).
-    expect(
-      (
-        await collection('ElectiveSelection').findOne({
-          _id: new Types.ObjectId(selectionId),
-        })
-      )?.status,
-    ).toBe('cancelled');
-    const discipline = await collection('ElectiveDiscipline').findOne({
-      _id: disciplineId,
-    });
-    expect(discipline?.enrolledCount).toBe(0);
+
+    expect(responses.some((r) => r.status === 200)).toBe(true);
+    for (const r of responses.filter((item) => item.status !== 200)) {
+      expect(r.status).toBe(409);
+      expect([
+        'elective_selection_conflict',
+        'elective_capacity_full',
+      ]).toContain((r.body as ErrorBody).code);
+    }
+    const active = await activeSelections(periodId, fixture.studentA);
+    expect(active).toHaveLength(2);
+    for (const id of [a, b, c, d]) {
+      expect(await enrolled(id)).toBe(
+        active.filter((s) => String(s.discipline) === id.toHexString()).length,
+      );
+    }
   });
 
-  it('prevents cross-student cancellation and mutations outside the active period', async () => {
+  it('rejects ids that differ only in hex case as a count mismatch', async () => {
     const fixture = await seedBase();
-    const disciplineId = await seedDiscipline(fixture);
-    const periodId = await seedPeriod(fixture);
-    const selected = await select(
-      fixture.studentA,
-      periodId,
-      disciplineId,
-    ).expect(201);
-    const selectionId = (selected.body as SelectionBody).id;
+    const [x, y] = await seedDisciplines(fixture, 2);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 2 });
+    await saveSelections(fixture.studentA, periodId, [x, y]).expect(200);
+    const [p] = await seedDisciplines(fixture, 1);
 
-    await request(app.getHttpServer())
-      .delete(
-        `/api/electives/periods/${periodId.toHexString()}/selections/${selectionId}`,
-      )
-      .set('Authorization', `Bearer ${fixture.studentB.token}`)
-      .expect(404);
-    await select(fixture.teacherA, periodId, disciplineId).expect(403);
+    const res = await request(app.getHttpServer())
+      .put(`/api/electives/periods/${periodId.toHexString()}/selections`)
+      .set('Authorization', `Bearer ${fixture.studentA.token}`)
+      .send({
+        disciplineIds: [p.toHexString(), p.toHexString().toUpperCase()],
+      })
+      .expect(400);
+
+    expect((res.body as ErrorBody).code).toBe('elective_choice_count_mismatch');
+    const active = await activeSelections(periodId, fixture.studentA);
+    expect(active.map((s) => String(s.discipline)).sort()).toEqual(
+      [x, y].map(String).sort(),
+    );
+    expect(await enrolled(p)).toBe(0);
+  });
+
+  it('does not lose an update when two saves of one student remove disjoint disciplines', async () => {
+    const fixture = await seedBase();
+    const [x, y, p, q] = await seedDisciplines(fixture, 4);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 2 });
+    await saveSelections(fixture.studentA, periodId, [x, y]).expect(200);
+
+    const requests = [
+      [x, p],
+      [y, q],
+    ];
+    const responses = await Promise.all(
+      requests.map((ids) => saveSelections(fixture.studentA, periodId, ids)),
+    );
+
+    for (const r of responses.filter((item) => item.status !== 200)) {
+      expect(r.status).toBe(409);
+      expect([
+        'elective_selection_conflict',
+        'elective_capacity_full',
+      ]).toContain((r.body as ErrorBody).code);
+    }
+    const active = await activeSelections(periodId, fixture.studentA);
+    expect(active).toHaveLength(2);
+    const finalSet = active.map((s) => String(s.discipline)).sort();
+    const sets = (ids: Types.ObjectId[]) => ids.map(String).sort();
+    const accepted = requests
+      .filter((_, index) => responses[index].status === 200)
+      .map(sets);
+    // The final set is a winner's set; with no winner it is the original one.
+    expect(
+      accepted.length > 0
+        ? accepted.some((set) => set.join() === finalSet.join())
+        : finalSet.join() === sets([x, y]).join(),
+    ).toBe(true);
+    for (const id of [x, y, p, q]) {
+      expect(await enrolled(id)).toBe(
+        active.filter((s) => String(s.discipline) === id.toHexString()).length,
+      );
+    }
+  });
+
+  it('rejects non-students, foreign groups and closed periods', async () => {
+    const fixture = await seedBase();
+    const [id] = await seedDisciplines(fixture, 1);
+    const periodId = await seedPeriod(fixture, { requiredChoices: 1 });
+    await saveSelections(fixture.studentA, periodId, [id]).expect(200);
+
+    await saveSelections(fixture.teacherA, periodId, [id]).expect(403);
+    await saveSelections(fixture.outsiderStudent, periodId, [id]).expect(403);
 
     await request(app.getHttpServer())
       .patch(`/api/electives/periods/${periodId.toHexString()}/status`)
       .set('Authorization', `Bearer ${fixture.admin.token}`)
       .send({ status: ElectiveSelectionPeriodStatus.CLOSED })
       .expect(200);
-    await request(app.getHttpServer())
-      .delete(
-        `/api/electives/periods/${periodId.toHexString()}/selections/${selectionId}`,
-      )
-      .set('Authorization', `Bearer ${fixture.studentA.token}`)
-      .expect(400);
+    await saveSelections(fixture.studentB, periodId, [id]).expect(400);
 
+    expect(await activeSelections(periodId, fixture.studentA)).toHaveLength(1);
     expect(
       await collection('ElectiveSelection').countDocuments({
-        _id: new Types.ObjectId(selectionId),
-        student: fixture.studentA.id,
+        period: periodId,
       }),
     ).toBe(1);
-    const discipline = await collection('ElectiveDiscipline').findOne({
-      _id: disciplineId,
-    });
-    expect(discipline?.enrolledCount).toBe(1);
+    expect(await enrolled(id)).toBe(1);
   });
 
   it('finalizes selections idempotently and exposes only enrolled courses', async () => {
     const fixture = await seedBase();
     const disciplineId = await seedDiscipline(fixture);
     const periodId = await seedPeriod(fixture);
-    const selected = await select(
-      fixture.studentA,
-      periodId,
-      disciplineId,
-    ).expect(201);
-    const selectionId = (selected.body as SelectionBody).id;
+    await saveSelections(fixture.studentA, periodId, [disciplineId]).expect(
+      200,
+    );
 
     await request(app.getHttpServer())
       .patch(`/api/electives/periods/${periodId.toHexString()}/status`)
@@ -714,12 +1046,9 @@ describe('Elective disciplines (e2e)', () => {
     expect(afterFinalizeBody).toHaveLength(1);
     expect(afterFinalizeBody[0].period.id).toBe(periodId.toHexString());
     expect(afterFinalizeBody[0].phase).toBe('finalized');
-    await request(app.getHttpServer())
-      .delete(
-        `/api/electives/periods/${periodId.toHexString()}/selections/${selectionId}`,
-      )
-      .set('Authorization', `Bearer ${fixture.studentA.token}`)
-      .expect(400);
+    await saveSelections(fixture.studentA, periodId, [disciplineId]).expect(
+      400,
+    );
     await expectAuditEntry(
       'electives-finalize-success',
       'success',
@@ -732,7 +1061,9 @@ describe('Elective disciplines (e2e)', () => {
     const fixture = await seedBase();
     const disciplineId = await seedDiscipline(fixture);
     const periodId = await seedPeriod(fixture);
-    await select(fixture.studentA, periodId, disciplineId).expect(201);
+    await saveSelections(fixture.studentA, periodId, [disciplineId]).expect(
+      200,
+    );
 
     await request(app.getHttpServer())
       .patch(`/api/electives/periods/${periodId.toHexString()}/status`)
@@ -879,7 +1210,9 @@ describe('Elective disciplines (e2e)', () => {
     const periodId = await seedPeriod(fixture, {
       title: '=SUM(1,1)',
     });
-    await select(fixture.studentA, periodId, disciplineId).expect(201);
+    await saveSelections(fixture.studentA, periodId, [disciplineId]).expect(
+      200,
+    );
 
     await request(app.getHttpServer())
       .patch(`/api/electives/periods/${periodId.toHexString()}/status`)
@@ -991,4 +1324,100 @@ describe('Elective disciplines (e2e)', () => {
 
     throw new Error(`Audit entry ${requestId} was not persisted`);
   }
+
+  it('upserts the public administration catalog idempotently', async () => {
+    const fixture = await seedBase();
+    const db = connection.db!;
+    const logger = { log: jest.fn(), warn: jest.fn() };
+
+    const first = await upsertPublicAdministrationCatalog(db, logger);
+    expect(first.disciplinesInserted).toBe(26);
+    const department = await collection('Department').findOne({
+      name: 'Кафедра публічного адміністрування',
+    });
+    const disciplines = await collection('ElectiveDiscipline')
+      .find({ department: department?._id, term: fixture.termId })
+      .toArray();
+    expect(disciplines).toHaveLength(26);
+    expect(
+      disciplines.every(
+        (d) => d.credits === 3 && d.capacity === 30 && d.status === 'active',
+      ),
+    ).toBe(true);
+    expect(
+      disciplines.every((d) =>
+        String(d.syllabusUrl).startsWith('https://maup.com.ua/assets/'),
+      ),
+    ).toBe(true);
+    expect(
+      disciplines.every((d) => /^EL-\d{4}-[12]-\d{3,}$/.test(String(d.code))),
+    ).toBe(true);
+
+    await collection('ElectiveDiscipline').updateOne(
+      { _id: disciplines[0]._id },
+      { $set: { capacity: 45 } },
+    );
+    const second = await upsertPublicAdministrationCatalog(db, logger);
+    expect(second.disciplinesInserted).toBe(0);
+    expect(
+      (
+        await collection('ElectiveDiscipline').findOne({
+          _id: disciplines[0]._id,
+        })
+      )?.capacity,
+    ).toBe(45);
+    expect(
+      await collection('Faculty').countDocuments({
+        name: 'Інститут економіки',
+      }),
+    ).toBe(1);
+  });
+
+  it('creates only the department when there is no current term', async () => {
+    await seedBase();
+    await collection('AcademicTerm').updateMany(
+      { status: 'current' },
+      { $set: { status: 'closed' } },
+    );
+    const logger = { log: jest.fn(), warn: jest.fn() };
+    const result = await upsertPublicAdministrationCatalog(
+      connection.db!,
+      logger,
+    );
+    expect(result.disciplinesInserted).toBe(0);
+    expect(logger.warn).toHaveBeenCalled();
+    expect(
+      await collection('Department').countDocuments({
+        name: 'Кафедра публічного адміністрування',
+      }),
+    ).toBe(1);
+  });
+
+  it('public administration migration skips an empty database and seeds a populated one', async () => {
+    const migration = DATABASE_MIGRATIONS.find(
+      (item) => item.id === '202611180001-public-administration-electives',
+    );
+    expect(migration).toBeDefined();
+
+    await migration!.up(connection.db!);
+    expect(
+      await collection('Faculty').countDocuments({
+        name: 'Інститут економіки',
+      }),
+    ).toBe(0);
+    expect(
+      await collection('Department').countDocuments({
+        name: 'Кафедра публічного адміністрування',
+      }),
+    ).toBe(0);
+
+    await seedBase();
+    await migration!.up(connection.db!);
+    expect(
+      await collection('ElectiveDiscipline').countDocuments({
+        title: 'Електронне врядування',
+      }),
+    ).toBe(1);
+    expect(await collection('ElectiveDiscipline').countDocuments()).toBe(26);
+  });
 });

@@ -21,6 +21,8 @@ export type DomainAuditEvent = {
 
 export type DomainAuditContext = {
   record(event: DomainAuditEvent): Promise<void>;
+  /** Marks the request as audited without writing a record (no-op writes). */
+  skip?(): void;
 };
 
 export function createAuditContext(
@@ -32,6 +34,9 @@ export function createAuditContext(
   const userAgent = request.get('user-agent') || 'unknown';
 
   return {
+    skip() {
+      request[DOMAIN_AUDIT_RECORDED] = true;
+    },
     async record(event) {
       request[DOMAIN_AUDIT_RECORDED] = true;
       await auditLogService.logAction({

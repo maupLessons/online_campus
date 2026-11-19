@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
@@ -32,7 +31,7 @@ import {
   ElectiveExportFormat,
   ElectiveExportQueryDto,
   ElectivePeriodQueryDto,
-  SelectElectiveDto,
+  ReplaceElectiveSelectionsDto,
   SetElectiveDisciplineStatusDto,
   SetElectivePeriodStatusDto,
   UpdateElectiveDisciplineDto,
@@ -72,35 +71,20 @@ export class ElectiveDisciplinesController {
     return this.electivesService.findMySelections(req.user);
   }
 
-  @Post('periods/:periodId/select')
+  @Put('periods/:periodId/selections')
   @Roles(Role.STUDENT)
-  @AuditEvent(AUDIT_ACTIONS.ELECTIVE_SELECTION_SELECT, 'elective_selection')
-  @ApiOperation({ summary: 'Select an elective discipline for a period' })
-  selectDiscipline(
+  @AuditEvent(AUDIT_ACTIONS.ELECTIVE_SELECTION_REPLACE, 'elective_period')
+  @ApiOperation({
+    summary: 'Replace the current student elective set for a period',
+  })
+  replaceSelections(
     @Param('periodId') periodId: string,
-    @Body() dto: SelectElectiveDto,
+    @Body() dto: ReplaceElectiveSelectionsDto,
     @Request() req: AuthenticatedRequest,
   ) {
-    return this.electivesService.selectDiscipline(
+    return this.electivesService.replaceSelections(
       periodId,
       dto,
-      req.user,
-      createAuditContext(req, this.auditLogService),
-    );
-  }
-
-  @Delete('periods/:periodId/selections/:selectionId')
-  @Roles(Role.STUDENT)
-  @AuditEvent(AUDIT_ACTIONS.ELECTIVE_SELECTION_CANCEL, 'elective_selection')
-  @ApiOperation({ summary: 'Cancel current student elective selection' })
-  cancelSelection(
-    @Param('periodId') periodId: string,
-    @Param('selectionId') selectionId: string,
-    @Request() req: AuthenticatedRequest,
-  ) {
-    return this.electivesService.cancelSelection(
-      periodId,
-      selectionId,
       req.user,
       createAuditContext(req, this.auditLogService),
     );

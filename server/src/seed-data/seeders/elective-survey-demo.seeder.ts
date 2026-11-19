@@ -21,6 +21,7 @@ import { activeStudentsInGroup } from '../../users/student-profile.filters';
 import { AcademicTermsService } from '../../academic-terms/academic-terms.service';
 import { Role } from '../../common/types/roles.enum';
 import { departments, groups, users } from '../../common/mock-data';
+import { upsertPublicAdministrationCatalog } from '../catalogs/public-administration-electives';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -51,7 +52,16 @@ export class ElectiveSurveyDemoSeeder {
 
   async seed(): Promise<void> {
     await this.seedElectiveDemoData();
+    await this.seedPublicAdministrationCatalog();
     await this.seedSurveyDemoData();
+  }
+
+  private async seedPublicAdministrationCatalog(): Promise<void> {
+    const db = this.disciplineModel.db.db;
+    if (!db) {
+      throw new Error('MongoDB connection is not ready');
+    }
+    await upsertPublicAdministrationCatalog(db, this.logger);
   }
 
   private async seedElectiveDemoData(): Promise<void> {
